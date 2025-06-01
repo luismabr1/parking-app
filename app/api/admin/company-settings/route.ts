@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
 export async function GET() {
@@ -6,11 +6,12 @@ export async function GET() {
     const client = await clientPromise
     const db = client.db("parking")
 
-    let settings = await db.collection("company_settings").findOne({})
+    // Obtener la configuración de la empresa
+    const settings = await db.collection("company_settings").findOne({})
 
+    // Si no hay configuración, devolver valores por defecto
     if (!settings) {
-      // Create default settings if none exist
-      const defaultSettings = {
+      return NextResponse.json({
         pagoMovil: {
           banco: "",
           cedula: "",
@@ -22,10 +23,19 @@ export async function GET() {
           telefono: "",
           numeroCuenta: "",
         },
-      }
+        tarifas: {
+          precioHora: 3.0,
+          tasaCambio: 35.0,
+        },
+      })
+    }
 
-      await db.collection("company_settings").insertOne(defaultSettings)
-      settings = defaultSettings
+    // Asegurarse de que exista la sección de tarifas
+    if (!settings.tarifas) {
+      settings.tarifas = {
+        precioHora: 3.0,
+        tasaCambio: 35.0,
+      }
     }
 
     return NextResponse.json(settings)
@@ -35,36 +45,38 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: NextRequest) {
+// En la función PUT, asegurarnos de que los valores se guarden con precisión decimal
+export async function PUT(request: Request) {
   try {
-    const settings = await request.json()
-
-    // Remove _id field if it exists to avoid MongoDB immutable field error
-    const { _id, ...settingsWithoutId } = settings
-
     const client = await clientPromise
     const db = client.db("parking")
+    const settings = await request.json()
 
-    // Check if settings document exists
-    const existingSettings = await db.collection("company_settings").findOne({})
-
-    if (existingSettings) {
-      // Update existing document using updateOne with $set
-      const result = await db
-        .collection("company_settings")
-        .updateOne({ _id: existingSettings._id }, { $set: settingsWithoutId })
-
-      if (result.matchedCount === 0) {
-        throw new Error("No se pudo actualizar la configuración")
-      }
-    } else {
-      // Insert new document if none exists
-      await db.collection("company_settings").insertOne(settingsWithoutId)
+    // Validar que los campos requeridos estén presentes
+    if (
+      !settings.tarifas ||
+      typeof settings.tarifas.precioHora !== "number" ||
+      typeof settings.tarifas.tasaCambio !== "number"
+    ) {
+      return NextResponse.json({ message: "Datos de tarifas inválidos" }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true, message: "Configuración actualizada exitosamente" })
+    // Asegurar precisión decimal para los valores numéricos
+    if (settings.tarifas) {
+      settings.tarifas.precioHora = Number.parseFloat(settings.tarifas.precioHora.toFixed(2))
+      settings.tarifas.tasaCambio = Number.parseFloat(settings.tarifas.tasaCambio.toFixed(2))
+    }
+
+    // Actualizar o crear la configuración
+    const result = await db.collection("company_settings").updateOne({}, { $set: settings }, { upsert: true })
+
+    return NextResponse.json({
+      message: "Configuración guardada exitosamente",
+      updated: result.modifiedCount > 0,
+      created: result.upsertedCount > 0,
+    })
   } catch (error) {
     console.error("Error updating company settings:", error)
-    return NextResponse.json({ message: "Error al actualizar la configuración" }, { status: 500 })
+    return NextResponse.json({ message: "Error al guardar la configuración" }, { status: 500 })
   }
 }

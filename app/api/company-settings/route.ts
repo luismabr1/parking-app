@@ -6,10 +6,11 @@ export async function GET() {
     const client = await clientPromise
     const db = client.db("parking")
 
+    // Obtener la configuración de la empresa
     const settings = await db.collection("company_settings").findOne({})
 
+    // Si no hay configuración, devolver valores por defecto
     if (!settings) {
-      // Return default empty settings if none exist
       return NextResponse.json({
         pagoMovil: {
           banco: "",
@@ -22,13 +23,22 @@ export async function GET() {
           telefono: "",
           numeroCuenta: "",
         },
+        tarifas: {
+          precioHora: 3.0,
+          tasaCambio: 35.0,
+        },
       })
     }
 
-    // Remove _id from response to avoid issues
-    const { _id, ...settingsWithoutId } = settings
+    // Asegurarse de que exista la sección de tarifas
+    if (!settings.tarifas) {
+      settings.tarifas = {
+        precioHora: 3.0,
+        tasaCambio: 35.0,
+      }
+    }
 
-    return NextResponse.json(settingsWithoutId)
+    return NextResponse.json(settings)
   } catch (error) {
     console.error("Error fetching company settings:", error)
     return NextResponse.json({ message: "Error al obtener la configuración" }, { status: 500 })

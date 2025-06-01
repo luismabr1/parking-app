@@ -1,3 +1,12 @@
+export interface CarInfo {
+  placa: string
+  marca: string
+  modelo: string
+  color: string
+  nombreDueño: string
+  telefono: string
+}
+
 export interface Ticket {
   _id: string
   codigoTicket: string
@@ -9,6 +18,8 @@ export interface Ticket {
   // Nuevos campos para el sistema mejorado
   fechaCreacion?: string
   horaOcupacion?: string | null
+  // Información del carro asociado
+  carInfo?: CarInfo | null
 }
 
 export interface Payment {
@@ -46,6 +57,7 @@ export interface StaffMember {
   fechaCreacion: string
 }
 
+// Actualizar la interfaz CompanySettings para incluir los nuevos campos
 export interface CompanySettings {
   _id?: string
   pagoMovil: {
@@ -58,6 +70,10 @@ export interface CompanySettings {
     cedula: string
     telefono: string
     numeroCuenta: string
+  }
+  tarifas: {
+    precioHora: number
+    tasaCambio: number
   }
 }
 

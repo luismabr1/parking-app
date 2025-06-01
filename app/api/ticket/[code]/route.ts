@@ -43,19 +43,40 @@ export async function GET(request: Request, { params }: { params: { code: string
       console.log(`❌ No se encontró carro asociado a ticket: ${ticketCode}`)
     }
 
+    // Obtener la configuración de tarifas
+    const settings = await db.collection("company_settings").findOne({})
+    const precioHora = settings?.tarifas?.precioHora || 3.0
+    const tasaCambio = settings?.tarifas?.tasaCambio || 35.0
+
     // Determinar la hora de entrada y calcular el monto
     if (ticket.estado === "ocupado" && ticket.horaOcupacion) {
       // Ticket nuevo con carro asignado
       horaEntrada = new Date(ticket.horaOcupacion)
-      montoCalculado = calculateParkingFee(horaEntrada)
+      const now = new Date()
+      const diffInMs = now.getTime() - horaEntrada.getTime()
+      const diffInHours = diffInMs / (1000 * 60 * 60)
+
+      // Calcular montos
+      montoCalculado = Math.max(diffInHours * precioHora, precioHora / 2)
+      montoCalculado = Number.parseFloat(montoCalculado.toFixed(2)) // Asegurar 2 decimales
+      const montoBs = Number.parseFloat((montoCalculado * tasaCambio).toFixed(2))
+
       canProceed = true
-      console.log(`💰 Ticket ocupado - Calculado: $${montoCalculado}`)
+      console.log(`💰 Ticket ocupado - Calculado: $${montoCalculado} / Bs. ${montoBs}`)
     } else if (ticket.estado === "activo" && ticket.horaEntrada) {
       // Ticket legacy activo
       horaEntrada = new Date(ticket.horaEntrada)
-      montoCalculado = calculateParkingFee(horaEntrada)
+      const now = new Date()
+      const diffInMs = now.getTime() - horaEntrada.getTime()
+      const diffInHours = diffInMs / (1000 * 60 * 60)
+
+      // Calcular montos
+      montoCalculado = Math.max(diffInHours * precioHora, precioHora / 2)
+      montoCalculado = Number.parseFloat(montoCalculado.toFixed(2)) // Asegurar 2 decimales
+      const montoBs = Number.parseFloat((montoCalculado * tasaCambio).toFixed(2))
+
       canProceed = true
-      console.log(`💰 Ticket activo legacy - Calculado: $${montoCalculado}`)
+      console.log(`💰 Ticket activo legacy - Calculado: $${montoCalculado} / Bs. ${montoBs}`)
     } else if (ticket.estado === "disponible") {
       // Ticket disponible - verificar si tiene carro asignado
       if (car) {
@@ -135,6 +156,8 @@ export async function GET(request: Request, { params }: { params: { code: string
     // Actualizar el monto calculado en el ticket
     await db.collection("tickets").updateOne({ codigoTicket: ticketCode }, { $set: { montoCalculado } })
 
+    const montoBs = Number.parseFloat((montoCalculado * tasaCambio).toFixed(2))
+
     const response = {
       _id: ticket._id,
       codigoTicket: ticket.codigoTicket,
@@ -142,6 +165,8 @@ export async function GET(request: Request, { params }: { params: { code: string
       horaSalida: ticket.horaSalida,
       estado: ticket.estado === "disponible" ? "ocupado" : ticket.estado, // Actualizar estado en respuesta
       montoCalculado,
+      montoBs,
+      tasaCambio,
       ultimoPagoId: ticket.ultimoPagoId,
       carInfo,
     }

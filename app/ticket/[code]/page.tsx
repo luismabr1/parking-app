@@ -11,10 +11,17 @@ import PaymentForm from "@/components/payment-form"
 import Link from "next/link"
 import type { Ticket } from "@/lib/types"
 
+// Actualizar la interfaz Ticket para incluir los nuevos campos
+interface TicketWithBs extends Ticket {
+  montoBs?: number
+  tasaCambio?: number
+}
+
 export default function TicketDetailsPage() {
   const params = useParams()
   const ticketCode = params.code as string
-  const [ticket, setTicket] = useState<Ticket | null>(null)
+  // Actualizar el estado para usar la nueva interfaz
+  const [ticket, setTicket] = useState<TicketWithBs | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [showPaymentForm, setShowPaymentForm] = useState(false)
@@ -226,9 +233,22 @@ export default function TicketDetailsPage() {
                 <div>
                   <p className="text-sm text-gray-600">Monto a Pagar</p>
                   <p className="text-3xl font-bold text-green-600">{formatCurrency(ticket.montoCalculado)}</p>
+                  {ticket.montoBs && (
+                    <p className="text-lg font-medium text-green-500">
+                      Bs.{" "}
+                      {ticket.montoBs.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  )}
                 </div>
               </div>
               <p className="text-sm text-gray-500">Calculado automáticamente basado en el tiempo de estacionamiento</p>
+              {ticket.tasaCambio && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Tasa de cambio:{" "}
+                  {ticket.tasaCambio.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                  Bs/USD
+                </p>
+              )}
             </div>
 
             {/* Botón de Pago */}

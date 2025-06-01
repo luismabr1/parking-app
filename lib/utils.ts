@@ -6,20 +6,32 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number): string {
+// Actualizar la función formatCurrency para soportar bolívares
+export function formatCurrency(amount: number, currency = "USD"): string {
   try {
     // Verificar si el amount es un número válido
     if (typeof amount !== "number" || isNaN(amount)) {
-      return "$0.00"
+      return currency === "USD" ? "$0.00" : "Bs. 0,00"
+    }
+
+    if (currency === "VES" || currency === "BS") {
+      return new Intl.NumberFormat("es-VE", {
+        style: "currency",
+        currency: "VES",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount)
     }
 
     return new Intl.NumberFormat("es-VE", {
       style: "currency",
       currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount)
   } catch (error) {
     console.error("Error formatting currency:", error)
-    return `$${amount.toFixed(2)}`
+    return currency === "USD" ? `$${amount.toFixed(2)}` : `Bs. ${amount.toFixed(2)}`
   }
 }
 
@@ -27,24 +39,45 @@ export function formatDateTime(date: any): string {
   return formatSafeDate(date)
 }
 
-export function calculateParkingFee(entryTime: Date | string): number {
+// Actualizar la función calculateParkingFee para manejar correctamente los decimales
+export async function calculateParkingFee(entryTime: Date | string): Promise<{ usd: number; bs: number }> {
   try {
     const entryDate = typeof entryTime === "string" ? new Date(entryTime) : entryTime
 
     if (!entryDate || isNaN(entryDate.getTime())) {
       console.error("Invalid entry time:", entryTime)
-      return 1.5 // Tarifa mínima por defecto
+      return { usd: 1.5, bs: 52.5 } // Valores por defecto
+    }
+
+    // Obtener la configuración de tarifas
+    let precioHora = 3.0 // Valor por defecto
+    let tasaCambio = 35.0 // Valor por defecto
+
+    try {
+      const response = await fetch("/api/company-settings")
+      if (response.ok) {
+        const settings = await response.json()
+        precioHora = settings.tarifas?.precioHora || precioHora
+        tasaCambio = settings.tarifas?.tasaCambio || tasaCambio
+      }
+    } catch (error) {
+      console.error("Error fetching company settings:", error)
     }
 
     const now = new Date()
     const diffInMs = now.getTime() - entryDate.getTime()
     const diffInHours = diffInMs / (1000 * 60 * 60)
 
-    // Tarifa: $3 por hora, mínimo $1.50 (30 minutos)
-    const fee = Math.max(diffInHours * 3, 1.5)
-    return Math.round(fee * 100) / 100 // Redondear a 2 decimales
+    // Tarifa: precioHora por hora, mínimo precioHora/2 (30 minutos)
+    const feeUSD = Math.max(diffInHours * precioHora, precioHora / 2)
+
+    // Asegurar precisión de 2 decimales
+    const usdAmount = Number.parseFloat(feeUSD.toFixed(2))
+    const bsAmount = Number.parseFloat((usdAmount * tasaCambio).toFixed(2))
+
+    return { usd: usdAmount, bs: bsAmount }
   } catch (error) {
     console.error("Error calculating parking fee:", error)
-    return 1.5 // Tarifa mínima por defecto
+    return { usd: 1.5, bs: 52.5 } // Valores por defecto
   }
 }
