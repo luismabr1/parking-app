@@ -59,46 +59,83 @@ async function seedDatabase() {
     await db.createCollection("staff")
     await db.createCollection("company_settings")
     await db.createCollection("banks")
+    await db.createCollection("cars")
+    await db.createCollection("car_history")
 
     // Limpiar datos existentes
     await db.collection("tickets").deleteMany({})
     await db.collection("pagos").deleteMany({})
+    await db.collection("cars").deleteMany({})
+    await db.collection("car_history").deleteMany({})
 
-    // Crear tickets de ejemplo
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
-    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000)
-
+    // Crear tickets de ejemplo con nuevo formato
     const tickets = [
+      // Tickets nuevos disponibles para asignar
+      {
+        codigoTicket: "PARK001",
+        estado: "disponible",
+        fechaCreacion: new Date(),
+        horaOcupacion: null,
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      {
+        codigoTicket: "PARK002",
+        estado: "disponible",
+        fechaCreacion: new Date(),
+        horaOcupacion: null,
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      {
+        codigoTicket: "PARK003",
+        estado: "disponible",
+        fechaCreacion: new Date(),
+        horaOcupacion: null,
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      {
+        codigoTicket: "PARK004",
+        estado: "disponible",
+        fechaCreacion: new Date(),
+        horaOcupacion: null,
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      {
+        codigoTicket: "PARK005",
+        estado: "disponible",
+        fechaCreacion: new Date(),
+        horaOcupacion: null,
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      // Tickets de prueba con carros asignados (LISTOS PARA PAGAR)
       {
         codigoTicket: "TEST001",
-        horaEntrada: oneHourAgo,
+        horaEntrada: new Date(Date.now() - 60 * 60 * 1000), // 1 hora atrás
         horaSalida: null,
-        estado: "activo",
+        estado: "ocupado", // Estado correcto para que funcione la búsqueda
+        horaOcupacion: new Date(Date.now() - 60 * 60 * 1000),
         montoCalculado: 0,
         ultimoPagoId: null,
       },
       {
         codigoTicket: "TEST002",
-        horaEntrada: twoHoursAgo,
+        horaEntrada: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 horas atrás
         horaSalida: null,
-        estado: "activo",
+        estado: "ocupado", // Estado correcto para que funcione la búsqueda
+        horaOcupacion: new Date(Date.now() - 2 * 60 * 60 * 1000),
         montoCalculado: 0,
         ultimoPagoId: null,
       },
-      {
-        codigoTicket: "TEST003",
-        horaEntrada: threeHoursAgo,
-        horaSalida: null,
-        estado: "activo",
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
+      // Tickets legacy activos (LISTOS PARA PAGAR)
       {
         codigoTicket: "ABC123",
         horaEntrada: new Date(Date.now() - 30 * 60 * 1000), // 30 minutos atrás
         horaSalida: null,
-        estado: "activo",
+        estado: "activo", // Estado legacy
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -106,7 +143,15 @@ async function seedDatabase() {
         codigoTicket: "XYZ789",
         horaEntrada: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 horas atrás
         horaSalida: null,
-        estado: "activo",
+        estado: "activo", // Estado legacy
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      {
+        codigoTicket: "TEST003",
+        horaEntrada: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 horas atrás
+        horaSalida: null,
+        estado: "activo", // Estado legacy
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -161,20 +206,98 @@ async function seedDatabase() {
     await db.collection("banks").insertMany(venezuelanBanks)
     console.log(`✅ ${venezuelanBanks.length} bancos insertados`)
 
-    console.log("\n🎉 Base de datos inicializada con datos de ejemplo")
-    console.log("\n📋 Códigos de tickets disponibles para pruebas:")
-    tickets.forEach((ticket, index) => {
-      const timeAgo = Math.floor((Date.now() - ticket.horaEntrada.getTime()) / (1000 * 60))
-      const estimatedCost = Math.max(timeAgo * 0.05, 1).toFixed(2)
-      console.log(`   ${index + 1}. ${ticket.codigoTicket} (${timeAgo} min atrás, ~$${estimatedCost})`)
-    })
+    // Crear algunos carros de ejemplo correctamente asociados
+    const exampleCars = [
+      {
+        placa: "ABC123",
+        marca: "Toyota",
+        modelo: "Corolla",
+        color: "Blanco",
+        nombreDueño: "Juan Pérez",
+        telefono: "0414-1234567",
+        ticketAsociado: "TEST001",
+        horaIngreso: new Date(Date.now() - 60 * 60 * 1000),
+        estado: "estacionado",
+        fechaRegistro: new Date(),
+      },
+      {
+        placa: "XYZ789",
+        marca: "Chevrolet",
+        modelo: "Aveo",
+        color: "Azul",
+        nombreDueño: "María González",
+        telefono: "0424-9876543",
+        ticketAsociado: "TEST002",
+        horaIngreso: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        estado: "estacionado",
+        fechaRegistro: new Date(),
+      },
+    ]
 
-    console.log("\n💡 Puedes usar cualquiera de estos códigos en la aplicación para probar el flujo de pago.")
+    const carsResult = await db.collection("cars").insertMany(exampleCars)
+    console.log(`✅ ${carsResult.insertedCount} carros de ejemplo insertados`)
+
+    // Crear entradas en el historial para los carros de ejemplo
+    const historyEntries = [
+      {
+        carId: carsResult.insertedIds[0].toString(),
+        placa: "ABC123",
+        marca: "Toyota",
+        modelo: "Corolla",
+        color: "Blanco",
+        nombreDueño: "Juan Pérez",
+        telefono: "0414-1234567",
+        ticketAsociado: "TEST001",
+        horaIngreso: new Date(Date.now() - 60 * 60 * 1000),
+        horaSalida: null,
+        montoTotal: 0,
+        pagoId: null,
+        estado: "activo",
+        fechaRegistro: new Date(),
+      },
+      {
+        carId: carsResult.insertedIds[1].toString(),
+        placa: "XYZ789",
+        marca: "Chevrolet",
+        modelo: "Aveo",
+        color: "Azul",
+        nombreDueño: "María González",
+        telefono: "0424-9876543",
+        ticketAsociado: "TEST002",
+        horaIngreso: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        horaSalida: null,
+        montoTotal: 0,
+        pagoId: null,
+        estado: "activo",
+        fechaRegistro: new Date(),
+      },
+    ]
+
+    await db.collection("car_history").insertMany(historyEntries)
+    console.log(`✅ ${historyEntries.length} entradas de historial creadas`)
+
+    console.log("\n🎉 Base de datos inicializada con datos de ejemplo")
+    console.log("\n🚗 TICKETS LISTOS PARA PAGAR (con carros asignados):")
+    console.log("   ✅ TEST001: Toyota Corolla (ABC123) - Juan Pérez - $3.00 aprox")
+    console.log("   ✅ TEST002: Chevrolet Aveo (XYZ789) - María González - $6.00 aprox")
+    console.log("   ✅ ABC123: Ticket legacy - $1.50 aprox (30 min)")
+    console.log("   ✅ XYZ789: Ticket legacy - $12.00 aprox (4 horas)")
+    console.log("   ✅ TEST003: Ticket legacy - $9.00 aprox (3 horas)")
+
+    console.log("\n📋 TICKETS DISPONIBLES (sin carros asignados):")
+    console.log("   📝 PARK001-PARK005: Disponibles para asignar nuevos carros")
+    console.log("   ⚠️  Estos NO se pueden buscar hasta asignar un carro")
+
+    console.log("\n🧪 PRUEBAS RECOMENDADAS:")
+    console.log("   1. 🔍 Buscar TEST001, TEST002, ABC123, XYZ789, TEST003")
+    console.log("   2. 💳 Completar proceso de pago para cualquiera")
+    console.log("   3. 🚗 Registrar nuevo carro con PARK001 en panel admin")
+    console.log("   4. 🔍 Buscar PARK001 después de asignar carro")
+
     console.log("\n🔐 Acceso al panel de administración:")
     console.log("   URL: http://localhost:3000/admin")
     console.log("   Usuario: admin")
     console.log("   Contraseña: admin123")
-    console.log("   (O puedes usar el botón de 'Acceso Rápido')")
   } catch (err) {
     console.error("❌ Error:", err)
   } finally {

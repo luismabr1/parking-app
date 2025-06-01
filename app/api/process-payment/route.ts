@@ -1,39 +1,91 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { createPayment } from "@/lib/ticket-service"
+import { NextResponse } from "next/server"
+import clientPromise from "@/lib/mongodb"
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const body = await request.json()
+    const client = await clientPromise
+    const db = client.db("parking")
 
-    // Validate required fields
-    const requiredFields = [
-      "codigoTicket",
-      "referenciaTransferencia",
-      "banco",
-      "telefono",
-      "numeroIdentidad",
-      "montoPagado",
-    ]
+    const { codigoTicket, referenciaTransferencia, banco, telefono, numeroIdentidad, montoPagado } =
+      await request.json()
 
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return NextResponse.json({ message: `El campo ${field} es requerido` }, { status: 400 })
-      }
+    // Validar que todos los campos requeridos estén presentes
+    if (!codigoTicket || !referenciaTransferencia || !banco || !telefono || !numeroIdentidad || !montoPagado) {
+      return NextResponse.json({ message: "Todos los campos son requeridos" }, { status: 400 })
     }
 
-    // Validate amount is a positive number
-    if (typeof body.montoPagado !== "number" || body.montoPagado <= 0) {
-      return NextResponse.json({ message: "El monto pagado debe ser un número positivo" }, { status: 400 })
+    // Buscar el ticket
+    const ticket = await db.collection("tickets").findOne({ codigoTicket })
+
+    if (!ticket) {
+      return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 })
     }
 
-    const result = await createPayment(body)
+    // Verificar que el ticket esté en estado válido para pago
+    if (ticket.estado === "pagado_validado" || ticket.estado === "salido") {
+      return NextResponse.json({ message: "Este ticket ya ha sido pagado" }, { status: 400 })
+    }
 
-    return NextResponse.json(result)
+    if (ticket.estado === "disponible") {
+      return NextResponse.json({ message: "Este ticket no tiene un vehículo asignado" }, { status: 400 })
+    }
+
+    // Buscar información del carro asociado
+    const car = await db.collection("cars").findOne({
+      ticketAsociado: codigoTicket,
+      estado: "estacionado",
+    })
+
+    // Crear el registro de pago
+    const pagoData = {
+      ticketId: ticket._id.toString(),
+      codigoTicket,
+      referenciaTransferencia,
+      banco,
+      telefono,
+      numeroIdentidad,
+      montoPagado: Number(montoPagado),
+      montoCalculado: ticket.montoCalculado || 0,
+      fechaPago: new Date(),
+      estado: "pendiente_validacion",
+      estadoValidacion: "pendiente",
+      // Incluir información del carro si existe
+      carInfo: car
+        ? {
+            placa: car.placa,
+            marca: car.marca,
+            modelo: car.modelo,
+            color: car.color,
+            nombreDueño: car.nombreDueño,
+            telefono: car.telefono,
+          }
+        : null,
+    }
+
+    const pagoResult = await db.collection("pagos").insertOne(pagoData)
+
+    // Actualizar el estado del ticket
+    await db.collection("tickets").updateOne(
+      { codigoTicket },
+      {
+        $set: {
+          estado: "pagado_pendiente",
+          ultimoPagoId: pagoResult.insertedId.toString(),
+        },
+      },
+    )
+
+    // Si hay un carro asociado, actualizar su estado
+    if (car) {
+      await db.collection("cars").updateOne({ _id: car._id }, { $set: { estado: "pago_pendiente" } })
+    }
+
+    return NextResponse.json({
+      message: "Pago registrado exitosamente",
+      pagoId: pagoResult.insertedId,
+    })
   } catch (error) {
     console.error("Error processing payment:", error)
-    return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Error al procesar el pago" },
-      { status: 500 },
-    )
+    return NextResponse.json({ message: "Error al procesar el pago" }, { status: 500 })
   }
 }

@@ -4,10 +4,30 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, XCircle, RefreshCw } from "lucide-react"
+import { CheckCircle, XCircle, RefreshCw, Car } from "lucide-react"
 import { formatCurrency, formatDateTime } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import type { PendingPayment } from "@/lib/types"
+
+interface PendingPayment {
+  _id: string
+  codigoTicket: string
+  referenciaTransferencia: string
+  banco: string
+  telefono: string
+  numeroIdentidad: string
+  montoPagado: number
+  montoCalculado: number
+  fechaPago: string
+  estado: string
+  carInfo?: {
+    placa: string
+    marca: string
+    modelo: string
+    color: string
+    nombreDueño: string
+    telefono: string
+  }
+}
 
 interface PendingPaymentsProps {
   onStatsUpdate: () => void
@@ -40,7 +60,6 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
     }
   }
 
-  // Después de cada acción exitosa (validar/rechazar), llamar a onStatsUpdate
   const handlePaymentAction = async (paymentId: string, action: "validate" | "reject") => {
     try {
       setProcessingId(paymentId)
@@ -57,9 +76,8 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
         throw new Error(errorData.message || `Error al ${action === "validate" ? "validar" : "rechazar"} el pago`)
       }
 
-      // Refresh the list and update stats
       await fetchPendingPayments()
-      onStatsUpdate() // Asegurar que se llame después de cada acción
+      onStatsUpdate()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al procesar la acción")
     } finally {
@@ -117,6 +135,36 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
                     <p className="font-medium">{formatDateTime(payment.fechaPago)}</p>
                   </div>
                 </div>
+
+                {/* Información del Vehículo si existe */}
+                {payment.carInfo && (
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Car className="h-4 w-4 text-blue-600" />
+                      <h4 className="font-medium text-blue-800">Información del Vehículo</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-gray-600">Placa:</span>
+                        <span className="font-medium ml-2">{payment.carInfo.placa}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Vehículo:</span>
+                        <span className="font-medium ml-2">
+                          {payment.carInfo.marca} {payment.carInfo.modelo}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Color:</span>
+                        <span className="font-medium ml-2">{payment.carInfo.color}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Propietario:</span>
+                        <span className="font-medium ml-2">{payment.carInfo.nombreDueño}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>

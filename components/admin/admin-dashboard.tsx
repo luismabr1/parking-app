@@ -8,12 +8,18 @@ import { RefreshCw } from "lucide-react"
 import PendingPayments from "./pending-payments"
 import StaffManagement from "./staff-management"
 import CompanySettings from "./company-settings"
+import TicketManagement from "./ticket-management"
+import CarRegistration from "./car-registration"
+import CarHistory from "./car-history"
 import { Badge } from "@/components/ui/badge"
 
 interface DashboardStats {
   pendingPayments: number
   totalStaff: number
   todayPayments: number
+  totalTickets: number
+  availableTickets: number
+  carsParked: number
 }
 
 export default function AdminDashboard() {
@@ -21,6 +27,9 @@ export default function AdminDashboard() {
     pendingPayments: 0,
     totalStaff: 0,
     todayPayments: 0,
+    totalTickets: 0,
+    availableTickets: 0,
+    carsParked: 0,
   })
   const [isLoadingStats, setIsLoadingStats] = useState(true)
 
@@ -54,7 +63,7 @@ export default function AdminDashboard() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Panel de Administración</h1>
-          <p className="text-lg text-gray-600">Gestión de pagos y configuración del sistema</p>
+          <p className="text-lg text-gray-600">Gestión completa del sistema de estacionamiento</p>
         </div>
         <Button onClick={fetchStats} variant="outline" disabled={isLoadingStats}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingStats ? "animate-spin" : ""}`} />
@@ -63,7 +72,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
@@ -98,25 +107,73 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Procesados hoy</p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
+            <Badge variant="outline">{stats.totalTickets}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalTickets}</div>
+            <p className="text-xs text-muted-foreground">Espacios totales</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Espacios Libres</CardTitle>
+            <Badge variant="secondary">{stats.availableTickets}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.availableTickets}</div>
+            <p className="text-xs text-muted-foreground">Disponibles</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Carros Estacionados</CardTitle>
+            <Badge variant="destructive">{stats.carsParked}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.carsParked}</div>
+            <p className="text-xs text-muted-foreground">Actualmente</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="payments" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="payments">
-            Gestión de Pagos
+            Pagos
             {stats.pendingPayments > 0 && (
               <Badge variant="destructive" className="ml-2 text-xs">
                 {stats.pendingPayments}
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="tickets">Tickets</TabsTrigger>
+          <TabsTrigger value="cars">Registro</TabsTrigger>
+          <TabsTrigger value="history">Historial</TabsTrigger>
           <TabsTrigger value="staff">Personal</TabsTrigger>
-          <TabsTrigger value="settings">Configuración</TabsTrigger>
+          <TabsTrigger value="settings">Config</TabsTrigger>
         </TabsList>
 
         <TabsContent value="payments">
           <PendingPayments onStatsUpdate={fetchStats} />
+        </TabsContent>
+
+        <TabsContent value="tickets">
+          <TicketManagement />
+        </TabsContent>
+
+        <TabsContent value="cars">
+          <CarRegistration />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <CarHistory />
         </TabsContent>
 
         <TabsContent value="staff">

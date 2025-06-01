@@ -6,21 +6,21 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { AlertCircle } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Search, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function TicketSearch() {
-  const router = useRouter()
   const [ticketCode, setTicketCode] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!ticketCode.trim()) {
-      setError("Por favor ingrese un código de ticket")
+      setError("Por favor ingresa un código de ticket")
       return
     }
 
@@ -28,34 +28,53 @@ export default function TicketSearch() {
     setError("")
 
     try {
-      const response = await fetch(`/api/ticket-details?code=${encodeURIComponent(ticketCode)}`)
+      console.log(`🔍 Buscando ticket: ${ticketCode.trim().toUpperCase()}`)
 
-      if (!response.ok) {
+      const response = await fetch("/api/search-ticket", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ codigoTicket: ticketCode.trim().toUpperCase() }),
+      })
+
+      if (response.ok) {
+        const ticket = await response.json()
+        console.log(`✅ Ticket encontrado, redirigiendo a: /ticket/${ticket.codigoTicket}`)
+        // Redirigir a la página de detalles del ticket
+        router.push(`/ticket/${ticket.codigoTicket}`)
+      } else {
         const errorData = await response.json()
-        throw new Error(errorData.message || "Error al buscar el ticket")
+        console.log(`❌ Error en búsqueda:`, errorData)
+        setError(errorData.message || "Error al buscar el ticket")
       }
-
-      // Redirect to ticket details page
-      router.push(`/ticket/${ticketCode}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al buscar el ticket")
+      console.error("❌ Error de conexión:", err)
+      setError("Error de conexión. Por favor intenta nuevamente.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <Card className="w-full">
-      <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl font-bold">Buscar Ticket</CardTitle>
+        <p className="text-gray-600">Ingresa tu código de ticket para ver los detalles de pago</p>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSearch} className="space-y-4">
           <div className="space-y-2">
+            <label htmlFor="ticketCode" className="text-sm font-medium">
+              Código de Ticket
+            </label>
             <Input
-              type="text"
               id="ticketCode"
-              placeholder="Código de ticket (ej. XYZ123)"
+              type="text"
+              placeholder="Ej. PARK001, TEST001"
               value={ticketCode}
               onChange={(e) => setTicketCode(e.target.value)}
-              className="h-12 text-lg"
+              className="text-center text-lg font-mono"
               disabled={isLoading}
             />
           </div>
@@ -67,10 +86,28 @@ export default function TicketSearch() {
             </Alert>
           )}
 
-          <Button type="submit" className="w-full h-12 text-lg" disabled={isLoading}>
+          <Button type="submit" className="w-full h-12 text-lg" disabled={isLoading || !ticketCode.trim()}>
+            <Search className="mr-2 h-5 w-5" />
             {isLoading ? "Buscando..." : "Buscar Ticket"}
           </Button>
         </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-500 mb-2">Códigos de ejemplo para pruebas:</p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {["TEST001", "TEST002", "ABC123", "XYZ789"].map((code) => (
+              <button
+                key={code}
+                onClick={() => setTicketCode(code)}
+                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded font-mono"
+                disabled={isLoading}
+              >
+                {code}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">PARK001-PARK005 requieren tener un carro asignado primero</p>
+        </div>
       </CardContent>
     </Card>
   )
