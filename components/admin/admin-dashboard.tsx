@@ -11,6 +11,7 @@ import CompanySettings from "./company-settings"
 import TicketManagement from "./ticket-management"
 import CarRegistration from "./car-registration"
 import CarHistory from "./car-history"
+import VehicleExit from "./vehicle-exit"
 import { Badge } from "@/components/ui/badge"
 
 interface DashboardStats {
@@ -20,6 +21,7 @@ interface DashboardStats {
   totalTickets: number
   availableTickets: number
   carsParked: number
+  paidTickets: number
 }
 
 export default function AdminDashboard() {
@@ -30,6 +32,7 @@ export default function AdminDashboard() {
     totalTickets: 0,
     availableTickets: 0,
     carsParked: 0,
+    paidTickets: 0,
   })
   const [isLoadingStats, setIsLoadingStats] = useState(true)
 
@@ -72,7 +75,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
@@ -110,7 +113,7 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Espacios</CardTitle>
             <Badge variant="outline">{stats.totalTickets}</Badge>
           </CardHeader>
           <CardContent>
@@ -140,11 +143,22 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Actualmente</p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Listos para Salir</CardTitle>
+            <Badge variant={stats.paidTickets > 0 ? "default" : "secondary"}>{stats.paidTickets}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.paidTickets}</div>
+            <p className="text-xs text-muted-foreground">Pagados</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="payments" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="payments">
             Pagos
             {stats.pendingPayments > 0 && (
@@ -153,8 +167,12 @@ export default function AdminDashboard() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="tickets">Tickets</TabsTrigger>
-          <TabsTrigger value="cars">Registro</TabsTrigger>
+          <TabsTrigger value="tickets">Espacios</TabsTrigger>
+          <TabsTrigger value="cars">Ingreso</TabsTrigger>
+          <TabsTrigger value="exit">
+            Salida
+            {stats.paidTickets > 0 && <Badge className="ml-2 text-xs">{stats.paidTickets}</Badge>}
+          </TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
           <TabsTrigger value="staff">Personal</TabsTrigger>
           <TabsTrigger value="settings">Config</TabsTrigger>
@@ -170,6 +188,10 @@ export default function AdminDashboard() {
 
         <TabsContent value="cars">
           <CarRegistration />
+        </TabsContent>
+
+        <TabsContent value="exit">
+          <VehicleExit />
         </TabsContent>
 
         <TabsContent value="history">

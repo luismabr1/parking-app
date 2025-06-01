@@ -28,28 +28,24 @@ export default function TicketSearch() {
     setError("")
 
     try {
-      console.log(`🔍 Buscando ticket: ${ticketCode.trim().toUpperCase()}`)
+      const cleanTicketCode = ticketCode.trim().toUpperCase()
+      console.log(`🔍 Búsqueda: Verificando ticket ${cleanTicketCode}`)
 
-      const response = await fetch("/api/search-ticket", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ codigoTicket: ticketCode.trim().toUpperCase() }),
-      })
+      // Usar directamente la ruta del ticket para verificar si existe
+      const response = await fetch(`/api/ticket/${cleanTicketCode}`)
 
       if (response.ok) {
         const ticket = await response.json()
-        console.log(`✅ Ticket encontrado, redirigiendo a: /ticket/${ticket.codigoTicket}`)
+        console.log(`✅ Búsqueda: Ticket encontrado, redirigiendo a: /ticket/${ticket.codigoTicket}`)
         // Redirigir a la página de detalles del ticket
         router.push(`/ticket/${ticket.codigoTicket}`)
       } else {
         const errorData = await response.json()
-        console.log(`❌ Error en búsqueda:`, errorData)
+        console.log(`❌ Búsqueda: Error para ${cleanTicketCode}:`, errorData)
         setError(errorData.message || "Error al buscar el ticket")
       }
     } catch (err) {
-      console.error("❌ Error de conexión:", err)
+      console.error("❌ Búsqueda: Error de conexión:", err)
       setError("Error de conexión. Por favor intenta nuevamente.")
     } finally {
       setIsLoading(false)
@@ -95,7 +91,7 @@ export default function TicketSearch() {
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-500 mb-2">Códigos de ejemplo para pruebas:</p>
           <div className="flex flex-wrap gap-2 justify-center">
-            {["TEST001", "TEST002", "ABC123", "XYZ789"].map((code) => (
+            {["TEST001", "TEST002", "ABC123", "XYZ789", "PARK001"].map((code) => (
               <button
                 key={code}
                 onClick={() => setTicketCode(code)}
@@ -106,7 +102,7 @@ export default function TicketSearch() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-400 mt-2">PARK001-PARK005 requieren tener un carro asignado primero</p>
+          <p className="text-xs text-gray-400 mt-2">PARK001 ahora tiene un carro asignado y debería funcionar</p>
         </div>
       </CardContent>
     </Card>

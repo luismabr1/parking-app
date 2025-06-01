@@ -38,6 +38,11 @@ export async function GET() {
       estado: "estacionado",
     })
 
+    // Obtener tickets pagados listos para salir
+    const paidTickets = await db.collection("tickets").countDocuments({
+      estado: "pagado_validado",
+    })
+
     return NextResponse.json({
       pendingPayments,
       totalStaff,
@@ -45,6 +50,7 @@ export async function GET() {
       totalTickets,
       availableTickets,
       carsParked,
+      paidTickets,
     })
   } catch (error) {
     console.error("Error fetching stats:", error)
