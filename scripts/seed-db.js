@@ -17,7 +17,33 @@ if (!uri) {
   process.exit(1)
 }
 
-// Añadir la inicialización de la configuración de la empresa
+// Lista de bancos venezolanos
+const venezuelanBanks = [
+  { code: "0102", name: "Banco de Venezuela (BDV)" },
+  { code: "0105", name: "Banco Mercantil" },
+  { code: "0108", name: "BBVA Provincial" },
+  { code: "0134", name: "Banesco" },
+  { code: "0115", name: "Banco Exterior" },
+  { code: "0116", name: "Banco Occidental de Descuento (BOD)" },
+  { code: "0191", name: "Banco Nacional de Crédito (BNC)" },
+  { code: "0114", name: "Bancaribe" },
+  { code: "0138", name: "Banco Plaza" },
+  { code: "0171", name: "Banco Activo" },
+  { code: "0128", name: "Banco Caroní" },
+  { code: "0151", name: "Banco Fondo Común (BFC)" },
+  { code: "0168", name: "Bancrecer" },
+  { code: "0104", name: "Banco Venezolano de Crédito (BVC)" },
+  { code: "0137", name: "Sofitasa" },
+  { code: "0166", name: "Banco Agrícola de Venezuela" },
+  { code: "0172", name: "Banavap" },
+  { code: "0169", name: "Mi Banco" },
+  { code: "0163", name: "Banco del Tesoro" },
+  { code: "0175", name: "Banco Bicentenario del Pueblo" },
+  { code: "0177", name: "Banco de la Fuerza Armada Nacional Bolivariana (BanFANB)" },
+  { code: "0174", name: "Banco Universal" },
+  { code: "0000", name: "Otros Bancos (Genérico)" },
+]
+
 async function seedDatabase() {
   const client = new MongoClient(uri)
 
@@ -32,6 +58,7 @@ async function seedDatabase() {
     await db.createCollection("pagos")
     await db.createCollection("staff")
     await db.createCollection("company_settings")
+    await db.createCollection("banks")
 
     // Limpiar datos existentes
     await db.collection("tickets").deleteMany({})
@@ -113,12 +140,12 @@ async function seedDatabase() {
     // Crear configuración de empresa de ejemplo
     const companySettings = {
       pagoMovil: {
-        banco: "Banco Nacional",
+        banco: "Banco de Venezuela (BDV)",
         cedula: "J-12345678-9",
         telefono: "0414-1234567",
       },
       transferencia: {
-        banco: "Banco de Venezuela",
+        banco: "Banco de Venezuela (BDV)",
         cedula: "J-12345678-9",
         telefono: "0212-1234567",
         numeroCuenta: "0102-0000-00-0000000000",
@@ -128,6 +155,11 @@ async function seedDatabase() {
     await db.collection("company_settings").deleteMany({})
     await db.collection("company_settings").insertOne(companySettings)
     console.log("✅ Configuración de empresa insertada")
+
+    // Insertar bancos venezolanos
+    await db.collection("banks").deleteMany({})
+    await db.collection("banks").insertMany(venezuelanBanks)
+    console.log(`✅ ${venezuelanBanks.length} bancos insertados`)
 
     console.log("\n🎉 Base de datos inicializada con datos de ejemplo")
     console.log("\n📋 Códigos de tickets disponibles para pruebas:")

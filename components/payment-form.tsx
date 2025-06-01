@@ -10,7 +10,14 @@ import { Card, CardContent } from "@/components/ui/card"
 import { AlertCircle, CheckCircle2, ArrowLeft, ArrowRight, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatCurrency } from "@/lib/utils"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Ticket, PaymentFormData, CompanySettings } from "@/lib/types"
+
+interface Bank {
+  _id: string
+  code: string
+  name: string
+}
 
 interface PaymentFormProps {
   ticket: Ticket
@@ -24,6 +31,8 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
   const [success, setSuccess] = useState(false)
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null)
   const [loadingSettings, setLoadingSettings] = useState(true)
+  const [banks, setBanks] = useState<Bank[]>([])
+  const [loadingBanks, setLoadingBanks] = useState(true)
 
   const [formData, setFormData] = useState<PaymentFormData>({
     referenciaTransferencia: "",
@@ -34,30 +43,58 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
   })
 
   useEffect(() => {
-    const fetchCompanySettings = async () => {
-      try {
-        const response = await fetch("/api/company-settings")
-        if (response.ok) {
-          const data = await response.json()
-          setCompanySettings(data)
-        } else {
-          console.error("Error fetching company settings")
-        }
-      } catch (error) {
-        console.error("Error:", error)
-      } finally {
+    Promise.all([fetchCompanySettings(), fetchBanks()])
+      .then(() => {
         setLoadingSettings(false)
-      }
-    }
-
-    fetchCompanySettings()
+        setLoadingBanks(false)
+      })
+      .catch((error) => {
+        console.error("Error initializing:", error)
+        setLoadingSettings(false)
+        setLoadingBanks(false)
+      })
   }, [])
+
+  const fetchCompanySettings = async () => {
+    try {
+      const response = await fetch("/api/company-settings")
+      if (response.ok) {
+        const data = await response.json()
+        setCompanySettings(data)
+      } else {
+        console.error("Error fetching company settings")
+      }
+    } catch (error) {
+      console.error("Error:", error)
+    }
+  }
+
+  const fetchBanks = async () => {
+    try {
+      const response = await fetch("/api/banks")
+      if (response.ok) {
+        const data = await response.json()
+        setBanks(data)
+      } else {
+        console.error("Error fetching banks")
+      }
+    } catch (error) {
+      console.error("Error:", error)
+    }
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
       [name]: name === "montoPagado" ? Number.parseFloat(value) || 0 : value,
+    }))
+  }
+
+  const handleBankChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      banco: value,
     }))
   }
 
@@ -123,6 +160,8 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
     )
   }
 
+  const isLoaded = !loadingSettings && !loadingBanks
+
   return (
     <Card className="w-full">
       <CardContent className="pt-6">
@@ -151,7 +190,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
               </div>
             </div>
 
-            {loadingSettings ? (
+            {!isLoaded ? (
               <div className="flex justify-center py-4">
                 <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
               </div>
@@ -269,15 +308,18 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                 <label htmlFor="banco" className="text-sm font-medium">
                   Banco
                 </label>
-                <Input
-                  id="banco"
-                  name="banco"
-                  value={formData.banco}
-                  onChange={handleChange}
-                  className="h-12 text-lg"
-                  placeholder="Ej. Banco Nacional"
-                  required
-                />
+                <Select value={formData.banco} onValueChange={handleBankChange}>
+                  <SelectTrigger id="banco" className="h-12 text-lg">
+                    <SelectValue placeholder="Seleccione su banco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {banks.map((bank) => (
+                      <SelectItem key={bank.code} value={bank.name}>
+                        {bank.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -290,7 +332,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                   value={formData.telefono}
                   onChange={handleChange}
                   className="h-12 text-lg"
-                  placeholder="Ej. 555-123-4567"
+                  placeholder="Ej. 0414-1234567"
                   required
                 />
               </div>
@@ -305,7 +347,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                   value={formData.numeroIdentidad}
                   onChange={handleChange}
                   className="h-12 text-lg"
-                  placeholder="Ej. 1234567890"
+                  placeholder="Ej. V-12345678"
                   required
                 />
               </div>

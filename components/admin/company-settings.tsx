@@ -9,6 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Save } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+interface Bank {
+  _id: string
+  code: string
+  name: string
+}
 
 export default function AdminCompanySettings() {
   const [settings, setSettings] = useState({
@@ -24,12 +31,18 @@ export default function AdminCompanySettings() {
       numeroCuenta: "",
     },
   })
+  const [banks, setBanks] = useState<Bank[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState("")
 
   useEffect(() => {
-    fetchSettings()
+    Promise.all([fetchSettings(), fetchBanks()])
+      .then(() => setIsLoading(false))
+      .catch((error) => {
+        console.error("Error initializing:", error)
+        setIsLoading(false)
+      })
   }, [])
 
   const fetchSettings = async () => {
@@ -43,8 +56,18 @@ export default function AdminCompanySettings() {
       }
     } catch (err) {
       console.error("Error fetching settings:", err)
-    } finally {
-      setIsLoading(false)
+    }
+  }
+
+  const fetchBanks = async () => {
+    try {
+      const response = await fetch("/api/banks")
+      if (response.ok) {
+        const data = await response.json()
+        setBanks(data)
+      }
+    } catch (err) {
+      console.error("Error fetching banks:", err)
     }
   }
 
@@ -127,12 +150,18 @@ export default function AdminCompanySettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="pagoMovilBanco">Banco (Pago Móvil)</Label>
-                <Input
-                  id="pagoMovilBanco"
-                  value={settings.pagoMovil.banco}
-                  onChange={(e) => updatePagoMovil("banco", e.target.value)}
-                  placeholder="Ej. Banco de Venezuela"
-                />
+                <Select value={settings.pagoMovil.banco} onValueChange={(value) => updatePagoMovil("banco", value)}>
+                  <SelectTrigger id="pagoMovilBanco">
+                    <SelectValue placeholder="Seleccione un banco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {banks.map((bank) => (
+                      <SelectItem key={`pm-${bank.code}`} value={bank.name}>
+                        {bank.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="pagoMovilCedula">Cédula o RIF (Pago Móvil)</Label>
@@ -161,12 +190,21 @@ export default function AdminCompanySettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="transferenciaBanco">Banco (Transferencia)</Label>
-                <Input
-                  id="transferenciaBanco"
+                <Select
                   value={settings.transferencia.banco}
-                  onChange={(e) => updateTransferencia("banco", e.target.value)}
-                  placeholder="Ej. Banco Nacional"
-                />
+                  onValueChange={(value) => updateTransferencia("banco", value)}
+                >
+                  <SelectTrigger id="transferenciaBanco">
+                    <SelectValue placeholder="Seleccione un banco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {banks.map((bank) => (
+                      <SelectItem key={`tr-${bank.code}`} value={bank.name}>
+                        {bank.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="transferenciaCedula">Cédula o RIF (Transferencia)</Label>
