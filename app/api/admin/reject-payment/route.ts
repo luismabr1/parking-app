@@ -48,7 +48,13 @@ export async function PUT(request: Request) {
       await db.collection("cars").updateOne({ _id: car._id }, { $set: { estado: "estacionado" } })
     }
 
-    return NextResponse.json({ message: "Pago rechazado exitosamente" })
+    // Agregar headers para evitar el caché
+    const response = NextResponse.json({ message: "Pago rechazado exitosamente" })
+    response.headers.set("Cache-Control", "no-store, max-age=0")
+    response.headers.set("Pragma", "no-cache")
+    response.headers.set("Expires", "0")
+
+    return response
   } catch (error) {
     console.error("Error rejecting payment:", error)
     return NextResponse.json({ message: "Error al rechazar el pago" }, { status: 500 })

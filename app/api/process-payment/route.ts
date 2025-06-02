@@ -63,6 +63,7 @@ export async function POST(request: Request) {
     }
 
     const pagoResult = await db.collection("pagos").insertOne(pagoData)
+    console.log("Pago registrado:", pagoResult)
 
     // Actualizar el estado del ticket
     await db.collection("tickets").updateOne(

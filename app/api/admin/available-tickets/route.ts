@@ -18,3 +18,4 @@ export async function GET() {
     return NextResponse.json({ message: "Error al obtener tickets disponibles" }, { status: 500 })
   }
 }
+

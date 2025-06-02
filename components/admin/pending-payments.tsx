@@ -41,12 +41,31 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
 
   useEffect(() => {
     fetchPendingPayments()
+
+    // Configurar un intervalo para actualizar los pagos pendientes cada 30 segundos
+    const intervalId = setInterval(() => {
+      fetchPendingPayments(false) // false para no mostrar el indicador de carga
+    }, 30000)
+
+    return () => clearInterval(intervalId)
   }, [])
 
-  const fetchPendingPayments = async () => {
+  const fetchPendingPayments = async (showLoading = true) => {
     try {
-      setIsLoading(true)
-      const response = await fetch("/api/admin/pending-payments")
+      if (showLoading) {
+        setIsLoading(true)
+      }
+
+      // Agregar un timestamp para evitar el caché
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/pending-payments?t=${timestamp}`, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      })
+
       if (response.ok) {
         const data = await response.json()
         setPayments(data)
@@ -56,7 +75,9 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar datos")
     } finally {
-      setIsLoading(false)
+      if (showLoading) {
+        setIsLoading(false)
+      }
     }
   }
 
@@ -65,9 +86,15 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
       setProcessingId(paymentId)
       setError("")
 
-      const response = await fetch(`/api/admin/${action}-payment`, {
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/${action}-payment?t=${timestamp}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
         body: JSON.stringify({ paymentId }),
       })
 
@@ -104,7 +131,7 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Pagos Pendientes de Validación</CardTitle>
-        <Button onClick={fetchPendingPayments} variant="outline" size="sm">
+        <Button onClick={() => fetchPendingPayments(true)} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />
           Actualizar
         </Button>

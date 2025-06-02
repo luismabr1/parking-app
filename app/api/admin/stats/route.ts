@@ -43,7 +43,8 @@ export async function GET() {
       estado: "pagado_validado",
     })
 
-    return NextResponse.json({
+    // Agregar headers para evitar el caché
+    const response = NextResponse.json({
       pendingPayments,
       totalStaff,
       todayPayments,
@@ -52,6 +53,12 @@ export async function GET() {
       carsParked,
       paidTickets,
     })
+
+    response.headers.set("Cache-Control", "no-store, max-age=0")
+    response.headers.set("Pragma", "no-cache")
+    response.headers.set("Expires", "0")
+
+    return response
   } catch (error) {
     console.error("Error fetching stats:", error)
     return NextResponse.json({ message: "Error al obtener estadísticas" }, { status: 500 })

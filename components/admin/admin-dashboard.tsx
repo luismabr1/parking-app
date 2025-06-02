@@ -48,7 +48,16 @@ export default function AdminDashboard() {
   const fetchStats = async () => {
     try {
       setIsLoadingStats(true)
-      const response = await fetch("/api/admin/stats")
+      // Agregar un timestamp para evitar el caché
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/stats?t=${timestamp}`, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      })
+
       if (response.ok) {
         const data = await response.json()
         setStats(data)
