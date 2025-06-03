@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
+export const fetchCache = 'force-no-store'
+
 export async function GET() {
   try {
     const client = await clientPromise

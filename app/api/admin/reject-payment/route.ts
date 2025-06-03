@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
+export const fetchCache = 'force-no-store'
+
 export async function PUT(request: Request) {
   try {
     const client = await clientPromise
