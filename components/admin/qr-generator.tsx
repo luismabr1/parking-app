@@ -241,7 +241,7 @@ export default function QRGenerator() {
           <div className="text-center py-8 text-gray-500">
             <QrCode className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No hay tickets disponibles</p>
-            <p className="text-sm">Cree tickets primero en la pestaña "Espacios"</p>
+            <p className="text-sm">Cree tickets primero en la pestaña &quot;Espacios&quot;</p>
           </div>
         )}
       </CardContent>

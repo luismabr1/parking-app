@@ -66,7 +66,14 @@ export default function CarRegistration() {
 
   const fetchCars = async () => {
     try {
-      const response = await fetch("/api/admin/cars")
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/cars?t=${timestamp}`, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      })
       if (response.ok) {
         const data = await response.json()
         setCars(data)
@@ -78,7 +85,14 @@ export default function CarRegistration() {
 
   const fetchAvailableTickets = async () => {
     try {
-      const response = await fetch("/api/admin/available-tickets")
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/available-tickets?t=${timestamp}`, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      })
       if (response.ok) {
         const data = await response.json()
         setAvailableTickets(data)
@@ -87,6 +101,15 @@ export default function CarRegistration() {
       console.error("Error fetching available tickets:", error)
     }
   }
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchCars()
+      fetchAvailableTickets()
+    }, 30000) // Actualizar cada 30 segundos
+
+    return () => clearInterval(interval)
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
