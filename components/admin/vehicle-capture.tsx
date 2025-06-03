@@ -40,15 +40,30 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     imageUrl: string
     confidence: number
   } | null>(null)
+  const [videoReady, setVideoReady] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const mountedRef = useRef(true)
 
   // Agregar debug info
   const addDebugInfo = useCallback((info: string) => {
     console.log("🔍 DEBUG:", info)
-    setDebugInfo((prev) => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${info}`])
+    if (mountedRef.current) {
+      setDebugInfo((prev) => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${info}`])
+    }
+  }, [])
+
+  // Cleanup al desmontar
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+      }
+    }
   }, [])
 
   // Detectar capacidades del dispositivo
@@ -84,9 +99,24 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   }, [addDebugInfo])
 
   const startCamera = useCallback(async () => {
+    if (!mountedRef.current) {
+      addDebugInfo("❌ Componente desmontado, cancelando")
+      return
+    }
+
     try {
       setError(null)
+      setVideoReady(false)
       addDebugInfo("🎬 Intentando iniciar cámara...")
+
+      // Verificar que el elemento video existe ANTES de continuar
+      if (!videoRef.current) {
+        addDebugInfo("❌ Elemento video no encontrado al inicio")
+        setError("Error: elemento de video no disponible")
+        return
+      }
+
+      addDebugInfo("✅ Elemento video encontrado")
 
       // Limpiar stream anterior si existe
       if (streamRef.current) {
@@ -97,15 +127,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
       // Configuraciones progresivas para mayor compatibilidad
       const constraints = [
-        // Configuración ideal para móviles
-        {
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-          },
-        },
-        // Configuración de respaldo
+        // Configuración básica para móviles
         {
           video: {
             facingMode: "environment",
@@ -113,7 +135,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             height: { ideal: 480 },
           },
         },
-        // Configuración mínima
+        // Configuración aún más básica
         {
           video: {
             facingMode: "environment",
@@ -129,6 +151,11 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       let lastError: Error | null = null
 
       for (let i = 0; i < constraints.length; i++) {
+        if (!mountedRef.current) {
+          addDebugInfo("❌ Componente desmontado durante configuración")
+          return
+        }
+
         try {
           addDebugInfo(`🔄 Probando configuración ${i + 1}/${constraints.length}`)
           stream = await navigator.mediaDevices.getUserMedia(constraints[i])
@@ -144,53 +171,80 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         throw lastError || new Error("No se pudo acceder a ninguna cámara")
       }
 
-      // Verificar que el video element existe
-      if (!videoRef.current) {
-        addDebugInfo("❌ Elemento video no encontrado")
-        throw new Error("Elemento de video no disponible")
+      // Verificar NUEVAMENTE que el video element existe
+      if (!videoRef.current || !mountedRef.current) {
+        addDebugInfo("❌ Elemento video perdido después de obtener stream")
+        stream.getTracks().forEach((track) => track.stop())
+        setError("Error: elemento de video no disponible")
+        return
       }
 
+      addDebugInfo("✅ Elemento video verificado después de stream")
+
       // Configurar el stream
-      videoRef.current.srcObject = stream
+      const video = videoRef.current
+      video.srcObject = stream
       streamRef.current = stream
 
-      // Esperar a que el video esté listo
-      await new Promise<void>((resolve, reject) => {
-        if (!videoRef.current) {
-          reject(new Error("Video element perdido"))
-          return
+      // Esperar a que el video esté listo con timeout más corto
+      try {
+        await new Promise<void>((resolve, reject) => {
+          if (!video || !mountedRef.current) {
+            reject(new Error("Video element perdido durante setup"))
+            return
+          }
+
+          const onLoadedMetadata = () => {
+            if (!mountedRef.current) return
+            addDebugInfo(`📹 Video listo: ${video.videoWidth}x${video.videoHeight}`)
+            cleanup()
+            setVideoReady(true)
+            resolve()
+          }
+
+          const onError = (e: Event) => {
+            addDebugInfo(`❌ Error en video: ${e}`)
+            cleanup()
+            reject(new Error("Error cargando video"))
+          }
+
+          const onTimeout = () => {
+            addDebugInfo("⏰ Timeout cargando video")
+            cleanup()
+            reject(new Error("Timeout cargando video"))
+          }
+
+          const cleanup = () => {
+            video.removeEventListener("loadedmetadata", onLoadedMetadata)
+            video.removeEventListener("error", onError)
+            clearTimeout(timeoutId)
+          }
+
+          video.addEventListener("loadedmetadata", onLoadedMetadata)
+          video.addEventListener("error", onError)
+
+          // Timeout más corto para móviles
+          const timeoutId = setTimeout(onTimeout, 5000)
+
+          // Si el video ya tiene metadata, disparar inmediatamente
+          if (video.readyState >= 1) {
+            onLoadedMetadata()
+          }
+        })
+
+        if (mountedRef.current) {
+          setIsCapturing(true)
+          addDebugInfo("🎉 Cámara iniciada exitosamente")
         }
-
-        const video = videoRef.current
-
-        const onLoadedMetadata = () => {
-          addDebugInfo(`📹 Video listo: ${video.videoWidth}x${video.videoHeight}`)
-          video.removeEventListener("loadedmetadata", onLoadedMetadata)
-          video.removeEventListener("error", onError)
-          resolve()
+      } catch (setupError) {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop())
         }
-
-        const onError = (e: Event) => {
-          addDebugInfo(`❌ Error en video: ${e}`)
-          video.removeEventListener("loadedmetadata", onLoadedMetadata)
-          video.removeEventListener("error", onError)
-          reject(new Error("Error cargando video"))
-        }
-
-        video.addEventListener("loadedmetadata", onLoadedMetadata)
-        video.addEventListener("error", onError)
-
-        // Timeout de seguridad
-        setTimeout(() => {
-          video.removeEventListener("loadedmetadata", onLoadedMetadata)
-          video.removeEventListener("error", onError)
-          reject(new Error("Timeout cargando video"))
-        }, 10000)
-      })
-
-      setIsCapturing(true)
-      addDebugInfo("🎉 Cámara iniciada exitosamente")
+        throw setupError
+      }
     } catch (err) {
+      if (!mountedRef.current) return
+
       const errorMessage = err instanceof Error ? err.message : "Error desconocido"
       addDebugInfo(`💥 Error final: ${errorMessage}`)
 
@@ -206,6 +260,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         errorMessage.includes("ConstraintNotSatisfiedError")
       ) {
         setError("La cámara no soporta la configuración solicitada.")
+      } else if (errorMessage.includes("elemento de video")) {
+        setError("Error interno: elemento de video no disponible. Intente recargar la página.")
       } else {
         setError(`Error accediendo a la cámara: ${errorMessage}`)
       }
@@ -224,6 +280,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       streamRef.current = null
     }
     setIsCapturing(false)
+    setVideoReady(false)
   }, [addDebugInfo])
 
   const capturePhoto = useCallback(() => {
@@ -232,6 +289,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     if (!videoRef.current || !canvasRef.current) {
       addDebugInfo("❌ Elementos video/canvas no disponibles")
       setError("Error: elementos de captura no disponibles")
+      return
+    }
+
+    if (!videoReady) {
+      addDebugInfo("❌ Video no está listo")
+      setError("Error: video no está listo para captura")
       return
     }
 
@@ -254,33 +317,40 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
     addDebugInfo(`📐 Capturando: ${video.videoWidth}x${video.videoHeight}`)
 
-    // Configurar el canvas con las dimensiones del video
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    try {
+      // Configurar el canvas con las dimensiones del video
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
 
-    // Dibujar el frame actual del video en el canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      // Dibujar el frame actual del video en el canvas
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    // Convertir a blob y obtener URL
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          const imageUrl = URL.createObjectURL(blob)
-          addDebugInfo(`✅ Foto capturada: ${blob.size} bytes`)
-          setCapturedImages((prev) => ({
-            ...prev,
-            [currentStep]: imageUrl,
-          }))
-          stopCamera()
-        } else {
-          addDebugInfo("❌ Error generando blob")
-          setError("Error generando imagen")
-        }
-      },
-      "image/jpeg",
-      0.8,
-    )
-  }, [currentStep, stopCamera, addDebugInfo])
+      // Convertir a blob y obtener URL
+      canvas.toBlob(
+        (blob) => {
+          if (!mountedRef.current) return
+
+          if (blob) {
+            const imageUrl = URL.createObjectURL(blob)
+            addDebugInfo(`✅ Foto capturada: ${blob.size} bytes`)
+            setCapturedImages((prev) => ({
+              ...prev,
+              [currentStep]: imageUrl,
+            }))
+            stopCamera()
+          } else {
+            addDebugInfo("❌ Error generando blob")
+            setError("Error generando imagen")
+          }
+        },
+        "image/jpeg",
+        0.8,
+      )
+    } catch (captureError) {
+      addDebugInfo(`❌ Error durante captura: ${captureError}`)
+      setError("Error capturando imagen")
+    }
+  }, [currentStep, stopCamera, addDebugInfo, videoReady])
 
   const processPlateImage = useCallback(async () => {
     if (!capturedImages.plate) return
@@ -462,8 +532,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           </Alert>
         )}
 
-        {/* Panel de debug en desarrollo */}
-        {process.env.NODE_ENV === "development" && debugInfo.length > 0 && (
+        {/* Panel de debug - siempre visible en producción para diagnosticar */}
+        {debugInfo.length > 0 && (
           <Alert>
             <AlertDescription>
               <details>
@@ -499,6 +569,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
               Abrir Cámara
             </Button>
             <p className="text-xs text-gray-500">Asegúrese de permitir el acceso a la cámara cuando se lo solicite</p>
+            <p className="text-xs text-gray-400">Si el problema persiste, recargue la página e intente nuevamente</p>
           </div>
         )}
 
@@ -510,23 +581,41 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                 autoPlay
                 playsInline
                 muted
-                className="w-full rounded-lg"
-                style={{ maxHeight: "300px" }}
+                className="w-full rounded-lg bg-black"
+                style={{ maxHeight: "300px", minHeight: "200px" }}
+                onLoadedMetadata={() => {
+                  addDebugInfo("📹 Video metadata cargada")
+                  setVideoReady(true)
+                }}
+                onError={(e) => {
+                  addDebugInfo(`❌ Error en video element: ${e}`)
+                  setError("Error en el elemento de video")
+                }}
               />
-              <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none">
-                <div
-                  className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 ${stepInfo.frameClass} border-2 border-yellow-400 rounded`}
-                >
-                  <span className="absolute -top-6 left-0 text-xs text-yellow-400 font-medium">
-                    {stepInfo.frameLabel}
-                  </span>
+              {videoReady && (
+                <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none">
+                  <div
+                    className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 ${stepInfo.frameClass} border-2 border-yellow-400 rounded`}
+                  >
+                    <span className="absolute -top-6 left-0 text-xs text-yellow-400 font-medium">
+                      {stepInfo.frameLabel}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
+              {!videoReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                  <div className="text-white text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                    <p className="text-sm">Cargando cámara...</p>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex space-x-2">
-              <Button onClick={capturePhoto} className="flex-1" size="lg">
+              <Button onClick={capturePhoto} className="flex-1" size="lg" disabled={!videoReady}>
                 <Camera className="h-4 w-4 mr-2" />
-                Capturar
+                {videoReady ? "Capturar" : "Esperando..."}
               </Button>
               <Button onClick={onCancel} variant="outline">
                 <X className="h-4 w-4" />
