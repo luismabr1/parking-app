@@ -15,12 +15,15 @@ Una aplicación web integral para la gestión completa de estacionamientos con r
 - **Panel de Administración Completo**: Interfaz integral para gestionar todo el sistema
 - **Gestión de Espacios**: Crear y administrar tickets de estacionamiento (hasta 100 por lote)
 - **Registro de Vehículos**: Sistema completo para registrar carros con datos del vehículo y propietario
+- **Confirmación de Estacionamiento**: Verificar que el vehículo está correctamente estacionado antes de habilitar pagos
 - **Control de Ocupación**: Asignación automática de espacios y control de disponibilidad
 - **Gestión de Pagos**: Validar o rechazar pagos pendientes con información detallada
+- **Salida de Vehículos**: Procesar la salida y liberar espacios automáticamente
+- **Códigos QR**: Generar, imprimir y escanear códigos QR para cada espacio
 - **Historial Completo**: Registro histórico de todos los vehículos que han usado el estacionamiento
 - **Gestión de Personal**: Crear, editar y eliminar cuentas de personal
 - **Configuración de Empresa**: Configurar datos bancarios para pago móvil y transferencias
-- **Estadísticas en Tiempo Real**: Dashboard con métricas importantes y actualización automática
+- **Estadísticas en Tiempo Real**: Dashboard con 8 métricas importantes y actualización automática
 - **Búsqueda Avanzada**: Filtros y búsqueda en el historial de vehículos
 
 ## 🛠️ Tecnologías Utilizadas
@@ -137,48 +140,63 @@ La aplicación estará disponible en: http://localhost:3000
    - O usa el botón "Acceso Rápido (Demo)"
 
 2. **Dashboard Principal**
-   - Ve estadísticas en tiempo real (6 métricas principales)
-   - Navega entre las 6 pestañas disponibles
+   - Ve estadísticas en tiempo real (8 métricas principales)
+   - Navega entre las 7 pestañas disponibles
    - Las estadísticas se actualizan automáticamente cada 30 segundos
 
-3. **Gestión de Tickets** (Pestaña "Tickets")
-   - **Ver estadísticas**: Total, disponibles, ocupados, pagados
+3. **Confirmación de Estacionamiento** (Pestaña "Confirmar" - PRIMERA PRIORIDAD)
+   - **Ver vehículos pendientes**: Carros registrados que necesitan confirmación
+   - **Verificar estacionamiento**: Confirmar físicamente que el vehículo está bien ubicado
+   - **Confirmar estacionamiento**: Un clic para habilitar el cobro
+   - **Badge de notificación**: Muestra cantidad de confirmaciones pendientes
+   - **Inicio del tiempo de cobro**: Se marca desde la confirmación, no desde el registro
+
+4. **Gestión de Tickets** (Pestaña "Tickets")
+   - **Ver estadísticas**: Total, disponibles, ocupados, confirmados, pagados
    - **Crear tickets masivos**: Hasta 100 tickets por lote
+   - **Generar códigos QR**: Para cada espacio de estacionamiento
    - **Monitorear espacios**: Lista completa de todos los tickets con sus estados
    - Los tickets representan los espacios físicos de estacionamiento
 
-4. **Registro de Vehículos** (Pestaña "Registro")
+5. **Registro de Vehículos** (Pestaña "Registro")
    - **Registrar nuevo carro**: Cuando llega un vehículo al estacionamiento
    - **Datos completos**: Placa, marca, modelo, color, dueño, teléfono
    - **Asignación automática**: Seleccionar ticket disponible del dropdown
-   - **Tiempo de ingreso**: Se registra automáticamente al momento del registro
+   - **Estado inicial**: Ticket pasa a "ocupado" (pendiente confirmación)
    - **Ver carros actuales**: Lista de todos los vehículos estacionados
+   - **Escaneo QR**: Opción para escanear código QR del espacio
 
-5. **Gestión de Pagos** (Pestaña "Pagos")
+6. **Gestión de Pagos** (Pestaña "Pagos")
    - Ve todos los pagos pendientes de validación
    - Revisa los detalles de cada pago (referencia, banco, monto, etc.)
    - Valida o rechaza pagos según corresponda
    - Los tickets validados cambian a estado "pagado_validado"
    - Los tickets rechazados vuelven a estado "pago_rechazado" para reintento
 
-6. **Historial Completo** (Pestaña "Historial")
+7. **Salida de Vehículos** (Pestaña "Salidas")
+   - **Procesar salidas**: Lista de vehículos con pagos validados listos para salir
+   - **Liberar espacios**: Confirmar salida y liberar ticket automáticamente
+   - **Actualización en tiempo real**: Lista se actualiza cada 30 segundos
+   - **Control de flujo**: Solo vehículos con pago validado pueden salir
+
+8. **Historial Completo** (Pestaña "Historial")
    - **Búsqueda avanzada**: Por placa, nombre del dueño, marca o ticket
    - **Paginación**: 20 registros por página para mejor rendimiento
    - **Filtros**: Buscar en todo el historial de vehículos
    - **Estados**: Estacionado, Pagado, Finalizado
    - **Información completa**: Todos los datos del vehículo y tiempos
 
-7. **Gestión de Personal** (Pestaña "Personal")
+9. **Gestión de Personal** (Pestaña "Personal")
    - Añade nuevos miembros del personal
    - Edita información existente
    - Asigna roles (administrador u operador)
    - Elimina cuentas cuando sea necesario
 
-8. **Configuración de Empresa** (Pestaña "Config")
-   - Configura los datos bancarios para pago móvil
-   - Configura los datos para transferencias bancarias
-   - Selecciona bancos del dropdown (lista completa de bancos venezolanos)
-   - Esta información se mostrará a los clientes durante el proceso de pago
+10. **Configuración de Empresa** (Pestaña "Config")
+    - Configura los datos bancarios para pago móvil
+    - Configura los datos para transferencias bancarias
+    - Selecciona bancos del dropdown (lista completa de bancos venezolanos)
+    - Esta información se mostrará a los clientes durante el proceso de pago
 
 ## 🧪 Datos de Prueba
 
@@ -188,19 +206,19 @@ La aplicación estará disponible en: http://localhost:3000
 - `PARK001` - `PARK005`: Tickets disponibles para asignar a nuevos vehículos
 
 #### Tickets de Compatibilidad (Sistema Legacy)
-- `TEST001` - Toyota Corolla (ABC123) - 1 hora estacionado
-- `TEST002` - Chevrolet Aveo (XYZ789) - 2 horas estacionado
-- `TEST003` - 3 horas de estacionamiento (~$9.00)
-- `ABC123` - 30 minutos de estacionamiento (~$1.50)
-- `XYZ789` - 4 horas de estacionamiento (~$12.00)
+- `TEST001` - Toyota Corolla (ABC123) - Estacionado y confirmado
+- `TEST002` - Chevrolet Aveo (XYZ789) - Estacionado y confirmado
+- `TEST003` - Estacionado y confirmado (~$9.00)
+- `ABC123` - Estacionado y confirmado (~$1.50)
+- `XYZ789` - Estacionado y confirmado (~$12.00)
 
 ### Credenciales de Administración
 - **Usuario**: admin
 - **Contraseña**: admin123
 
 ### Vehículos de Ejemplo
-- **ABC123**: Toyota Corolla Blanco - Juan Pérez (Estacionado en TEST001)
-- **XYZ789**: Chevrolet Aveo Azul - María González (Estacionado en TEST002)
+- **ABC123**: Toyota Corolla Blanco - Juan Pérez (Confirmado en TEST001)
+- **XYZ789**: Chevrolet Aveo Azul - María González (Confirmado en TEST002)
 
 ## 🗂️ Estructura del Proyecto
 
@@ -242,22 +260,25 @@ sistema-estacionamiento/
 
 1. **Admin crea tickets** → Representa espacios físicos disponibles (PARK001, PARK002, etc.)
 2. **Cliente llega al estacionamiento** → Admin registra el vehículo en el sistema
-3. **Sistema asigna espacio** → Ticket pasa de "disponible" a "ocupado"
-4. **Tiempo se registra automáticamente** → Hora de ingreso para cálculo posterior
-5. **Cliente decide salir** → Busca su ticket en la web usando el código
-6. **Sistema calcula monto** → Basado en tiempo transcurrido desde el ingreso
-7. **Cliente realiza pago** → Transferencia bancaria o pago móvil
-8. **Cliente registra pago** → Completa formulario con detalles de la transacción
-9. **Admin recibe notificación** → Pago aparece en lista de pendientes
-10. **Admin valida pago** → Revisa detalles y confirma o rechaza
-11. **Sistema actualiza registros** → Ticket marcado como pagado, historial actualizado
+3. **Sistema asigna espacio** → Ticket pasa de "disponible" a "ocupado" (pendiente confirmación)
+4. **Admin confirma estacionamiento** → Verifica físicamente que el carro está bien ubicado
+5. **Sistema habilita cobro** → Ticket pasa a "estacionado_confirmado" y se inicia el tiempo de cobro
+6. **Cliente decide salir** → Busca su ticket en la web usando el código
+7. **Sistema calcula monto** → Basado en tiempo transcurrido desde la confirmación
+8. **Cliente realiza pago** → Transferencia bancaria o pago móvil
+9. **Cliente registra pago** → Completa formulario con detalles de la transacción
+10. **Admin recibe notificación** → Pago aparece en lista de pendientes
+11. **Admin valida pago** → Revisa detalles y confirma o rechaza
+12. **Cliente puede salir** → Vehículo aparece en lista de salidas
+13. **Admin procesa salida** → Confirma salida y libera espacio automáticamente
 
 ### Estados de los Tickets
 
 - **Disponible**: Espacio libre, listo para asignar
-- **Ocupado**: Vehículo estacionado, tiempo corriendo
+- **Ocupado**: Vehículo registrado, pendiente confirmación física ⚠️
+- **Estacionado Confirmado**: Vehículo confirmado, tiempo de cobro iniciado ✅
 - **Pago Pendiente**: Cliente registró pago, esperando validación
-- **Pagado Validado**: Pago confirmado por admin, proceso completo
+- **Pagado Validado**: Pago confirmado por admin, listo para salir
 - **Pago Rechazado**: Pago rechazado, cliente debe reintentar
 
 ### Colecciones de Base de Datos
@@ -359,9 +380,10 @@ npm run seed
 ## 🔮 Próximas Características Planificadas
 
 ### Funcionalidades Inmediatas
-- [ ] **Salida de vehículos**: Registrar cuando un carro sale y liberar el ticket
+- [x] **Salida de vehículos**: Registrar cuando un carro sale y liberar el ticket ✅
+- [x] **Códigos QR**: Generar QR para cada ticket para facilitar el proceso ✅
+- [x] **Confirmación de estacionamiento**: Verificar ubicación antes de habilitar cobro ✅
 - [ ] **Tarifas dinámicas**: Diferentes precios según hora del día o tipo de vehículo
-- [ ] **Códigos QR**: Generar QR para cada ticket para facilitar el proceso
 - [ ] **Notificaciones automáticas**: Alertas para pagos pendientes y espacios disponibles
 
 ### Mejoras de Gestión

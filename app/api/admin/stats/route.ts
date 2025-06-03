@@ -16,6 +16,11 @@ export async function GET() {
       estado: "pendiente_validacion",
     })
 
+    // Obtener confirmaciones pendientes (tickets ocupados)
+    const pendingConfirmations = await db.collection("tickets").countDocuments({
+      estado: "ocupado",
+    })
+
     // Obtener total de personal
     const totalStaff = await db.collection("staff").countDocuments()
 
@@ -51,6 +56,7 @@ export async function GET() {
     // Set cache control headers
     const response = NextResponse.json({
       pendingPayments,
+      pendingConfirmations,
       totalStaff,
       todayPayments,
       totalTickets,

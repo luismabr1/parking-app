@@ -76,6 +76,7 @@ async function seedDatabase() {
         estado: "disponible",
         fechaCreacion: new Date(),
         horaOcupacion: null,
+        horaConfirmacion: null,
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -84,6 +85,7 @@ async function seedDatabase() {
         estado: "disponible",
         fechaCreacion: new Date(),
         horaOcupacion: null,
+        horaConfirmacion: null,
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -92,6 +94,7 @@ async function seedDatabase() {
         estado: "disponible",
         fechaCreacion: new Date(),
         horaOcupacion: null,
+        horaConfirmacion: null,
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -100,6 +103,7 @@ async function seedDatabase() {
         estado: "disponible",
         fechaCreacion: new Date(),
         horaOcupacion: null,
+        horaConfirmacion: null,
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -108,16 +112,37 @@ async function seedDatabase() {
         estado: "disponible",
         fechaCreacion: new Date(),
         horaOcupacion: null,
+        horaConfirmacion: null,
         montoCalculado: 0,
         ultimoPagoId: null,
       },
-      // Tickets de prueba con carros asignados (LISTOS PARA PAGAR)
+      // Tickets con carros registrados pero pendientes de confirmación
+      {
+        codigoTicket: "PARK006",
+        estado: "ocupado",
+        fechaCreacion: new Date(),
+        horaOcupacion: new Date(Date.now() - 10 * 60 * 1000), // 10 minutos atrás
+        horaConfirmacion: null,
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      {
+        codigoTicket: "PARK007",
+        estado: "ocupado",
+        fechaCreacion: new Date(),
+        horaOcupacion: new Date(Date.now() - 15 * 60 * 1000), // 15 minutos atrás
+        horaConfirmacion: null,
+        montoCalculado: 0,
+        ultimoPagoId: null,
+      },
+      // Tickets confirmados y listos para pagar
       {
         codigoTicket: "TEST001",
         horaEntrada: new Date(Date.now() - 60 * 60 * 1000), // 1 hora atrás
         horaSalida: null,
-        estado: "ocupado", // Estado correcto para que funcione la búsqueda
+        estado: "estacionado_confirmado",
         horaOcupacion: new Date(Date.now() - 60 * 60 * 1000),
+        horaConfirmacion: new Date(Date.now() - 55 * 60 * 1000), // Confirmado 5 min después
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -125,17 +150,19 @@ async function seedDatabase() {
         codigoTicket: "TEST002",
         horaEntrada: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 horas atrás
         horaSalida: null,
-        estado: "ocupado", // Estado correcto para que funcione la búsqueda
+        estado: "estacionado_confirmado",
         horaOcupacion: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        horaConfirmacion: new Date(Date.now() - 115 * 60 * 1000), // Confirmado 5 min después
         montoCalculado: 0,
         ultimoPagoId: null,
       },
-      // Tickets legacy activos (LISTOS PARA PAGAR)
+      // Tickets legacy confirmados (LISTOS PARA PAGAR)
       {
         codigoTicket: "ABC123",
         horaEntrada: new Date(Date.now() - 30 * 60 * 1000), // 30 minutos atrás
         horaSalida: null,
-        estado: "activo", // Estado legacy
+        estado: "estacionado_confirmado",
+        horaConfirmacion: new Date(Date.now() - 25 * 60 * 1000),
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -143,7 +170,8 @@ async function seedDatabase() {
         codigoTicket: "XYZ789",
         horaEntrada: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 horas atrás
         horaSalida: null,
-        estado: "activo", // Estado legacy
+        estado: "estacionado_confirmado",
+        horaConfirmacion: new Date(Date.now() - 235 * 60 * 1000),
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -151,7 +179,8 @@ async function seedDatabase() {
         codigoTicket: "TEST003",
         horaEntrada: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 horas atrás
         horaSalida: null,
-        estado: "activo", // Estado legacy
+        estado: "estacionado_confirmado",
+        horaConfirmacion: new Date(Date.now() - 175 * 60 * 1000),
         montoCalculado: 0,
         ultimoPagoId: null,
       },
@@ -208,6 +237,7 @@ async function seedDatabase() {
 
     // Crear algunos carros de ejemplo correctamente asociados
     const exampleCars = [
+      // Carros confirmados y listos para pagar
       {
         placa: "ABC123",
         marca: "Toyota",
@@ -232,6 +262,31 @@ async function seedDatabase() {
         estado: "estacionado",
         fechaRegistro: new Date(),
       },
+      // Carros registrados pero pendientes de confirmación
+      {
+        placa: "DEF456",
+        marca: "Ford",
+        modelo: "Fiesta",
+        color: "Rojo",
+        nombreDueño: "Carlos Rodríguez",
+        telefono: "0412-5555555",
+        ticketAsociado: "PARK006",
+        horaIngreso: new Date(Date.now() - 10 * 60 * 1000),
+        estado: "registrado",
+        fechaRegistro: new Date(),
+      },
+      {
+        placa: "GHI789",
+        marca: "Nissan",
+        modelo: "Sentra",
+        color: "Negro",
+        nombreDueño: "Ana López",
+        telefono: "0416-7777777",
+        ticketAsociado: "PARK007",
+        horaIngreso: new Date(Date.now() - 15 * 60 * 1000),
+        estado: "registrado",
+        fechaRegistro: new Date(),
+      },
     ]
 
     const carsResult = await db.collection("cars").insertMany(exampleCars)
@@ -239,6 +294,7 @@ async function seedDatabase() {
 
     // Crear entradas en el historial para los carros de ejemplo
     const historyEntries = [
+      // Carros confirmados
       {
         carId: carsResult.insertedIds[0].toString(),
         placa: "ABC123",
@@ -252,7 +308,7 @@ async function seedDatabase() {
         horaSalida: null,
         montoTotal: 0,
         pagoId: null,
-        estado: "activo",
+        estado: "estacionado",
         fechaRegistro: new Date(),
       },
       {
@@ -268,7 +324,40 @@ async function seedDatabase() {
         horaSalida: null,
         montoTotal: 0,
         pagoId: null,
-        estado: "activo",
+        estado: "estacionado",
+        fechaRegistro: new Date(),
+      },
+      // Carros pendientes de confirmación
+      {
+        carId: carsResult.insertedIds[2].toString(),
+        placa: "DEF456",
+        marca: "Ford",
+        modelo: "Fiesta",
+        color: "Rojo",
+        nombreDueño: "Carlos Rodríguez",
+        telefono: "0412-5555555",
+        ticketAsociado: "PARK006",
+        horaIngreso: new Date(Date.now() - 10 * 60 * 1000),
+        horaSalida: null,
+        montoTotal: 0,
+        pagoId: null,
+        estado: "registrado",
+        fechaRegistro: new Date(),
+      },
+      {
+        carId: carsResult.insertedIds[3].toString(),
+        placa: "GHI789",
+        marca: "Nissan",
+        modelo: "Sentra",
+        color: "Negro",
+        nombreDueño: "Ana López",
+        telefono: "0416-7777777",
+        ticketAsociado: "PARK007",
+        horaIngreso: new Date(Date.now() - 15 * 60 * 1000),
+        horaSalida: null,
+        montoTotal: 0,
+        pagoId: null,
+        estado: "registrado",
         fechaRegistro: new Date(),
       },
     ]
@@ -277,12 +366,17 @@ async function seedDatabase() {
     console.log(`✅ ${historyEntries.length} entradas de historial creadas`)
 
     console.log("\n🎉 Base de datos inicializada con datos de ejemplo")
-    console.log("\n🚗 TICKETS LISTOS PARA PAGAR (con carros asignados):")
+    console.log("\n🚗 TICKETS LISTOS PARA PAGAR (confirmados):")
     console.log("   ✅ TEST001: Toyota Corolla (ABC123) - Juan Pérez - $3.00 aprox")
     console.log("   ✅ TEST002: Chevrolet Aveo (XYZ789) - María González - $6.00 aprox")
-    console.log("   ✅ ABC123: Ticket legacy - $1.50 aprox (30 min)")
+    console.log("   ✅ ABC123: Ticket legacy - $1.50 aprox (25 min)")
     console.log("   ✅ XYZ789: Ticket legacy - $12.00 aprox (4 horas)")
     console.log("   ✅ TEST003: Ticket legacy - $9.00 aprox (3 horas)")
+
+    console.log("\n⚠️  VEHÍCULOS PENDIENTES DE CONFIRMACIÓN:")
+    console.log("   🚗 PARK006: Ford Fiesta (DEF456) - Carlos Rodríguez")
+    console.log("   🚗 PARK007: Nissan Sentra (GHI789) - Ana López")
+    console.log("   📋 Estos aparecen en la pestaña 'Confirmar' del admin")
 
     console.log("\n📋 TICKETS DISPONIBLES (sin carros asignados):")
     console.log("   📝 PARK001-PARK005: Disponibles para asignar nuevos carros")
@@ -290,14 +384,20 @@ async function seedDatabase() {
 
     console.log("\n🧪 PRUEBAS RECOMENDADAS:")
     console.log("   1. 🔍 Buscar TEST001, TEST002, ABC123, XYZ789, TEST003")
-    console.log("   2. 💳 Completar proceso de pago para cualquiera")
-    console.log("   3. 🚗 Registrar nuevo carro con PARK001 en panel admin")
-    console.log("   4. 🔍 Buscar PARK001 después de asignar carro")
+    console.log("   2. 📋 Confirmar PARK006 y PARK007 en pestaña 'Confirmar'")
+    console.log("   3. 💳 Completar proceso de pago para cualquiera")
+    console.log("   4. 🚗 Registrar nuevo carro con PARK001 en panel admin")
+    console.log("   5. 🚪 Procesar salidas en pestaña 'Salidas'")
+    console.log("   6. 📱 Generar y escanear códigos QR")
 
     console.log("\n🔐 Acceso al panel de administración:")
     console.log("   URL: http://localhost:3000/admin")
     console.log("   Usuario: admin")
     console.log("   Contraseña: admin123")
+    console.log("\n🎯 FLUJO COMPLETO:")
+    console.log(
+      "   1. Registrar carro → 2. Confirmar estacionamiento → 3. Cliente paga → 4. Validar pago → 5. Procesar salida",
+    )
   } catch (err) {
     console.error("❌ Error:", err)
   } finally {

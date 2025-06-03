@@ -49,8 +49,8 @@ export async function GET(request: Request, { params }: { params: { code: string
     const tasaCambio = settings?.tarifas?.tasaCambio || 35.0
 
     // Determinar la hora de entrada y calcular el monto
-    if (ticket.estado === "ocupado" && ticket.horaOcupacion) {
-      // Ticket nuevo con carro asignado
+    if (ticket.estado === "estacionado_confirmado" && ticket.horaOcupacion) {
+      // Ticket confirmado como estacionado - LISTO PARA PAGAR
       horaEntrada = new Date(ticket.horaOcupacion)
       const now = new Date()
       const diffInMs = now.getTime() - horaEntrada.getTime()
@@ -58,11 +58,21 @@ export async function GET(request: Request, { params }: { params: { code: string
 
       // Calcular montos
       montoCalculado = Math.max(diffInHours * precioHora, precioHora / 2)
-      montoCalculado = Number.parseFloat(montoCalculado.toFixed(2)) // Asegurar 2 decimales
+      montoCalculado = Number.parseFloat(montoCalculado.toFixed(2))
       const montoBs = Number.parseFloat((montoCalculado * tasaCambio).toFixed(2))
 
       canProceed = true
-      console.log(`💰 Ticket ocupado - Calculado: $${montoCalculado} / Bs. ${montoBs}`)
+      console.log(`💰 Ticket estacionado confirmado - Calculado: $${montoCalculado} / Bs. ${montoBs}`)
+    } else if (ticket.estado === "ocupado") {
+      // Ticket ocupado pero NO confirmado
+      console.log(`⚠️ Ticket ocupado pero no confirmado: ${ticketCode}`)
+      return NextResponse.json(
+        {
+          message:
+            "Este vehículo está registrado pero aún no ha sido confirmado como estacionado por el personal. Por favor espere la confirmación.",
+        },
+        { status: 404 },
+      )
     } else if (ticket.estado === "activo" && ticket.horaEntrada) {
       // Ticket legacy activo
       horaEntrada = new Date(ticket.horaEntrada)
@@ -72,7 +82,7 @@ export async function GET(request: Request, { params }: { params: { code: string
 
       // Calcular montos
       montoCalculado = Math.max(diffInHours * precioHora, precioHora / 2)
-      montoCalculado = Number.parseFloat(montoCalculado.toFixed(2)) // Asegurar 2 decimales
+      montoCalculado = Number.parseFloat(montoCalculado.toFixed(2))
       const montoBs = Number.parseFloat((montoCalculado * tasaCambio).toFixed(2))
 
       canProceed = true
@@ -80,23 +90,14 @@ export async function GET(request: Request, { params }: { params: { code: string
     } else if (ticket.estado === "disponible") {
       // Ticket disponible - verificar si tiene carro asignado
       if (car) {
-        // Hay un carro pero el ticket sigue como disponible - actualizar estado
-        console.log(`🔄 Ticket disponible pero con carro asignado - actualizando estado`)
-        horaEntrada = new Date(car.horaIngreso)
-        montoCalculado = calculateParkingFee(horaEntrada)
-        canProceed = true
-
-        // Actualizar el estado del ticket a ocupado
-        await db.collection("tickets").updateOne(
-          { codigoTicket: ticketCode },
+        console.log(`⚠️ Ticket disponible pero con carro asignado - requiere confirmación`)
+        return NextResponse.json(
           {
-            $set: {
-              estado: "ocupado",
-              horaOcupacion: car.horaIngreso,
-            },
+            message:
+              "Este vehículo está registrado pero aún no ha sido confirmado como estacionado por el personal. Por favor espere la confirmación.",
           },
+          { status: 404 },
         )
-        console.log(`✅ Ticket actualizado a estado ocupado`)
       } else {
         console.log(`⚠️ Ticket disponible sin carro: ${ticketCode}`)
         return NextResponse.json(
@@ -163,7 +164,7 @@ export async function GET(request: Request, { params }: { params: { code: string
       codigoTicket: ticket.codigoTicket,
       horaEntrada: horaEntrada?.toISOString() || ticket.horaEntrada,
       horaSalida: ticket.horaSalida,
-      estado: ticket.estado === "disponible" ? "ocupado" : ticket.estado, // Actualizar estado en respuesta
+      estado: ticket.estado,
       montoCalculado,
       montoBs,
       tasaCambio,

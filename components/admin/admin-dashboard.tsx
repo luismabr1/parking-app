@@ -13,6 +13,7 @@ import CarRegistration from "./car-registration"
 import CarHistory from "./car-history"
 import VehicleExit from "./vehicle-exit"
 import QRGenerator from "./qr-generator"
+import ParkingConfirmation from "./parking-confirmation"
 import { Badge } from "@/components/ui/badge"
 
 interface DashboardStats {
@@ -23,6 +24,7 @@ interface DashboardStats {
   availableTickets: number
   carsParked: number
   paidTickets: number
+  pendingConfirmations: number
 }
 
 export default function AdminDashboard() {
@@ -34,6 +36,7 @@ export default function AdminDashboard() {
     availableTickets: 0,
     carsParked: 0,
     paidTickets: 0,
+    pendingConfirmations: 0,
   })
   const [isLoadingStats, setIsLoadingStats] = useState(true)
 
@@ -86,7 +89,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
@@ -96,6 +99,21 @@ export default function AdminDashboard() {
             <div className="text-2xl font-bold">{stats.pendingPayments}</div>
             <p className="text-xs text-muted-foreground">
               {stats.pendingPayments === 0 ? "Todos procesados" : "Requieren validación"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Confirmaciones</CardTitle>
+            <Badge variant={stats.pendingConfirmations > 0 ? "destructive" : "secondary"}>
+              {stats.pendingConfirmations}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.pendingConfirmations}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.pendingConfirmations === 0 ? "Todos confirmados" : "Pendientes"}
             </p>
           </CardContent>
         </Card>
@@ -168,8 +186,16 @@ export default function AdminDashboard() {
       </div>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="payments" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8">
+      <Tabs defaultValue="confirmations" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-9">
+          <TabsTrigger value="confirmations">
+            Confirmar
+            {stats.pendingConfirmations > 0 && (
+              <Badge variant="destructive" className="ml-2 text-xs">
+                {stats.pendingConfirmations}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="payments">
             Pagos
             {stats.pendingPayments > 0 && (
@@ -189,6 +215,10 @@ export default function AdminDashboard() {
           <TabsTrigger value="staff">Personal</TabsTrigger>
           <TabsTrigger value="settings">Config</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="confirmations">
+          <ParkingConfirmation />
+        </TabsContent>
 
         <TabsContent value="payments">
           <PendingPayments onStatsUpdate={fetchStats} />
