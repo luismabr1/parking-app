@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
-export const fetchCache = 'force-no-store'
+// Opt out of caching for this route
+export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+export const revalidate = 0
 
 export async function GET() {
   try {
@@ -14,11 +17,12 @@ export async function GET() {
       .sort({ fechaPago: -1 })
       .toArray()
 
-    // Agregar headers para evitar el caché
+    // Set cache control headers
     const response = NextResponse.json(pendingPayments)
-    response.headers.set("Cache-Control", "no-store, max-age=0")
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
     response.headers.set("Pragma", "no-cache")
     response.headers.set("Expires", "0")
+    response.headers.set("Surrogate-Control", "no-store")
 
     return response
   } catch (error) {

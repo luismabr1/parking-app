@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
+// Opt out of caching for this route
+export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+export const revalidate = 0
+
 export async function POST(request: Request) {
   try {
     const client = await clientPromise
@@ -81,10 +86,17 @@ export async function POST(request: Request) {
       await db.collection("cars").updateOne({ _id: car._id }, { $set: { estado: "pago_pendiente" } })
     }
 
-    return NextResponse.json({
+    // Set cache control headers
+    const response = NextResponse.json({
       message: "Pago registrado exitosamente",
       pagoId: pagoResult.insertedId,
     })
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+    response.headers.set("Pragma", "no-cache")
+    response.headers.set("Expires", "0")
+    response.headers.set("Surrogate-Control", "no-store")
+
+    return response
   } catch (error) {
     console.error("Error processing payment:", error)
     return NextResponse.json({ message: "Error al procesar el pago" }, { status: 500 })

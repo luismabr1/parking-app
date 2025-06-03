@@ -65,6 +65,7 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
           Pragma: "no-cache",
           Expires: "0",
         },
+        next: { revalidate: 0 },
       })
 
       if (response.ok) {

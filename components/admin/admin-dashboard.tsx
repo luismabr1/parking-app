@@ -56,6 +56,7 @@ export default function AdminDashboard() {
           Pragma: "no-cache",
           Expires: "0",
         },
+        next: { revalidate: 0 },
       })
 
       if (response.ok) {
