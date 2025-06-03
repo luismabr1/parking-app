@@ -32,7 +32,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     plate?: string
     vehicle?: string
   }>({})
-  const [isProcessing, setIsProcessing] = useState(isProcessing)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [debugInfo, setDebugInfo] = useState<string[]>([])
   const [plateData, setPlateData] = useState<{
