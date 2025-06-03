@@ -1,3 +1,7 @@
+// Opt out of caching for this route
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
@@ -70,7 +74,8 @@ export async function POST(request: Request) {
 
     console.log(`✅ Ticket ${ticketCode} liberado y disponible para nuevo uso`)
 
-    return NextResponse.json({
+    // Agregar headers anti-cache a la respuesta
+    const response = NextResponse.json({
       message: `Salida procesada exitosamente. El espacio ${ticketCode} está ahora disponible.`,
       ticketCode,
       carInfo: {
@@ -80,6 +85,13 @@ export async function POST(request: Request) {
         propietario: car.nombreDueño,
       },
     })
+
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+    response.headers.set("Pragma", "no-cache")
+    response.headers.set("Expires", "0")
+    response.headers.set("Surrogate-Control", "no-store")
+
+    return response
   } catch (error) {
     console.error("Error processing vehicle exit:", error)
     return NextResponse.json({ message: "Error al procesar la salida del vehículo" }, { status: 500 })

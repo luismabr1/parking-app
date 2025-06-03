@@ -35,12 +35,27 @@ export default function VehicleExit() {
 
   useEffect(() => {
     fetchPaidTickets()
+
+    // Actualizar automáticamente cada 30 segundos
+    const interval = setInterval(() => {
+      fetchPaidTickets()
+    }, 30000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const fetchPaidTickets = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch("/api/admin/paid-tickets")
+      // Agregar timestamp para evitar cache
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/paid-tickets?t=${timestamp}`, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      })
       if (response.ok) {
         const data = await response.json()
         setPaidTickets(data)
@@ -57,9 +72,16 @@ export default function VehicleExit() {
       setIsProcessing(ticketCode)
       setMessage("")
 
-      const response = await fetch("/api/admin/vehicle-exit", {
+      // Agregar timestamp para evitar cache
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/vehicle-exit?t=${timestamp}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
         body: JSON.stringify({ ticketCode }),
       })
 
@@ -67,6 +89,7 @@ export default function VehicleExit() {
 
       if (response.ok) {
         setMessage(`✅ ${data.message}`)
+        // IMPORTANTE: Refrescar la lista inmediatamente después del éxito
         await fetchPaidTickets()
       } else {
         setMessage(`❌ ${data.message}`)
