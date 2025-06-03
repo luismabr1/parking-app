@@ -25,9 +25,6 @@ const nextConfig = {
       },
     ]
   },
-  // Add a custom cache handler to disable caching for API routes
-  cacheHandler: require.resolve("./cache-handler.js"),
-  cacheMaxMemorySize: 0, // disable default in-memory caching
 }
 
 module.exports = nextConfig
