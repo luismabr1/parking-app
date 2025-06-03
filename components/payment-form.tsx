@@ -7,10 +7,11 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { AlertCircle, CheckCircle2, ArrowLeft, ArrowRight, RefreshCw } from "lucide-react"
+import { AlertCircle, CheckCircle2, ArrowLeft, ArrowRight, RefreshCw, Clock } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatCurrency } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import type { Ticket, PaymentFormData, CompanySettings } from "@/lib/types"
 
 interface Bank {
@@ -23,6 +24,18 @@ interface PaymentFormProps {
   ticket: Ticket
 }
 
+// Opciones de tiempo de salida
+const exitTimeOptions = [
+  { value: "now", label: "Ahora", minutes: 0 },
+  { value: "5min", label: "En 5 minutos", minutes: 5 },
+  { value: "10min", label: "En 10 minutos", minutes: 10 },
+  { value: "15min", label: "En 15 minutos", minutes: 15 },
+  { value: "20min", label: "En 20 minutos", minutes: 20 },
+  { value: "30min", label: "En 30 minutos", minutes: 30 },
+  { value: "45min", label: "En 45 minutos", minutes: 45 },
+  { value: "60min", label: "En 1 hora", minutes: 60 },
+]
+
 export default function PaymentForm({ ticket }: PaymentFormProps) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
@@ -34,12 +47,13 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
   const [banks, setBanks] = useState<Bank[]>([])
   const [loadingBanks, setLoadingBanks] = useState(true)
 
-  const [formData, setFormData] = useState<PaymentFormData>({
+  const [formData, setFormData] = useState<PaymentFormData & { tiempoSalida?: string }>({
     referenciaTransferencia: "",
     banco: "",
     telefono: "",
     numeroIdentidad: "",
     montoPagado: ticket.montoCalculado,
+    tiempoSalida: "now", // Valor por defecto
   })
 
   useEffect(() => {
@@ -98,6 +112,27 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
     }))
   }
 
+  const handleExitTimeChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      tiempoSalida: value,
+    }))
+  }
+
+  const getExitTimeLabel = (value: string) => {
+    const option = exitTimeOptions.find((opt) => opt.value === value)
+    return option ? option.label : "Ahora"
+  }
+
+  const getExitDateTime = (value: string) => {
+    const option = exitTimeOptions.find((opt) => opt.value === value)
+    if (!option) return new Date()
+
+    const exitTime = new Date()
+    exitTime.setMinutes(exitTime.getMinutes() + option.minutes)
+    return exitTime
+  }
+
   const handleSubmit = async () => {
     setIsLoading(true)
     setError("")
@@ -137,7 +172,8 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
         formData.banco.trim() !== "" &&
         formData.telefono.trim() !== "" &&
         formData.numeroIdentidad.trim() !== "" &&
-        formData.montoPagado > 0
+        formData.montoPagado > 0 &&
+        formData.tiempoSalida
       )
     }
     return true
@@ -149,9 +185,26 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
         <CardContent className="pt-6 text-center">
           <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
           <h2 className="text-2xl font-bold mb-2">¡Pago Registrado!</h2>
-          <p className="text-lg text-gray-600 mb-6">
+          <p className="text-lg text-gray-600 mb-4">
             El pago ha sido registrado y está Pendiente de Validación por el personal del estacionamiento.
           </p>
+          {formData.tiempoSalida && formData.tiempoSalida !== "now" && (
+            <div className="bg-blue-50 p-4 rounded-lg mb-4">
+              <div className="flex items-center justify-center space-x-2 text-blue-800">
+                <Clock className="h-5 w-5" />
+                <span className="font-medium">
+                  Tiempo de salida programado: {getExitTimeLabel(formData.tiempoSalida)}
+                </span>
+              </div>
+              <p className="text-sm text-blue-600 mt-1">
+                Salida estimada:{" "}
+                {getExitDateTime(formData.tiempoSalida).toLocaleTimeString("es-VE", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+          )}
           <Button onClick={() => router.push("/")} className="w-full h-12 text-lg">
             Volver al Inicio
           </Button>
@@ -289,6 +342,29 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
             <h2 className="text-xl font-bold mb-4 text-center">Detalles de Transferencia</h2>
 
             <div className="space-y-4">
+              {/* Selector de tiempo de salida */}
+              <div className="space-y-2">
+                <Label htmlFor="tiempoSalida" className="text-sm font-medium flex items-center">
+                  <Clock className="h-4 w-4 mr-2" />
+                  ¿Cuándo planea salir?
+                </Label>
+                <Select value={formData.tiempoSalida} onValueChange={handleExitTimeChange}>
+                  <SelectTrigger id="tiempoSalida" className="h-12 text-lg">
+                    <SelectValue placeholder="Seleccione tiempo de salida" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {exitTimeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">
+                  Esta información ayudará al personal a gestionar mejor los espacios
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <label htmlFor="referenciaTransferencia" className="text-sm font-medium">
                   Referencia de la Transferencia
@@ -395,6 +471,25 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                   <p className="text-lg font-medium">{formatCurrency(formData.montoPagado)}</p>
                 </div>
               </div>
+
+              {/* Mostrar tiempo de salida programado */}
+              {formData.tiempoSalida && (
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="flex items-center space-x-2 text-blue-800">
+                    <Clock className="h-4 w-4" />
+                    <span className="font-medium">Tiempo de salida: {getExitTimeLabel(formData.tiempoSalida)}</span>
+                  </div>
+                  {formData.tiempoSalida !== "now" && (
+                    <p className="text-sm text-blue-600 mt-1">
+                      Salida estimada:{" "}
+                      {getExitDateTime(formData.tiempoSalida).toLocaleTimeString("es-VE", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Referencia de Transferencia</p>

@@ -12,6 +12,7 @@ import TicketManagement from "./ticket-management"
 import CarRegistration from "./car-registration"
 import CarHistory from "./car-history"
 import VehicleExit from "./vehicle-exit"
+import QRGenerator from "./qr-generator"
 import { Badge } from "@/components/ui/badge"
 
 interface DashboardStats {
@@ -168,7 +169,7 @@ export default function AdminDashboard() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="payments" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="payments">
             Pagos
             {stats.pendingPayments > 0 && (
@@ -183,6 +184,7 @@ export default function AdminDashboard() {
             Salida
             {stats.paidTickets > 0 && <Badge className="ml-2 text-xs">{stats.paidTickets}</Badge>}
           </TabsTrigger>
+          <TabsTrigger value="qr">QR</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
           <TabsTrigger value="staff">Personal</TabsTrigger>
           <TabsTrigger value="settings">Config</TabsTrigger>
@@ -202,6 +204,10 @@ export default function AdminDashboard() {
 
         <TabsContent value="exit">
           <VehicleExit />
+        </TabsContent>
+
+        <TabsContent value="qr">
+          <QRGenerator />
         </TabsContent>
 
         <TabsContent value="history">

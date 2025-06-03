@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, XCircle, RefreshCw, Car } from "lucide-react"
+import { CheckCircle, XCircle, RefreshCw, Car, Clock } from "lucide-react"
 import { formatCurrency, formatDateTime } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -19,6 +19,8 @@ interface PendingPayment {
   montoCalculado: number
   fechaPago: string
   estado: string
+  tiempoSalida?: string
+  tiempoSalidaEstimado?: string
   carInfo?: {
     placa: string
     marca: string
@@ -31,6 +33,18 @@ interface PendingPayment {
 
 interface PendingPaymentsProps {
   onStatsUpdate: () => void
+}
+
+// Opciones de tiempo de salida para mostrar labels
+const exitTimeLabels: { [key: string]: string } = {
+  now: "Ahora",
+  "5min": "En 5 minutos",
+  "10min": "En 10 minutos",
+  "15min": "En 15 minutos",
+  "20min": "En 20 minutos",
+  "30min": "En 30 minutos",
+  "45min": "En 45 minutos",
+  "60min": "En 1 hora",
 }
 
 export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps) {
@@ -114,6 +128,40 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
     }
   }
 
+  const getExitTimeBadge = (tiempoSalida?: string, tiempoSalidaEstimado?: string) => {
+    if (!tiempoSalida) return null
+
+    const label = exitTimeLabels[tiempoSalida] || tiempoSalida
+    const isUrgent = tiempoSalida === "now" || tiempoSalida === "5min"
+
+    return (
+      <div
+        className={`flex items-center space-x-2 p-2 rounded-lg ${
+          isUrgent ? "bg-red-50 text-red-800" : "bg-blue-50 text-blue-800"
+        }`}
+      >
+        <Clock className="h-4 w-4" />
+        <div>
+          <span className="font-medium text-sm">{label}</span>
+          {tiempoSalidaEstimado && tiempoSalida !== "now" && (
+            <p className="text-xs opacity-75">
+              Estimado:{" "}
+              {new Date(tiempoSalidaEstimado).toLocaleTimeString("es-VE", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          )}
+        </div>
+        {isUrgent && (
+          <Badge variant="destructive" className="text-xs">
+            URGENTE
+          </Badge>
+        )}
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <Card>
@@ -164,6 +212,14 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
                     <p className="font-medium">{formatDateTime(payment.fechaPago)}</p>
                   </div>
                 </div>
+
+                {/* Tiempo de salida programado - DESTACADO */}
+                {payment.tiempoSalida && (
+                  <div className="border-l-4 border-blue-500 pl-4">
+                    <h4 className="font-medium text-sm text-gray-700 mb-2">⏰ Tiempo de Salida Programado</h4>
+                    {getExitTimeBadge(payment.tiempoSalida, payment.tiempoSalidaEstimado)}
+                  </div>
+                )}
 
                 {/* Información del Vehículo si existe */}
                 {payment.carInfo && (
