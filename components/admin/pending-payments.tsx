@@ -59,6 +59,7 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
       // Agregar un timestamp para evitar el caché
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/admin/pending-payments?t=${timestamp}`, {
+        method: "GET",
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
