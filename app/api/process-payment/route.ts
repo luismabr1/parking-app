@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const client = await clientPromise
     const db = client.db("parking")
 
-    const { codigoTicket, referenciaTransferencia, banco, telefono, numeroIdentidad, montoPagado } =
+    const { codigoTicket, referenciaTransferencia, banco, telefono, numeroIdentidad, montoPagado, tiempoSalida } =
       await request.json()
 
     // Validar que todos los campos requeridos estén presentes
@@ -41,6 +41,25 @@ export async function POST(request: Request) {
       estado: "estacionado",
     })
 
+    // Calcular tiempo de salida estimado
+    let tiempoSalidaEstimado = null
+    if (tiempoSalida && tiempoSalida !== "now") {
+      const minutesToAdd =
+        {
+          "5min": 5,
+          "10min": 10,
+          "15min": 15,
+          "20min": 20,
+          "30min": 30,
+          "45min": 45,
+          "60min": 60,
+        }[tiempoSalida] || 0
+
+      if (minutesToAdd > 0) {
+        tiempoSalidaEstimado = new Date(Date.now() + minutesToAdd * 60000)
+      }
+    }
+
     // Crear el registro de pago
     const pagoData = {
       ticketId: ticket._id.toString(),
@@ -54,6 +73,9 @@ export async function POST(request: Request) {
       fechaPago: new Date(),
       estado: "pendiente_validacion",
       estadoValidacion: "pendiente",
+      // AGREGAR: Campos de tiempo de salida
+      tiempoSalida: tiempoSalida || "now",
+      tiempoSalidaEstimado,
       // Incluir información del carro si existe
       carInfo: car
         ? {
@@ -77,6 +99,9 @@ export async function POST(request: Request) {
         $set: {
           estado: "pagado_pendiente",
           ultimoPagoId: pagoResult.insertedId.toString(),
+          // AGREGAR: También guardar en el ticket para referencia
+          tiempoSalida: tiempoSalida || "now",
+          tiempoSalidaEstimado,
         },
       },
     )

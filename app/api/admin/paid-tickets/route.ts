@@ -19,12 +19,18 @@ export async function GET() {
       .sort({ horaOcupacion: -1 })
       .toArray()
 
-    // Para cada ticket, buscar la información del carro asociado
+    // Para cada ticket, buscar la información del carro asociado y del pago
     const ticketsWithCarInfo = await Promise.all(
       paidTickets.map(async (ticket) => {
         const car = await db.collection("cars").findOne({
           ticketAsociado: ticket.codigoTicket,
           estado: { $in: ["estacionado", "pagado"] },
+        })
+
+        // AGREGAR: Buscar el pago para obtener la fecha de pago y tiempos de salida
+        const payment = await db.collection("pagos").findOne({
+          codigoTicket: ticket.codigoTicket,
+          estadoValidacion: "validado",
         })
 
         return {
@@ -39,6 +45,10 @@ export async function GET() {
                 telefono: car.telefono,
               }
             : null,
+          // AGREGAR: Campos de tiempo de salida y fecha de pago
+          fechaPago: payment?.fechaPago || ticket.fechaCreacion,
+          tiempoSalida: ticket.tiempoSalida || payment?.tiempoSalida,
+          tiempoSalidaEstimado: ticket.tiempoSalidaEstimado || payment?.tiempoSalidaEstimado,
         }
       }),
     )

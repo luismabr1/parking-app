@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { LogOut, Car, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/utils"
+import { ExitTimeDisplay } from "./exit-time-display"
 
 interface PaidTicket {
   _id: string
@@ -16,6 +17,9 @@ interface PaidTicket {
   estado: string
   horaOcupacion?: string
   montoCalculado: number
+  tiempoSalida?: string
+  tiempoSalidaEstimado?: string
+  fechaPago?: string
   carInfo?: {
     placa: string
     marca: string
@@ -33,13 +37,16 @@ export default function VehicleExit() {
   const [message, setMessage] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
 
+  // DEBUG: Log de todos los tickets
+  console.log("🔍 DEBUG VehicleExit - All tickets:", paidTickets)
+
   useEffect(() => {
     fetchPaidTickets()
 
-    // Actualizar automáticamente cada 30 segundos
+    // Actualizar cada 10 segundos para tiempo real
     const interval = setInterval(() => {
       fetchPaidTickets()
-    }, 30000)
+    }, 10000)
 
     return () => clearInterval(interval)
   }, [])
@@ -47,7 +54,6 @@ export default function VehicleExit() {
   const fetchPaidTickets = async () => {
     try {
       setIsLoading(true)
-      // Agregar timestamp para evitar cache
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/admin/paid-tickets?t=${timestamp}`, {
         headers: {
@@ -58,7 +64,45 @@ export default function VehicleExit() {
       })
       if (response.ok) {
         const data = await response.json()
-        setPaidTickets(data)
+        console.log("🔍 DEBUG: Raw paid tickets API response:", data)
+
+        // Ordenar por urgencia de salida
+        const sortedData = data.sort((a: PaidTicket, b: PaidTicket) => {
+          if (!a.tiempoSalida && !b.tiempoSalida) return 0
+          if (!a.tiempoSalida) return 1
+          if (!b.tiempoSalida) return -1
+
+          // Calcular urgencia para ordenar
+          const getUrgencyScore = (ticket: PaidTicket) => {
+            if (!ticket.fechaPago || !ticket.tiempoSalida) return 0
+
+            const paymentTime = new Date(ticket.fechaPago)
+            const currentTime = new Date()
+            const minutesToAdd =
+              {
+                now: 0,
+                "5min": 5,
+                "10min": 10,
+                "15min": 15,
+                "20min": 20,
+                "30min": 30,
+                "45min": 45,
+                "60min": 60,
+              }[ticket.tiempoSalida] || 0
+
+            const targetTime = new Date(paymentTime.getTime() + minutesToAdd * 60000)
+            const timeRemaining = Math.ceil((targetTime.getTime() - currentTime.getTime()) / 60000)
+
+            if (timeRemaining <= 0) return 4 // Crítico
+            if (timeRemaining <= 2) return 3 // Urgente
+            if (timeRemaining <= 5) return 2 // Warning
+            return 1 // Normal
+          }
+
+          return getUrgencyScore(b) - getUrgencyScore(a)
+        })
+
+        setPaidTickets(sortedData)
       }
     } catch (error) {
       console.error("Error fetching paid tickets:", error)
@@ -72,7 +116,6 @@ export default function VehicleExit() {
       setIsProcessing(ticketCode)
       setMessage("")
 
-      // Agregar timestamp para evitar cache
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/admin/vehicle-exit?t=${timestamp}`, {
         method: "POST",
@@ -89,7 +132,6 @@ export default function VehicleExit() {
 
       if (response.ok) {
         setMessage(`✅ ${data.message}`)
-        // IMPORTANTE: Refrescar la lista inmediatamente después del éxito
         await fetchPaidTickets()
       } else {
         setMessage(`❌ ${data.message}`)
@@ -142,6 +184,18 @@ export default function VehicleExit() {
           </Alert>
         )}
 
+        {/* DEBUG INFO - Solo en desarrollo */}
+        {process.env.NODE_ENV === "development" && (
+          <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
+            <p className="font-bold">🔧 DEBUG INFO:</p>
+            <p>Total tickets: {paidTickets.length}</p>
+            <p>
+              With tiempoSalida: {paidTickets.filter((t) => t.tiempoSalida).length} | Without:{" "}
+              {paidTickets.filter((t) => !t.tiempoSalida).length}
+            </p>
+          </div>
+        )}
+
         {/* Búsqueda */}
         <div className="flex gap-2">
           <div className="flex-1">
@@ -185,6 +239,17 @@ export default function VehicleExit() {
                     <p className="font-medium">${ticket.montoCalculado.toFixed(2)}</p>
                   </div>
                 </div>
+
+                {/* Tiempo de salida programado - COMPONENTE REUTILIZABLE */}
+                {ticket.fechaPago && (
+                  <ExitTimeDisplay
+                    tiempoSalida={ticket.tiempoSalida}
+                    tiempoSalidaEstimado={ticket.tiempoSalidaEstimado}
+                    fechaPago={ticket.fechaPago}
+                    codigoTicket={ticket.codigoTicket}
+                    variant="compact"
+                  />
+                )}
 
                 {ticket.carInfo && (
                   <div className="bg-green-50 p-3 rounded-lg">

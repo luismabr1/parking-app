@@ -46,6 +46,9 @@ export interface PaymentFormData {
 export interface PendingPayment extends Payment {
   montoCalculado: number
   estado?: string
+  tiempoSalida?: string
+  tiempoSalidaEstimado?: string
+  carInfo?: CarInfo
 }
 
 export interface StaffMember {

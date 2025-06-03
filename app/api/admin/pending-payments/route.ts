@@ -11,10 +11,51 @@ export async function GET() {
     const client = await clientPromise
     const db = client.db("parking")
 
+    // Buscar pagos pendientes con información completa del ticket
     const pendingPayments = await db
       .collection("pagos")
-      .find({ estado: "pendiente_validacion" })
-      .sort({ fechaPago: -1 })
+      .aggregate([
+        {
+          $match: { estado: "pendiente_validacion" },
+        },
+        {
+          $lookup: {
+            from: "tickets",
+            localField: "codigoTicket",
+            foreignField: "codigoTicket",
+            as: "ticketInfo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$ticketInfo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            codigoTicket: 1,
+            referenciaTransferencia: 1,
+            banco: 1,
+            telefono: 1,
+            numeroIdentidad: 1,
+            montoPagado: 1,
+            fechaPago: 1,
+            estado: 1,
+            estadoValidacion: 1,
+            carInfo: 1,
+            // AGREGAR: Campos de tiempo de salida (primero del pago, luego del ticket como fallback)
+            tiempoSalida: { $ifNull: ["$tiempoSalida", "$ticketInfo.tiempoSalida"] },
+            tiempoSalidaEstimado: { $ifNull: ["$tiempoSalidaEstimado", "$ticketInfo.tiempoSalidaEstimado"] },
+            // Información del ticket
+            montoCalculado: "$ticketInfo.montoCalculado",
+          },
+        },
+        {
+          $sort: { fechaPago: -1 },
+        },
+      ])
       .toArray()
 
     // Set cache control headers

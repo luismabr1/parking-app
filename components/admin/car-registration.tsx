@@ -8,9 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CarIcon, RefreshCw, Plus } from "lucide-react"
+import { CarIcon, RefreshCw, Plus, Camera, Smartphone, Monitor } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/utils"
+import { useMobileDetection } from "@/hooks/use-mobile-detection"
+import VehicleCapture from "./vehicle-capture"
+import MobileStats from "./mobile-stats"
+import MobileCarList from "./mobile-car-list"
 
 interface AvailableTicket {
   _id: string
@@ -47,6 +51,8 @@ export default function CarRegistration() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState("")
+  const [showVehicleCapture, setShowVehicleCapture] = useState(false)
+  const isMobile = useMobileDetection()
 
   const [formData, setFormData] = useState<CarFormData>({
     placa: "",
@@ -106,7 +112,7 @@ export default function CarRegistration() {
     const interval = setInterval(() => {
       fetchCars()
       fetchAvailableTickets()
-    }, 30000) // Actualizar cada 30 segundos
+    }, 30000)
 
     return () => clearInterval(interval)
   }, [])
@@ -118,6 +124,30 @@ export default function CarRegistration() {
 
   const handleTicketChange = (value: string) => {
     setFormData((prev) => ({ ...prev, ticketAsociado: value }))
+  }
+
+  const handleVehicleDetected = (vehicleData: {
+    placa: string
+    marca: string
+    modelo: string
+    color: string
+    plateImageUrl: string
+    vehicleImageUrl: string
+    plateConfidence: number
+    vehicleConfidence: number
+  }) => {
+    setFormData((prev) => ({
+      ...prev,
+      placa: vehicleData.placa,
+      marca: vehicleData.marca,
+      modelo: vehicleData.modelo,
+      color: vehicleData.color,
+    }))
+    setShowVehicleCapture(false)
+    setMessage(
+      `✅ Vehículo detectado: ${vehicleData.marca} ${vehicleData.modelo} ${vehicleData.color} - Placa: ${vehicleData.placa}`,
+    )
+    setTimeout(() => setMessage(""), 5000)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -160,6 +190,11 @@ export default function CarRegistration() {
   }
 
   const isFormValid = () => {
+    if (isMobile) {
+      // En móvil solo requerir placa y ticket
+      return formData.placa.trim() !== "" && formData.ticketAsociado.trim() !== ""
+    }
+    // En desktop requerir todos los campos
     return Object.values(formData).every((value) => value.trim() !== "")
   }
 
@@ -167,7 +202,10 @@ export default function CarRegistration() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Registro de Carros</CardTitle>
+          <CardTitle className="flex items-center">
+            {isMobile ? <Smartphone className="h-5 w-5 mr-2" /> : <Monitor className="h-5 w-5 mr-2" />}
+            Registro de Carros {isMobile ? "(Móvil)" : "(Desktop)"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -178,12 +216,121 @@ export default function CarRegistration() {
     )
   }
 
+  if (showVehicleCapture) {
+    return <VehicleCapture onVehicleDetected={handleVehicleDetected} onCancel={() => setShowVehicleCapture(false)} />
+  }
+
+  // Vista móvil simplificada
+  if (isMobile) {
+    return (
+      <div className="space-y-4 p-4">
+        {/* Estadísticas compactas */}
+        <MobileStats />
+
+        {/* Formulario principal - prominente */}
+        <Card className="border-2 border-blue-200">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center justify-center text-xl">
+              <Camera className="h-6 w-6 mr-2 text-blue-600" />
+              Registro Rápido
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {message && (
+              <Alert variant={message.includes("❌") ? "destructive" : "default"}>
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+            )}
+
+            {availableTickets.length === 0 ? (
+              <Alert variant="destructive">
+                <AlertDescription>No hay tickets disponibles para asignar.</AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                {/* Botón principal de captura */}
+                <Button
+                  onClick={() => setShowVehicleCapture(true)}
+                  className="w-full py-8 text-lg bg-blue-600 hover:bg-blue-700"
+                  size="lg"
+                >
+                  <Camera className="h-6 w-6 mr-3" />
+                  Capturar Vehículo
+                </Button>
+
+                {/* Formulario simplificado */}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="placa" className="text-lg">
+                      Placa del Vehículo
+                    </Label>
+                    <Input
+                      id="placa"
+                      name="placa"
+                      value={formData.placa}
+                      onChange={handleInputChange}
+                      placeholder="Ej. ABC123"
+                      required
+                      className="text-lg py-6"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ticketAsociado" className="text-lg">
+                      Ticket de Estacionamiento
+                    </Label>
+                    <Select value={formData.ticketAsociado} onValueChange={handleTicketChange}>
+                      <SelectTrigger className="text-lg py-6">
+                        <SelectValue placeholder="Seleccione un ticket" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableTickets.map((ticket) => (
+                          <SelectItem key={ticket._id} value={ticket.codigoTicket} className="text-lg">
+                            {ticket.codigoTicket}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-gray-500 text-center">{availableTickets.length} espacios disponibles</p>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full py-6 text-lg"
+                    disabled={!isFormValid() || isSubmitting}
+                    variant={isFormValid() ? "default" : "secondary"}
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    {isSubmitting ? "Registrando..." : "Registrar Vehículo"}
+                  </Button>
+                </form>
+
+                <Alert>
+                  <AlertDescription className="text-center">
+                    💡 <strong>Tip:</strong> Use "Capturar Vehículo" para llenar automáticamente los datos
+                  </AlertDescription>
+                </Alert>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Lista de carros - colapsable */}
+        <MobileCarList cars={cars} onRefresh={fetchCars} />
+      </div>
+    )
+  }
+
+  // Vista desktop completa (sin cambios)
   return (
     <div className="space-y-6">
-      {/* Formulario de Registro */}
+      {/* Formulario de Registro Desktop */}
       <Card>
         <CardHeader>
-          <CardTitle>Registrar Nuevo Carro</CardTitle>
+          <CardTitle className="flex items-center">
+            <Monitor className="h-5 w-5 mr-2" />
+            Registro Completo (Desktop)
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {message && (
@@ -211,6 +358,23 @@ export default function CarRegistration() {
                     placeholder="Ej. ABC123"
                     required
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="ticketAsociado">Ticket de Estacionamiento</Label>
+                  <Select value={formData.ticketAsociado} onValueChange={handleTicketChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccione un ticket disponible" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTickets.map((ticket) => (
+                        <SelectItem key={ticket._id} value={ticket.codigoTicket}>
+                          {ticket.codigoTicket}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-gray-500">Tickets disponibles: {availableTickets.length}</p>
                 </div>
 
                 <div className="space-y-2">
@@ -274,23 +438,6 @@ export default function CarRegistration() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="ticketAsociado">Ticket de Estacionamiento</Label>
-                <Select value={formData.ticketAsociado} onValueChange={handleTicketChange}>
-                  <SelectTrigger id="ticketAsociado">
-                    <SelectValue placeholder="Seleccione un ticket disponible" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableTickets.map((ticket) => (
-                      <SelectItem key={ticket._id} value={ticket.codigoTicket}>
-                        {ticket.codigoTicket}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-gray-500">Tickets disponibles: {availableTickets.length}</p>
-              </div>
-
               <Button type="submit" className="w-full" disabled={!isFormValid() || isSubmitting}>
                 <Plus className="h-4 w-4 mr-2" />
                 {isSubmitting ? "Registrando..." : "Registrar Carro"}
@@ -300,7 +447,7 @@ export default function CarRegistration() {
         </CardContent>
       </Card>
 
-      {/* Lista de Carros Estacionados */}
+      {/* Lista de Carros Desktop */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Carros Estacionados Actualmente</CardTitle>

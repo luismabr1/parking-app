@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, XCircle, RefreshCw, Car, Clock } from "lucide-react"
+import { CheckCircle, XCircle, RefreshCw, Car } from "lucide-react"
 import { formatCurrency, formatDateTime } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ExitTimeDisplay } from "./exit-time-display"
 
 interface PendingPayment {
   _id: string
@@ -35,31 +36,22 @@ interface PendingPaymentsProps {
   onStatsUpdate: () => void
 }
 
-// Opciones de tiempo de salida para mostrar labels
-const exitTimeLabels: { [key: string]: string } = {
-  now: "Ahora",
-  "5min": "En 5 minutos",
-  "10min": "En 10 minutos",
-  "15min": "En 15 minutos",
-  "20min": "En 20 minutos",
-  "30min": "En 30 minutos",
-  "45min": "En 45 minutos",
-  "60min": "En 1 hora",
-}
-
 export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps) {
   const [payments, setPayments] = useState<PendingPayment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [error, setError] = useState("")
 
+  // DEBUG: Log de todos los pagos
+  console.log("🔍 DEBUG PendingPayments - All payments:", payments)
+
   useEffect(() => {
     fetchPendingPayments()
 
-    // Configurar un intervalo para actualizar los pagos pendientes cada 30 segundos
+    // Configurar un intervalo para actualizar los pagos pendientes cada 10 segundos
     const intervalId = setInterval(() => {
-      fetchPendingPayments(false) // false para no mostrar el indicador de carga
-    }, 30000)
+      fetchPendingPayments(false)
+    }, 10000)
 
     return () => clearInterval(intervalId)
   }, [])
@@ -70,7 +62,6 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
         setIsLoading(true)
       }
 
-      // Agregar un timestamp para evitar el caché
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/admin/pending-payments?t=${timestamp}`, {
         method: "GET",
@@ -84,7 +75,43 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
 
       if (response.ok) {
         const data = await response.json()
-        setPayments(data)
+        console.log("🔍 DEBUG: Raw API response:", data)
+
+        // Ordenar por urgencia: críticos primero, luego urgentes, etc.
+        const sortedData = data.sort((a: PendingPayment, b: PendingPayment) => {
+          if (!a.tiempoSalida && !b.tiempoSalida) return 0
+          if (!a.tiempoSalida) return 1
+          if (!b.tiempoSalida) return -1
+
+          // Calcular urgencia para ordenar
+          const getUrgencyScore = (payment: PendingPayment) => {
+            const paymentTime = new Date(payment.fechaPago)
+            const currentTime = new Date()
+            const minutesToAdd =
+              {
+                now: 0,
+                "5min": 5,
+                "10min": 10,
+                "15min": 15,
+                "20min": 20,
+                "30min": 30,
+                "45min": 45,
+                "60min": 60,
+              }[payment.tiempoSalida || "now"] || 0
+
+            const targetTime = new Date(paymentTime.getTime() + minutesToAdd * 60000)
+            const timeRemaining = Math.ceil((targetTime.getTime() - currentTime.getTime()) / 60000)
+
+            if (timeRemaining <= 0) return 4 // Crítico
+            if (timeRemaining <= 2) return 3 // Urgente
+            if (timeRemaining <= 5) return 2 // Warning
+            return 1 // Normal
+          }
+
+          return getUrgencyScore(b) - getUrgencyScore(a)
+        })
+
+        setPayments(sortedData)
       } else {
         throw new Error("Error al cargar pagos pendientes")
       }
@@ -128,40 +155,6 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
     }
   }
 
-  const getExitTimeBadge = (tiempoSalida?: string, tiempoSalidaEstimado?: string) => {
-    if (!tiempoSalida) return null
-
-    const label = exitTimeLabels[tiempoSalida] || tiempoSalida
-    const isUrgent = tiempoSalida === "now" || tiempoSalida === "5min"
-
-    return (
-      <div
-        className={`flex items-center space-x-2 p-2 rounded-lg ${
-          isUrgent ? "bg-red-50 text-red-800" : "bg-blue-50 text-blue-800"
-        }`}
-      >
-        <Clock className="h-4 w-4" />
-        <div>
-          <span className="font-medium text-sm">{label}</span>
-          {tiempoSalidaEstimado && tiempoSalida !== "now" && (
-            <p className="text-xs opacity-75">
-              Estimado:{" "}
-              {new Date(tiempoSalidaEstimado).toLocaleTimeString("es-VE", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </p>
-          )}
-        </div>
-        {isUrgent && (
-          <Badge variant="destructive" className="text-xs">
-            URGENTE
-          </Badge>
-        )}
-      </div>
-    )
-  }
-
   if (isLoading) {
     return (
       <Card>
@@ -193,6 +186,18 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
           </Alert>
         )}
 
+        {/* DEBUG INFO - Solo en desarrollo */}
+        {process.env.NODE_ENV === "development" && (
+          <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
+            <p className="font-bold">🔧 DEBUG INFO:</p>
+            <p>Total payments: {payments.length}</p>
+            <p>
+              With tiempoSalida: {payments.filter((p) => p.tiempoSalida).length} | Without:{" "}
+              {payments.filter((p) => !p.tiempoSalida).length}
+            </p>
+          </div>
+        )}
+
         {payments.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <p className="text-lg font-medium">No hay pagos pendientes</p>
@@ -213,13 +218,14 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
                   </div>
                 </div>
 
-                {/* Tiempo de salida programado - DESTACADO */}
-                {payment.tiempoSalida && (
-                  <div className="border-l-4 border-blue-500 pl-4">
-                    <h4 className="font-medium text-sm text-gray-700 mb-2">⏰ Tiempo de Salida Programado</h4>
-                    {getExitTimeBadge(payment.tiempoSalida, payment.tiempoSalidaEstimado)}
-                  </div>
-                )}
+                {/* Tiempo de salida programado - COMPONENTE REUTILIZABLE */}
+                <ExitTimeDisplay
+                  tiempoSalida={payment.tiempoSalida}
+                  tiempoSalidaEstimado={payment.tiempoSalidaEstimado}
+                  fechaPago={payment.fechaPago}
+                  codigoTicket={payment.codigoTicket}
+                  variant="full"
+                />
 
                 {/* Información del Vehículo si existe */}
                 {payment.carInfo && (
