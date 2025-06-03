@@ -41,6 +41,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     confidence: number
   } | null>(null)
   const [videoReady, setVideoReady] = useState(false)
+  const [streamActive, setStreamActive] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -107,19 +108,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     try {
       setError(null)
       setVideoReady(false)
+      setStreamActive(false)
       addDebugInfo("🎬 Intentando iniciar cámara...")
-
-      // Esperar un tick para asegurar que el DOM esté actualizado
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
-      // Verificar que el elemento video existe DESPUÉS del timeout
-      if (!videoRef.current) {
-        addDebugInfo("❌ Elemento video no encontrado después del timeout")
-        setError("Error: elemento de video no disponible. Intente recargar la página.")
-        return
-      }
-
-      addDebugInfo("✅ Elemento video encontrado")
 
       // Limpiar stream anterior si existe
       if (streamRef.current) {
@@ -174,22 +164,36 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         throw lastError || new Error("No se pudo acceder a ninguna cámara")
       }
 
-      // Verificar NUEVAMENTE que el video element existe
+      addDebugInfo(`📹 Stream obtenido con ${stream.getVideoTracks().length} tracks de video`)
+
+      // Verificar que el stream tiene tracks activos
+      const videoTrack = stream.getVideoTracks()[0]
+      if (videoTrack) {
+        addDebugInfo(`📹 Track de video: ${videoTrack.label}, estado: ${videoTrack.readyState}`)
+      }
+
+      // Mostrar la interfaz de captura primero
+      setIsCapturing(true)
+
+      // Esperar un momento para que el DOM se actualice
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      // Verificar que el video element existe
       if (!videoRef.current || !mountedRef.current) {
-        addDebugInfo("❌ Elemento video perdido después de obtener stream")
+        addDebugInfo("❌ Elemento video no encontrado")
         stream.getTracks().forEach((track) => track.stop())
         setError("Error: elemento de video no disponible")
         return
       }
 
-      addDebugInfo("✅ Elemento video verificado después de stream")
+      addDebugInfo("✅ Elemento video encontrado")
 
       // Configurar el stream
       const video = videoRef.current
       video.srcObject = stream
       streamRef.current = stream
 
-      // Esperar a que el video esté listo con timeout más corto
+      // Esperar a que el video esté completamente listo
       try {
         await new Promise<void>((resolve, reject) => {
           if (!video || !mountedRef.current) {
@@ -199,10 +203,23 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
           const onLoadedMetadata = () => {
             if (!mountedRef.current) return
-            addDebugInfo(`📹 Video listo: ${video.videoWidth}x${video.videoHeight}`)
+            addDebugInfo(`📹 Video metadata: ${video.videoWidth}x${video.videoHeight}`)
+            addDebugInfo(`📹 Video readyState: ${video.readyState}`)
             cleanup()
             setVideoReady(true)
             resolve()
+          }
+
+          const onCanPlay = () => {
+            if (!mountedRef.current) return
+            addDebugInfo("📹 Video puede reproducirse")
+            setStreamActive(true)
+          }
+
+          const onPlaying = () => {
+            if (!mountedRef.current) return
+            addDebugInfo("📹 Video está reproduciéndose")
+            setStreamActive(true)
           }
 
           const onError = (e: Event) => {
@@ -219,26 +236,32 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
           const cleanup = () => {
             video.removeEventListener("loadedmetadata", onLoadedMetadata)
+            video.removeEventListener("canplay", onCanPlay)
+            video.removeEventListener("playing", onPlaying)
             video.removeEventListener("error", onError)
             clearTimeout(timeoutId)
           }
 
           video.addEventListener("loadedmetadata", onLoadedMetadata)
+          video.addEventListener("canplay", onCanPlay)
+          video.addEventListener("playing", onPlaying)
           video.addEventListener("error", onError)
 
-          // Timeout más corto para móviles
-          const timeoutId = setTimeout(onTimeout, 5000)
+          // Timeout más largo para asegurar que el video esté listo
+          const timeoutId = setTimeout(onTimeout, 8000)
 
           // Si el video ya tiene metadata, disparar inmediatamente
           if (video.readyState >= 1) {
             onLoadedMetadata()
           }
+
+          // Forzar reproducción
+          video.play().catch((playError) => {
+            addDebugInfo(`❌ Error reproduciendo video: ${playError}`)
+          })
         })
 
-        if (mountedRef.current) {
-          setIsCapturing(true)
-          addDebugInfo("🎉 Cámara iniciada exitosamente")
-        }
+        addDebugInfo("🎉 Cámara iniciada exitosamente")
       } catch (setupError) {
         if (stream) {
           stream.getTracks().forEach((track) => track.stop())
@@ -269,6 +292,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         setError(`Error accediendo a la cámara: ${errorMessage}`)
       }
 
+      setIsCapturing(false)
       console.error("Camera error:", err)
     }
   }, [addDebugInfo])
@@ -284,6 +308,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
     setIsCapturing(false)
     setVideoReady(false)
+    setStreamActive(false)
   }, [addDebugInfo])
 
   const capturePhoto = useCallback(() => {
@@ -295,9 +320,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       return
     }
 
-    if (!videoReady) {
-      addDebugInfo("❌ Video no está listo")
-      setError("Error: video no está listo para captura")
+    if (!videoReady || !streamActive) {
+      addDebugInfo(`❌ Video no está listo: ready=${videoReady}, active=${streamActive}`)
+      setError("Error: video no está listo para captura. Espere un momento.")
       return
     }
 
@@ -314,19 +339,47 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     // Verificar que el video tiene dimensiones válidas
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       addDebugInfo(`❌ Video sin dimensiones: ${video.videoWidth}x${video.videoHeight}`)
-      setError("Error: video no está listo para captura")
+      setError("Error: video no tiene dimensiones válidas")
+      return
+    }
+
+    // Verificar que el video está realmente reproduciendo
+    if (video.paused || video.ended) {
+      addDebugInfo(`❌ Video no está reproduciendo: paused=${video.paused}, ended=${video.ended}`)
+      setError("Error: video no está reproduciendo")
       return
     }
 
     addDebugInfo(`📐 Capturando: ${video.videoWidth}x${video.videoHeight}`)
+    addDebugInfo(`📹 Estado del video: readyState=${video.readyState}, currentTime=${video.currentTime}`)
 
     try {
       // Configurar el canvas con las dimensiones del video
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
 
+      // Limpiar el canvas primero
+      context.clearRect(0, 0, canvas.width, canvas.height)
+
       // Dibujar el frame actual del video en el canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+      // Verificar que se dibujó algo (no todo negro)
+      const imageData = context.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height))
+      const pixels = imageData.data
+      let hasNonBlackPixels = false
+
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i] > 10 || pixels[i + 1] > 10 || pixels[i + 2] > 10) {
+          hasNonBlackPixels = true
+          break
+        }
+      }
+
+      if (!hasNonBlackPixels) {
+        addDebugInfo("⚠️ Imagen capturada parece estar en negro")
+        // Continuar de todos modos, pero avisar
+      }
 
       // Convertir a blob y obtener URL
       canvas.toBlob(
@@ -353,7 +406,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       addDebugInfo(`❌ Error durante captura: ${captureError}`)
       setError("Error capturando imagen")
     }
-  }, [currentStep, stopCamera, addDebugInfo, videoReady])
+  }, [currentStep, stopCamera, addDebugInfo, videoReady, streamActive])
 
   const processPlateImage = useCallback(async () => {
     if (!capturedImages.plate) return
@@ -576,55 +629,69 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           </div>
         )}
 
-        {/* Video element SIEMPRE presente en el DOM, pero oculto cuando no se usa */}
-        <div className={`${isCapturing ? "block" : "hidden"} space-y-4`}>
-          <div className="relative">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full rounded-lg bg-black"
-              style={{ maxHeight: "300px", minHeight: "200px" }}
-              onLoadedMetadata={() => {
-                addDebugInfo("📹 Video metadata cargada")
-                setVideoReady(true)
-              }}
-              onError={(e) => {
-                addDebugInfo(`❌ Error en video element: ${e}`)
-                setError("Error en el elemento de video")
-              }}
-            />
-            {videoReady && (
-              <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none">
-                <div
-                  className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 ${stepInfo.frameClass} border-2 border-yellow-400 rounded`}
-                >
-                  <span className="absolute -top-6 left-0 text-xs text-yellow-400 font-medium">
-                    {stepInfo.frameLabel}
-                  </span>
+        {isCapturing && (
+          <div className="space-y-4">
+            <div className="relative">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-lg bg-black"
+                style={{ maxHeight: "300px", minHeight: "200px" }}
+                onLoadedMetadata={() => {
+                  addDebugInfo("📹 Video metadata cargada")
+                  setVideoReady(true)
+                }}
+                onCanPlay={() => {
+                  addDebugInfo("📹 Video puede reproducirse")
+                  setStreamActive(true)
+                }}
+                onPlaying={() => {
+                  addDebugInfo("📹 Video está reproduciéndose")
+                  setStreamActive(true)
+                }}
+                onError={(e) => {
+                  addDebugInfo(`❌ Error en video element: ${e}`)
+                  setError("Error en el elemento de video")
+                }}
+              />
+              {videoReady && streamActive && (
+                <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none">
+                  <div
+                    className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 ${stepInfo.frameClass} border-2 border-yellow-400 rounded`}
+                  >
+                    <span className="absolute -top-6 left-0 text-xs text-yellow-400 font-medium">
+                      {stepInfo.frameLabel}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
-            {!videoReady && isCapturing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
-                <div className="text-white text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                  <p className="text-sm">Cargando cámara...</p>
+              )}
+              {(!videoReady || !streamActive) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                  <div className="text-white text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                    <p className="text-sm">
+                      {!videoReady ? "Cargando cámara..." : !streamActive ? "Iniciando video..." : "Preparando..."}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
+            <div className="flex space-x-2">
+              <Button onClick={capturePhoto} className="flex-1" size="lg" disabled={!videoReady || !streamActive}>
+                <Camera className="h-4 w-4 mr-2" />
+                {videoReady && streamActive ? "Capturar" : "Esperando..."}
+              </Button>
+              <Button onClick={onCancel} variant="outline">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {videoReady && streamActive && (
+              <p className="text-xs text-center text-green-600">✅ Cámara lista para capturar</p>
             )}
           </div>
-          <div className="flex space-x-2">
-            <Button onClick={capturePhoto} className="flex-1" size="lg" disabled={!videoReady}>
-              <Camera className="h-4 w-4 mr-2" />
-              {videoReady ? "Capturar" : "Esperando..."}
-            </Button>
-            <Button onClick={onCancel} variant="outline">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        )}
 
         {capturedImages[currentStep] && currentStep !== "processing" && (
           <div className="space-y-4">
@@ -661,21 +728,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           </div>
         )}
 
-        {/* Canvas y video siempre presentes en el DOM */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="hidden"
-          onLoadedMetadata={() => {
-            addDebugInfo("📹 Video metadata cargada (hidden)")
-            setVideoReady(true)
-          }}
-          onError={(e) => {
-            addDebugInfo(`❌ Error en video element (hidden): ${e}`)
-          }}
-        />
         <canvas ref={canvasRef} className="hidden" />
       </CardContent>
     </Card>
