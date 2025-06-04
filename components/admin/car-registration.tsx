@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CarIcon, RefreshCw, Plus, Camera, Smartphone, Monitor } from "lucide-react"
+import { CarIcon, RefreshCw, Plus, Camera, Smartphone, Monitor, ImageIcon, Edit } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/utils"
 import { useMobileDetection } from "@/hooks/use-mobile-detection"
 import VehicleCapture from "./vehicle-capture"
 import MobileStats from "./mobile-stats"
 import MobileCarList from "./mobile-car-list"
+import CarImageViewer from "./car-image-viewer"
 
 interface AvailableTicket {
   _id: string
@@ -33,6 +34,14 @@ interface Car {
   ticketAsociado: string
   horaIngreso: string
   estado: string
+  imagenes?: {
+    placaUrl?: string
+    vehiculoUrl?: string
+    fechaCaptura?: string
+    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
+    confianzaPlaca?: number
+    confianzaVehiculo?: number
+  }
 }
 
 interface CarFormData {
@@ -52,6 +61,7 @@ export default function CarRegistration() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState("")
   const [showVehicleCapture, setShowVehicleCapture] = useState(false)
+  const [selectedCarImages, setSelectedCarImages] = useState<Car | null>(null)
   const isMobile = useMobileDetection()
 
   const [formData, setFormData] = useState<CarFormData>({
@@ -63,6 +73,13 @@ export default function CarRegistration() {
     telefono: "",
     ticketAsociado: "",
   })
+
+  const [capturedImages, setCapturedImages] = useState<{
+    placaUrl?: string
+    vehiculoUrl?: string
+    confianzaPlaca?: number
+    confianzaVehiculo?: number
+  } | null>(null)
 
   useEffect(() => {
     Promise.all([fetchCars(), fetchAvailableTickets()])
@@ -143,9 +160,17 @@ export default function CarRegistration() {
       modelo: vehicleData.modelo,
       color: vehicleData.color,
     }))
+
+    setCapturedImages({
+      placaUrl: vehicleData.plateImageUrl,
+      vehiculoUrl: vehicleData.vehicleImageUrl,
+      confianzaPlaca: vehicleData.plateConfidence,
+      confianzaVehiculo: vehicleData.vehicleConfidence,
+    })
+
     setShowVehicleCapture(false)
     setMessage(
-      `✅ Vehículo detectado: ${vehicleData.marca} ${vehicleData.modelo} ${vehicleData.color} - Placa: ${vehicleData.placa}`,
+      `✅ Vehículo capturado: ${vehicleData.marca} ${vehicleData.modelo} ${vehicleData.color} - Placa: ${vehicleData.placa}`,
     )
     setTimeout(() => setMessage(""), 5000)
   }
@@ -156,10 +181,23 @@ export default function CarRegistration() {
     setMessage("")
 
     try {
+      const submitData = {
+        ...formData,
+        imagenes: capturedImages
+          ? {
+              placaUrl: capturedImages.placaUrl,
+              vehiculoUrl: capturedImages.vehiculoUrl,
+              capturaMetodo: isMobile ? "camara_movil" : "camara_desktop",
+              confianzaPlaca: capturedImages.confianzaPlaca,
+              confianzaVehiculo: capturedImages.confianzaVehiculo,
+            }
+          : undefined,
+      }
+
       const response = await fetch("/api/admin/cars", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(submitData),
       })
 
       const data = await response.json()
@@ -175,6 +213,7 @@ export default function CarRegistration() {
           telefono: "",
           ticketAsociado: "",
         })
+        setCapturedImages(null)
         await Promise.all([fetchCars(), fetchAvailableTickets()])
       } else {
         setMessage(`❌ ${data.message}`)
@@ -220,6 +259,10 @@ export default function CarRegistration() {
     return <VehicleCapture onVehicleDetected={handleVehicleDetected} onCancel={() => setShowVehicleCapture(false)} />
   }
 
+  if (selectedCarImages) {
+    return <CarImageViewer car={selectedCarImages} onClose={() => setSelectedCarImages(null)} onUpdate={fetchCars} />
+  }
+
   // Vista móvil simplificada
   if (isMobile) {
     return (
@@ -257,6 +300,21 @@ export default function CarRegistration() {
                   <Camera className="h-6 w-6 mr-3" />
                   Capturar Vehículo
                 </Button>
+
+                {/* Mostrar imágenes capturadas */}
+                {capturedImages && (
+                  <Alert>
+                    <AlertDescription>
+                      <div className="flex items-center space-x-2">
+                        <ImageIcon className="h-4 w-4 text-green-600" />
+                        <span>
+                          ✅ Imágenes capturadas (Placa: {Math.round((capturedImages.confianzaPlaca || 0) * 100)}%,
+                          Vehículo: {Math.round((capturedImages.confianzaVehiculo || 0) * 100)}%)
+                        </span>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {/* Formulario simplificado */}
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -316,12 +374,12 @@ export default function CarRegistration() {
         </Card>
 
         {/* Lista de carros - colapsable */}
-        <MobileCarList cars={cars} onRefresh={fetchCars} />
+        <MobileCarList cars={cars} onRefresh={fetchCars} onViewImages={setSelectedCarImages} />
       </div>
     )
   }
 
-  // Vista desktop completa (sin cambios)
+  // Vista desktop completa
   return (
     <div className="space-y-6">
       {/* Formulario de Registro Desktop */}
@@ -481,6 +539,21 @@ export default function CarRegistration() {
                           <p className="text-sm text-gray-600">
                             Dueño: {car.nombreDueño} | Tel: {car.telefono}
                           </p>
+                          {car.imagenes && (
+                            <div className="flex items-center space-x-2 mt-1">
+                              <ImageIcon className="h-4 w-4 text-blue-600" />
+                              <span className="text-xs text-blue-600">Con imágenes</span>
+                              <Button
+                                onClick={() => setSelectedCarImages(car)}
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                              >
+                                <Edit className="h-3 w-3 mr-1" />
+                                Ver/Editar
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

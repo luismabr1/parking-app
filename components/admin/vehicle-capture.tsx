@@ -3,9 +3,11 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Camera, RotateCcw, Check, X, Car, CreditCard, AlertTriangle } from "lucide-react"
+import { Camera, RotateCcw, Check, X, Car, CreditCard, AlertTriangle, Settings } from 'lucide-react'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { useOCRService } from "@/lib/ocr-service"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface VehicleData {
   placa: string
@@ -24,6 +26,7 @@ interface VehicleCaptureProps {
 }
 
 type CaptureStep = "plate" | "vehicle" | "processing"
+type OCRMethod = 'auto' | 'tesseract' | 'python'
 
 export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleCaptureProps) {
   const [currentStep, setCurrentStep] = useState<CaptureStep>("plate")
@@ -42,6 +45,11 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   } | null>(null)
   const [videoReady, setVideoReady] = useState(false)
   const [streamActive, setStreamActive] = useState(false)
+  const [ocrMethod, setOcrMethod] = useState<OCRMethod>('auto')
+  const [ocrStatus, setOcrStatus] = useState<string>('')
+  const [showSettings, setShowSettings] = useState(false)
+
+  const { processPlate, processVehicle, cleanup } = useOCRService()
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -64,12 +72,14 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop())
       }
+      // Limpiar recursos de OCR
+      cleanup()
     }
-  }, [])
+  }, [cleanup])
 
   // Detectar capacidades del dispositivo
   useEffect(() => {
-    addDebugInfo("Iniciando componente de captura")
+    addDebugInfo("Iniciando componente de captura con OCR real")
 
     // Verificar soporte de getUserMedia
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -83,6 +93,13 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     // Verificar si estamos en HTTPS o localhost
     const isSecure = location.protocol === "https:" || location.hostname === "localhost"
     addDebugInfo(`🔒 Protocolo seguro: ${isSecure ? "Sí" : "No"} (${location.protocol})`)
+
+    // Verificar soporte de WebAssembly para Tesseract
+    if (typeof WebAssembly === 'object') {
+      addDebugInfo("✅ WebAssembly soportado - Tesseract.js disponible")
+    } else {
+      addDebugInfo("⚠️ WebAssembly no soportado - Solo API remota")
+    }
 
     // Enumerar dispositivos disponibles
     navigator.mediaDevices
@@ -295,7 +312,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       setIsCapturing(false)
       console.error("Camera error:", err)
     }
-  }, [addDebugInfo])
+  }, [addDebugInfo, cleanup])
 
   const stopCamera = useCallback(() => {
     addDebugInfo("🛑 Deteniendo cámara")
@@ -413,102 +430,129 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
     setIsProcessing(true)
     setError(null)
-    addDebugInfo("🔍 Procesando imagen de placa")
+    setOcrStatus('Preparando imagen...')
+    addDebugInfo(`🔍 Iniciando procesamiento OCR de placa con método: ${ocrMethod}`)
 
     try {
+      // Obtener blob de la imagen
+      setOcrStatus('Obteniendo imagen...')
       const response = await fetch(capturedImages.plate)
       const blob = await response.blob()
-      const file = new File([blob], "plate-capture.jpg", { type: "image/jpeg" })
+      
+      addDebugInfo(`📤 Imagen obtenida: ${blob.size} bytes`)
+      
+      // Procesar con OCR real usando Tesseract.js
+      setOcrStatus('Analizando placa con IA...')
+      const ocrResult = await processPlate(blob)
+      
+      addDebugInfo(`✅ OCR completado con ${ocrResult.method}: ${ocrResult.text} (${Math.round(ocrResult.confidence * 100)}%)`)
+      
+      // Si la confianza es muy baja, usar API como fallback
+      if (ocrResult.confidence < 0.6 && ocrResult.method === 'tesseract') {
+        setOcrStatus('Confianza baja, usando API como respaldo...')
+        addDebugInfo("⚠️ Confianza baja, intentando con servidor...")
+        
+        // Fallback a la API del servidor
+        const formData = new FormData()
+        const file = new File([blob], "plate-capture.jpg", { type: "image/jpeg" })
+        formData.append("image", file)
+        formData.append("type", "plate")
+        formData.append("method", ocrMethod === 'auto' ? 'python' : ocrMethod)
 
-      const formData = new FormData()
-      formData.append("image", file)
-      formData.append("type", "plate")
-
-      addDebugInfo(`📤 Enviando imagen: ${file.size} bytes`)
-
-      const uploadResponse = await fetch("/api/admin/process-vehicle", {
-        method: "POST",
-        body: formData,
-      })
-
-      const result = await uploadResponse.json()
-      addDebugInfo(`📥 Respuesta recibida: ${uploadResponse.status}`)
-
-      if (uploadResponse.ok && result.success) {
-        setPlateData({
-          placa: result.placa,
-          imageUrl: result.imageUrl,
-          confidence: result.confidence,
+        const uploadResponse = await fetch("/api/admin/process-vehicle", {
+          method: "POST",
+          body: formData,
         })
-        setCurrentStep("vehicle")
-        addDebugInfo(`✅ Placa detectada: ${result.placa}`)
+
+        const result = await uploadResponse.json()
+        
+        if (uploadResponse.ok && result.success) {
+          setPlateData({
+            placa: result.placa,
+            imageUrl: result.imageUrl,
+            confidence: result.confidence,
+          })
+          addDebugInfo(`✅ Servidor exitoso: ${result.placa} (método: ${result.method})`)
+        } else {
+          // Usar resultado de Tesseract aunque sea de baja confianza
+          setPlateData({
+            placa: ocrResult.text,
+            imageUrl: capturedImages.plate,
+            confidence: ocrResult.confidence,
+          })
+          addDebugInfo(`⚠️ Usando resultado Tesseract: ${ocrResult.text}`)
+        }
       } else {
-        addDebugInfo(`❌ Error procesando: ${result.message}`)
-        setError(result.message || "Error al procesar la placa")
+        // Usar resultado directo del OCR
+        setPlateData({
+          placa: ocrResult.text,
+          imageUrl: capturedImages.plate,
+          confidence: ocrResult.confidence,
+        })
       }
+      
+      setCurrentStep("vehicle")
+      setOcrStatus('')
+      
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Error desconocido"
-      addDebugInfo(`💥 Error de red: ${errorMsg}`)
-      setError("Error al procesar la imagen de la placa")
-      console.error("Processing error:", err)
+      addDebugInfo(`💥 Error OCR: ${errorMsg}`)
+      setError("Error al procesar la imagen de la placa con OCR")
+      setOcrStatus('')
+      console.error("OCR error:", err)
     } finally {
       setIsProcessing(false)
     }
-  }, [capturedImages.plate, addDebugInfo])
+  }, [capturedImages.plate, addDebugInfo, processPlate, ocrMethod])
 
   const processVehicleImage = useCallback(async () => {
     if (!capturedImages.vehicle || !plateData) return
 
     setIsProcessing(true)
     setCurrentStep("processing")
-    addDebugInfo("🚗 Procesando imagen de vehículo")
+    setOcrStatus('Preparando análisis del vehículo...')
+    addDebugInfo("🚗 Iniciando procesamiento OCR de vehículo")
 
     try {
+      // Obtener blob de la imagen
+      setOcrStatus('Obteniendo imagen del vehículo...')
       const response = await fetch(capturedImages.vehicle)
       const blob = await response.blob()
-      const file = new File([blob], "vehicle-capture.jpg", { type: "image/jpeg" })
-
-      const formData = new FormData()
-      formData.append("image", file)
-      formData.append("type", "vehicle")
-
-      addDebugInfo(`📤 Enviando imagen de vehículo: ${file.size} bytes`)
-
-      const uploadResponse = await fetch("/api/admin/process-vehicle", {
-        method: "POST",
-        body: formData,
-      })
-
-      const result = await uploadResponse.json()
-      addDebugInfo(`📥 Respuesta vehículo: ${uploadResponse.status}`)
-
-      if (uploadResponse.ok && result.success) {
-        addDebugInfo(`✅ Vehículo detectado: ${result.marca} ${result.modelo}`)
-        onVehicleDetected({
-          placa: plateData.placa,
-          marca: result.marca,
-          modelo: result.modelo,
-          color: result.color,
-          plateImageUrl: plateData.imageUrl,
-          vehicleImageUrl: result.imageUrl,
-          plateConfidence: plateData.confidence,
-          vehicleConfidence: result.confidence,
-        })
-      } else {
-        addDebugInfo(`❌ Error procesando vehículo: ${result.message}`)
-        setError(result.message || "Error al procesar la imagen del vehículo")
-        setCurrentStep("vehicle")
+      
+      addDebugInfo(`📤 Imagen de vehículo obtenida: ${blob.size} bytes`)
+      
+      // Procesar con OCR
+      setOcrStatus('Analizando vehículo con IA...')
+      const vehicleResult = await processVehicle(blob)
+      
+      addDebugInfo(`✅ OCR vehículo completado: ${vehicleResult.marca} ${vehicleResult.modelo} (${Math.round(vehicleResult.confidence * 100)}%)`)
+      
+      // Combinar datos
+      const finalData = {
+        placa: plateData.placa, // Usar placa de la primera captura
+        marca: vehicleResult.marca,
+        modelo: vehicleResult.modelo,
+        color: vehicleResult.color,
+        plateImageUrl: plateData.imageUrl,
+        vehicleImageUrl: capturedImages.vehicle,
+        plateConfidence: plateData.confidence,
+        vehicleConfidence: vehicleResult.confidence,
       }
+      
+      setOcrStatus('')
+      onVehicleDetected(finalData)
+      
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Error desconocido"
-      addDebugInfo(`💥 Error procesando vehículo: ${errorMsg}`)
+      addDebugInfo(`💥 Error OCR vehículo: ${errorMsg}`)
       setError("Error al procesar la imagen del vehículo")
       setCurrentStep("vehicle")
-      console.error("Processing error:", err)
+      setOcrStatus('')
+      console.error("Vehicle OCR error:", err)
     } finally {
       setIsProcessing(false)
     }
-  }, [capturedImages.vehicle, plateData, onVehicleDetected, addDebugInfo])
+  }, [capturedImages.vehicle, plateData, onVehicleDetected, addDebugInfo, processVehicle])
 
   const retakePhoto = useCallback(() => {
     addDebugInfo("🔄 Retomando foto")
@@ -546,7 +590,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       case "processing":
         return {
           title: "3. Procesando...",
-          description: "Analizando las imágenes",
+          description: "Analizando las imágenes con IA",
           icon: <Camera className="h-5 w-5" />,
           frameClass: "",
           frameLabel: "",
@@ -564,14 +608,48 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             {stepInfo.icon}
             <span className="ml-2">{stepInfo.title}</span>
           </div>
-          <div className="flex space-x-1">
-            <Badge variant={currentStep === "plate" ? "default" : plateData ? "secondary" : "outline"}>1</Badge>
-            <Badge variant={currentStep === "vehicle" ? "default" : "outline"}>2</Badge>
-            <Badge variant={currentStep === "processing" ? "default" : "outline"}>3</Badge>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+            <div className="flex space-x-1">
+              <Badge variant={currentStep === "plate" ? "default" : plateData ? "secondary" : "outline"}>1</Badge>
+              <Badge variant={currentStep === "vehicle" ? "default" : "outline"}>2</Badge>
+              <Badge variant={currentStep === "processing" ? "default" : "outline"}>3</Badge>
+            </div>
           </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
+        {/* Panel de configuración OCR */}
+        {showSettings && (
+          <Alert>
+            <Settings className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Método de OCR:</label>
+                <Select value={ocrMethod} onValueChange={(value: OCRMethod) => setOcrMethod(value)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Automático (Recomendado)</SelectItem>
+                    <SelectItem value="tesseract">Solo Tesseract.js</SelectItem>
+                    <SelectItem value="python">Solo API Python</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">
+                  Automático: Usa Tesseract.js primero, luego API como respaldo
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -612,6 +690,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
             </div>
             <p className="text-sm text-gray-600">Procesando imágenes con IA...</p>
+            {ocrStatus && (
+              <p className="text-xs text-blue-600">{ocrStatus}</p>
+            )}
             <p className="text-xs text-gray-500">Esto puede tomar unos segundos</p>
           </div>
         )}
@@ -625,7 +706,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
               Abrir Cámara
             </Button>
             <p className="text-xs text-gray-500">Asegúrese de permitir el acceso a la cámara cuando se lo solicite</p>
-            <p className="text-xs text-gray-400">Si el problema persiste, recargue la página e intente nuevamente</p>
+            <p className="text-xs text-gray-400">OCR con IA: Tesseract.js + API Python como respaldo</p>
           </div>
         )}
 
