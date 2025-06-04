@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Camera, RotateCcw, Check, X, Car, CreditCard, AlertTriangle, Settings } from 'lucide-react'
+import { Camera, RotateCcw, Check, X, Car, CreditCard, AlertTriangle, Settings, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { useOCRService } from "@/lib/ocr-service"
@@ -26,7 +26,7 @@ interface VehicleCaptureProps {
 }
 
 type CaptureStep = "plate" | "vehicle" | "processing"
-type OCRMethod = 'auto' | 'tesseract' | 'python'
+type OCRMethod = "auto" | "tesseract" | "python"
 
 export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleCaptureProps) {
   const [currentStep, setCurrentStep] = useState<CaptureStep>("plate")
@@ -45,9 +45,11 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   } | null>(null)
   const [videoReady, setVideoReady] = useState(false)
   const [streamActive, setStreamActive] = useState(false)
-  const [ocrMethod, setOcrMethod] = useState<OCRMethod>('auto')
-  const [ocrStatus, setOcrStatus] = useState<string>('')
+  const [ocrMethod, setOcrMethod] = useState<OCRMethod>("auto")
+  const [ocrStatus, setOcrStatus] = useState<string>("")
   const [showSettings, setShowSettings] = useState(false)
+  const [cameraFacing, setCameraFacing] = useState<"environment" | "user">("environment")
+  const [retryCount, setRetryCount] = useState(0)
 
   const { processPlate, processVehicle, cleanup } = useOCRService()
 
@@ -60,7 +62,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   const addDebugInfo = useCallback((info: string) => {
     console.log("🔍 DEBUG:", info)
     if (mountedRef.current) {
-      setDebugInfo((prev) => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${info}`])
+      setDebugInfo((prev) => [...prev.slice(-6), `${new Date().toLocaleTimeString()}: ${info}`])
     }
   }, [])
 
@@ -72,7 +74,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop())
       }
-      // Limpiar recursos de OCR
       cleanup()
     }
   }, [cleanup])
@@ -81,7 +82,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   useEffect(() => {
     addDebugInfo("Iniciando componente de captura con OCR real")
 
-    // Verificar soporte de getUserMedia
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setError("Su navegador no soporta acceso a la cámara")
       addDebugInfo("❌ getUserMedia no disponible")
@@ -90,18 +90,15 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
     addDebugInfo("✅ getUserMedia disponible")
 
-    // Verificar si estamos en HTTPS o localhost
     const isSecure = location.protocol === "https:" || location.hostname === "localhost"
     addDebugInfo(`🔒 Protocolo seguro: ${isSecure ? "Sí" : "No"} (${location.protocol})`)
 
-    // Verificar soporte de WebAssembly para Tesseract
-    if (typeof WebAssembly === 'object') {
+    if (typeof WebAssembly === "object") {
       addDebugInfo("✅ WebAssembly soportado - Tesseract.js disponible")
     } else {
       addDebugInfo("⚠️ WebAssembly no soportado - Solo API remota")
     }
 
-    // Enumerar dispositivos disponibles
     navigator.mediaDevices
       .enumerateDevices()
       .then((devices) => {
@@ -126,7 +123,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       setError(null)
       setVideoReady(false)
       setStreamActive(false)
-      addDebugInfo("🎬 Intentando iniciar cámara...")
+      addDebugInfo(`🎬 Intentando iniciar cámara (intento ${retryCount + 1})`)
 
       // Limpiar stream anterior si existe
       if (streamRef.current) {
@@ -135,20 +132,29 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         addDebugInfo("🧹 Stream anterior limpiado")
       }
 
-      // Configuraciones progresivas para mayor compatibilidad
+      // Configuraciones más específicas para móviles
       const constraints = [
-        // Configuración básica para móviles
+        // Configuración específica para móviles con cámara trasera
         {
           video: {
-            facingMode: "environment",
+            facingMode: { exact: cameraFacing },
+            width: { min: 320, ideal: 640, max: 1280 },
+            height: { min: 240, ideal: 480, max: 720 },
+            frameRate: { ideal: 30, max: 30 },
+          },
+        },
+        // Configuración más flexible
+        {
+          video: {
+            facingMode: cameraFacing,
             width: { ideal: 640 },
             height: { ideal: 480 },
           },
         },
-        // Configuración aún más básica
+        // Configuración básica
         {
           video: {
-            facingMode: "environment",
+            facingMode: cameraFacing,
           },
         },
         // Cualquier cámara disponible
@@ -168,6 +174,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
         try {
           addDebugInfo(`🔄 Probando configuración ${i + 1}/${constraints.length}`)
+          addDebugInfo(`📐 Constraint: ${JSON.stringify(constraints[i].video)}`)
+
           stream = await navigator.mediaDevices.getUserMedia(constraints[i])
           addDebugInfo(`✅ Configuración ${i + 1} exitosa`)
           break
@@ -181,21 +189,16 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         throw lastError || new Error("No se pudo acceder a ninguna cámara")
       }
 
-      addDebugInfo(`📹 Stream obtenido con ${stream.getVideoTracks().length} tracks de video`)
-
-      // Verificar que el stream tiene tracks activos
       const videoTrack = stream.getVideoTracks()[0]
       if (videoTrack) {
-        addDebugInfo(`📹 Track de video: ${videoTrack.label}, estado: ${videoTrack.readyState}`)
+        const settings = videoTrack.getSettings()
+        addDebugInfo(`📹 Track configurado: ${settings.width}x${settings.height}, facing: ${settings.facingMode}`)
+        addDebugInfo(`📹 Track estado: ${videoTrack.readyState}, enabled: ${videoTrack.enabled}`)
       }
 
-      // Mostrar la interfaz de captura primero
       setIsCapturing(true)
+      await new Promise((resolve) => setTimeout(resolve, 200))
 
-      // Esperar un momento para que el DOM se actualice
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
-      // Verificar que el video element existe
       if (!videoRef.current || !mountedRef.current) {
         addDebugInfo("❌ Elemento video no encontrado")
         stream.getTracks().forEach((track) => track.stop())
@@ -203,14 +206,18 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         return
       }
 
-      addDebugInfo("✅ Elemento video encontrado")
-
-      // Configurar el stream
       const video = videoRef.current
+
+      // Configurar propiedades del video para móviles
+      video.setAttribute("playsinline", "true")
+      video.setAttribute("webkit-playsinline", "true")
+      video.muted = true
+      video.autoplay = true
+
       video.srcObject = stream
       streamRef.current = stream
 
-      // Esperar a que el video esté completamente listo
+      // Esperar a que el video esté completamente listo con timeout más largo
       try {
         await new Promise<void>((resolve, reject) => {
           if (!video || !mountedRef.current) {
@@ -218,41 +225,66 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             return
           }
 
+          let resolved = false
+
           const onLoadedMetadata = () => {
-            if (!mountedRef.current) return
+            if (!mountedRef.current || resolved) return
             addDebugInfo(`📹 Video metadata: ${video.videoWidth}x${video.videoHeight}`)
             addDebugInfo(`📹 Video readyState: ${video.readyState}`)
+
+            // Verificar que las dimensiones son válidas
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+              addDebugInfo("⚠️ Video sin dimensiones válidas, esperando...")
+              return
+            }
+
+            resolved = true
             cleanup()
             setVideoReady(true)
             resolve()
           }
 
           const onCanPlay = () => {
-            if (!mountedRef.current) return
+            if (!mountedRef.current || resolved) return
             addDebugInfo("📹 Video puede reproducirse")
             setStreamActive(true)
           }
 
           const onPlaying = () => {
-            if (!mountedRef.current) return
+            if (!mountedRef.current || resolved) return
             addDebugInfo("📹 Video está reproduciéndose")
             setStreamActive(true)
           }
 
+          const onLoadedData = () => {
+            if (!mountedRef.current || resolved) return
+            addDebugInfo("📹 Video data cargada")
+
+            // Forzar verificación de dimensiones
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+              onLoadedMetadata()
+            }
+          }
+
           const onError = (e: Event) => {
+            if (resolved) return
             addDebugInfo(`❌ Error en video: ${e}`)
+            resolved = true
             cleanup()
             reject(new Error("Error cargando video"))
           }
 
           const onTimeout = () => {
+            if (resolved) return
             addDebugInfo("⏰ Timeout cargando video")
+            resolved = true
             cleanup()
             reject(new Error("Timeout cargando video"))
           }
 
           const cleanup = () => {
             video.removeEventListener("loadedmetadata", onLoadedMetadata)
+            video.removeEventListener("loadeddata", onLoadedData)
             video.removeEventListener("canplay", onCanPlay)
             video.removeEventListener("playing", onPlaying)
             video.removeEventListener("error", onError)
@@ -260,25 +292,36 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           }
 
           video.addEventListener("loadedmetadata", onLoadedMetadata)
+          video.addEventListener("loadeddata", onLoadedData)
           video.addEventListener("canplay", onCanPlay)
           video.addEventListener("playing", onPlaying)
           video.addEventListener("error", onError)
 
-          // Timeout más largo para asegurar que el video esté listo
-          const timeoutId = setTimeout(onTimeout, 8000)
+          // Timeout más largo para móviles
+          const timeoutId = setTimeout(onTimeout, 15000)
 
-          // Si el video ya tiene metadata, disparar inmediatamente
+          // Verificar estado actual
           if (video.readyState >= 1) {
-            onLoadedMetadata()
+            addDebugInfo("📹 Video ya tiene metadata, verificando...")
+            setTimeout(onLoadedMetadata, 100)
           }
 
-          // Forzar reproducción
-          video.play().catch((playError) => {
-            addDebugInfo(`❌ Error reproduciendo video: ${playError}`)
-          })
+          // Forzar reproducción con manejo de errores
+          const playPromise = video.play()
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                addDebugInfo("📹 Video.play() exitoso")
+              })
+              .catch((playError) => {
+                addDebugInfo(`❌ Error en video.play(): ${playError}`)
+                // No rechazar aquí, el video puede funcionar sin autoplay
+              })
+          }
         })
 
         addDebugInfo("🎉 Cámara iniciada exitosamente")
+        setRetryCount(0) // Reset retry count on success
       } catch (setupError) {
         if (stream) {
           stream.getTracks().forEach((track) => track.stop())
@@ -291,7 +334,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       const errorMessage = err instanceof Error ? err.message : "Error desconocido"
       addDebugInfo(`💥 Error final: ${errorMessage}`)
 
-      // Mensajes de error más específicos
+      // Incrementar contador de reintentos
+      setRetryCount((prev) => prev + 1)
+
       if (errorMessage.includes("Permission denied") || errorMessage.includes("NotAllowedError")) {
         setError("Permisos de cámara denegados. Por favor, permita el acceso a la cámara y recargue la página.")
       } else if (errorMessage.includes("NotFoundError") || errorMessage.includes("DevicesNotFoundError")) {
@@ -302,9 +347,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         errorMessage.includes("OverconstrainedError") ||
         errorMessage.includes("ConstraintNotSatisfiedError")
       ) {
-        setError("La cámara no soporta la configuración solicitada.")
-      } else if (errorMessage.includes("elemento de video")) {
-        setError("Error interno: elemento de video no disponible. Intente recargar la página.")
+        setError("La cámara no soporta la configuración solicitada. Intente cambiar de cámara.")
+      } else if (errorMessage.includes("Timeout")) {
+        setError("Timeout iniciando cámara. Intente nuevamente o cambie de cámara.")
       } else {
         setError(`Error accediendo a la cámara: ${errorMessage}`)
       }
@@ -312,7 +357,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       setIsCapturing(false)
       console.error("Camera error:", err)
     }
-  }, [addDebugInfo, cleanup])
+  }, [addDebugInfo, cleanup, cameraFacing, retryCount])
 
   const stopCamera = useCallback(() => {
     addDebugInfo("🛑 Deteniendo cámara")
@@ -327,6 +372,25 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     setVideoReady(false)
     setStreamActive(false)
   }, [addDebugInfo])
+
+  const switchCamera = useCallback(() => {
+    addDebugInfo("🔄 Cambiando cámara")
+    stopCamera()
+    setCameraFacing((prev) => (prev === "environment" ? "user" : "environment"))
+    // Reiniciar después de un breve delay
+    setTimeout(() => {
+      startCamera()
+    }, 500)
+  }, [stopCamera, startCamera, addDebugInfo])
+
+  const retryCamera = useCallback(() => {
+    addDebugInfo("🔄 Reintentando cámara")
+    stopCamera()
+    setError(null)
+    setTimeout(() => {
+      startCamera()
+    }, 1000)
+  }, [stopCamera, startCamera, addDebugInfo])
 
   const capturePhoto = useCallback(() => {
     addDebugInfo("📸 Iniciando captura de foto")
@@ -353,14 +417,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       return
     }
 
-    // Verificar que el video tiene dimensiones válidas
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       addDebugInfo(`❌ Video sin dimensiones: ${video.videoWidth}x${video.videoHeight}`)
       setError("Error: video no tiene dimensiones válidas")
       return
     }
 
-    // Verificar que el video está realmente reproduciendo
     if (video.paused || video.ended) {
       addDebugInfo(`❌ Video no está reproduciendo: paused=${video.paused}, ended=${video.ended}`)
       setError("Error: video no está reproduciendo")
@@ -368,20 +430,15 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
 
     addDebugInfo(`📐 Capturando: ${video.videoWidth}x${video.videoHeight}`)
-    addDebugInfo(`📹 Estado del video: readyState=${video.readyState}, currentTime=${video.currentTime}`)
 
     try {
-      // Configurar el canvas con las dimensiones del video
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
 
-      // Limpiar el canvas primero
       context.clearRect(0, 0, canvas.width, canvas.height)
-
-      // Dibujar el frame actual del video en el canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-      // Verificar que se dibujó algo (no todo negro)
+      // Verificar que se dibujó algo
       const imageData = context.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height))
       const pixels = imageData.data
       let hasNonBlackPixels = false
@@ -395,10 +452,10 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
       if (!hasNonBlackPixels) {
         addDebugInfo("⚠️ Imagen capturada parece estar en negro")
-        // Continuar de todos modos, pero avisar
+        setError("La imagen capturada está en negro. Intente cambiar de cámara o verificar la iluminación.")
+        return
       }
 
-      // Convertir a blob y obtener URL
       canvas.toBlob(
         (blob) => {
           if (!mountedRef.current) return
@@ -430,34 +487,32 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
     setIsProcessing(true)
     setError(null)
-    setOcrStatus('Preparando imagen...')
+    setOcrStatus("Preparando imagen...")
     addDebugInfo(`🔍 Iniciando procesamiento OCR de placa con método: ${ocrMethod}`)
 
     try {
-      // Obtener blob de la imagen
-      setOcrStatus('Obteniendo imagen...')
+      setOcrStatus("Obteniendo imagen...")
       const response = await fetch(capturedImages.plate)
       const blob = await response.blob()
-      
+
       addDebugInfo(`📤 Imagen obtenida: ${blob.size} bytes`)
-      
-      // Procesar con OCR real usando Tesseract.js
-      setOcrStatus('Analizando placa con IA...')
+
+      setOcrStatus("Analizando placa con IA...")
       const ocrResult = await processPlate(blob)
-      
-      addDebugInfo(`✅ OCR completado con ${ocrResult.method}: ${ocrResult.text} (${Math.round(ocrResult.confidence * 100)}%)`)
-      
-      // Si la confianza es muy baja, usar API como fallback
-      if (ocrResult.confidence < 0.6 && ocrResult.method === 'tesseract') {
-        setOcrStatus('Confianza baja, usando API como respaldo...')
+
+      addDebugInfo(
+        `✅ OCR completado con ${ocrResult.method}: ${ocrResult.text} (${Math.round(ocrResult.confidence * 100)}%)`,
+      )
+
+      if (ocrResult.confidence < 0.6 && ocrResult.method === "tesseract") {
+        setOcrStatus("Confianza baja, usando API como respaldo...")
         addDebugInfo("⚠️ Confianza baja, intentando con servidor...")
-        
-        // Fallback a la API del servidor
+
         const formData = new FormData()
         const file = new File([blob], "plate-capture.jpg", { type: "image/jpeg" })
         formData.append("image", file)
         formData.append("type", "plate")
-        formData.append("method", ocrMethod === 'auto' ? 'python' : ocrMethod)
+        formData.append("method", ocrMethod === "auto" ? "python" : ocrMethod)
 
         const uploadResponse = await fetch("/api/admin/process-vehicle", {
           method: "POST",
@@ -465,7 +520,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         })
 
         const result = await uploadResponse.json()
-        
+
         if (uploadResponse.ok && result.success) {
           setPlateData({
             placa: result.placa,
@@ -474,7 +529,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           })
           addDebugInfo(`✅ Servidor exitoso: ${result.placa} (método: ${result.method})`)
         } else {
-          // Usar resultado de Tesseract aunque sea de baja confianza
           setPlateData({
             placa: ocrResult.text,
             imageUrl: capturedImages.plate,
@@ -483,22 +537,20 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           addDebugInfo(`⚠️ Usando resultado Tesseract: ${ocrResult.text}`)
         }
       } else {
-        // Usar resultado directo del OCR
         setPlateData({
           placa: ocrResult.text,
           imageUrl: capturedImages.plate,
           confidence: ocrResult.confidence,
         })
       }
-      
+
       setCurrentStep("vehicle")
-      setOcrStatus('')
-      
+      setOcrStatus("")
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Error desconocido"
       addDebugInfo(`💥 Error OCR: ${errorMsg}`)
       setError("Error al procesar la imagen de la placa con OCR")
-      setOcrStatus('')
+      setOcrStatus("")
       console.error("OCR error:", err)
     } finally {
       setIsProcessing(false)
@@ -510,26 +562,25 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
     setIsProcessing(true)
     setCurrentStep("processing")
-    setOcrStatus('Preparando análisis del vehículo...')
+    setOcrStatus("Preparando análisis del vehículo...")
     addDebugInfo("🚗 Iniciando procesamiento OCR de vehículo")
 
     try {
-      // Obtener blob de la imagen
-      setOcrStatus('Obteniendo imagen del vehículo...')
+      setOcrStatus("Obteniendo imagen del vehículo...")
       const response = await fetch(capturedImages.vehicle)
       const blob = await response.blob()
-      
+
       addDebugInfo(`📤 Imagen de vehículo obtenida: ${blob.size} bytes`)
-      
-      // Procesar con OCR
-      setOcrStatus('Analizando vehículo con IA...')
+
+      setOcrStatus("Analizando vehículo con IA...")
       const vehicleResult = await processVehicle(blob)
-      
-      addDebugInfo(`✅ OCR vehículo completado: ${vehicleResult.marca} ${vehicleResult.modelo} (${Math.round(vehicleResult.confidence * 100)}%)`)
-      
-      // Combinar datos
+
+      addDebugInfo(
+        `✅ OCR vehículo completado: ${vehicleResult.marca} ${vehicleResult.modelo} (${Math.round(vehicleResult.confidence * 100)}%)`,
+      )
+
       const finalData = {
-        placa: plateData.placa, // Usar placa de la primera captura
+        placa: plateData.placa,
         marca: vehicleResult.marca,
         modelo: vehicleResult.modelo,
         color: vehicleResult.color,
@@ -538,16 +589,15 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         plateConfidence: plateData.confidence,
         vehicleConfidence: vehicleResult.confidence,
       }
-      
-      setOcrStatus('')
+
+      setOcrStatus("")
       onVehicleDetected(finalData)
-      
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Error desconocido"
       addDebugInfo(`💥 Error OCR vehículo: ${errorMsg}`)
       setError("Error al procesar la imagen del vehículo")
       setCurrentStep("vehicle")
-      setOcrStatus('')
+      setOcrStatus("")
       console.error("Vehicle OCR error:", err)
     } finally {
       setIsProcessing(false)
@@ -609,11 +659,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             <span className="ml-2">{stepInfo.title}</span>
           </div>
           <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSettings(!showSettings)}
-            >
+            <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)}>
               <Settings className="h-4 w-4" />
             </Button>
             <div className="flex space-x-1">
@@ -642,9 +688,10 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     <SelectItem value="python">Solo API Python</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">
-                  Automático: Usa Tesseract.js primero, luego API como respaldo
-                </p>
+                <div className="flex items-center space-x-2 text-xs">
+                  <span>Cámara:</span>
+                  <Badge variant="outline">{cameraFacing === "environment" ? "Trasera" : "Frontal"}</Badge>
+                </div>
               </div>
             </AlertDescription>
           </Alert>
@@ -653,7 +700,21 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         {error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              {error}
+              {retryCount > 0 && (
+                <div className="mt-2 space-x-2">
+                  <Button size="sm" variant="outline" onClick={retryCamera}>
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Reintentar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={switchCamera}>
+                    <Camera className="h-3 w-3 mr-1" />
+                    Cambiar Cámara
+                  </Button>
+                </div>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -666,7 +727,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           </Alert>
         )}
 
-        {/* Panel de debug - siempre visible en producción para diagnosticar */}
+        {/* Panel de debug */}
         {debugInfo.length > 0 && (
           <Alert>
             <AlertDescription>
@@ -690,9 +751,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
             </div>
             <p className="text-sm text-gray-600">Procesando imágenes con IA...</p>
-            {ocrStatus && (
-              <p className="text-xs text-blue-600">{ocrStatus}</p>
-            )}
+            {ocrStatus && <p className="text-xs text-blue-600">{ocrStatus}</p>}
             <p className="text-xs text-gray-500">Esto puede tomar unos segundos</p>
           </div>
         )}
@@ -701,10 +760,16 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           <div className="text-center space-y-4">
             <Camera className="h-16 w-16 mx-auto text-gray-400" />
             <p className="text-sm text-gray-600">{stepInfo.description}</p>
-            <Button onClick={startCamera} className="w-full" size="lg">
-              <Camera className="h-4 w-4 mr-2" />
-              Abrir Cámara
-            </Button>
+            <div className="space-y-2">
+              <Button onClick={startCamera} className="w-full" size="lg">
+                <Camera className="h-4 w-4 mr-2" />
+                Abrir Cámara {cameraFacing === "environment" ? "Trasera" : "Frontal"}
+              </Button>
+              <Button onClick={switchCamera} variant="outline" className="w-full" size="sm">
+                <RefreshCw className="h-3 w-3 mr-2" />
+                Cambiar a Cámara {cameraFacing === "environment" ? "Frontal" : "Trasera"}
+              </Button>
+            </div>
             <p className="text-xs text-gray-500">Asegúrese de permitir el acceso a la cámara cuando se lo solicite</p>
             <p className="text-xs text-gray-400">OCR con IA: Tesseract.js + API Python como respaldo</p>
           </div>
@@ -764,12 +829,24 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                 <Camera className="h-4 w-4 mr-2" />
                 {videoReady && streamActive ? "Capturar" : "Esperando..."}
               </Button>
+              <Button onClick={switchCamera} variant="outline" size="sm">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
               <Button onClick={onCancel} variant="outline">
                 <X className="h-4 w-4" />
               </Button>
             </div>
             {videoReady && streamActive && (
               <p className="text-xs text-center text-green-600">✅ Cámara lista para capturar</p>
+            )}
+            {(!videoReady || !streamActive) && (
+              <div className="text-center space-y-2">
+                <p className="text-xs text-yellow-600">⏳ Esperando que la cámara esté lista...</p>
+                <Button onClick={retryCamera} variant="outline" size="sm">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Reintentar
+                </Button>
+              </div>
             )}
           </div>
         )}
