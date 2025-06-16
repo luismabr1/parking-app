@@ -19,6 +19,8 @@ import {
   Copy,
   CheckCircle2,
   Bug,
+  Trash2,
+  FileText,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -41,7 +43,7 @@ interface VehicleCaptureProps {
   onCancel: () => void
 }
 
-type CaptureStep = "plate" | "vehicle" | "processing"
+type CaptureStep = "plate" | "vehicle" | "processing" | "completed"
 type OCRMethod = "auto" | "tesseract" | "python"
 
 export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleCaptureProps) {
@@ -59,9 +61,15 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     imageUrl: string
     confidence: number
   } | null>(null)
+  const [vehicleResult, setVehicleResult] = useState<{
+    marca: string
+    modelo: string
+    color: string
+    confidence: number
+  } | null>(null)
   const [videoReady, setVideoReady] = useState(false)
   const [streamActive, setStreamActive] = useState(false)
-  const [ocrMethod, setOcrMethod] = useState<OCRMethod>("tesseract") // Tesseract por defecto
+  const [ocrMethod, setOcrMethod] = useState<OCRMethod>("tesseract")
   const [ocrStatus, setOcrStatus] = useState<string>("")
   const [showSettings, setShowSettings] = useState(false)
   const [cameraFacing, setCameraFacing] = useState<"environment" | "user">("environment")
@@ -71,8 +79,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   const [selectedCameraId, setSelectedCameraId] = useState<string>("")
   const [copySuccess, setCopySuccess] = useState(false)
   const [forceLegacyMode, setForceLegacyMode] = useState(false)
-  const [debugMode, setDebugMode] = useState(false) // Modo debug desactivado por defecto
-  const [simulationMode, setSimulationMode] = useState(false) // Modo simulación desactivado por defecto
+  const [simulationMode, setSimulationMode] = useState(false)
+  const [showLogs, setShowLogs] = useState(true) // Mostrar logs por defecto
 
   const { processPlate, processVehicle, cleanup } = useOCRService()
 
@@ -82,15 +90,30 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   const streamRef = useRef<MediaStream | null>(null)
   const mountedRef = useRef(true)
   const diagnosticIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const logsEndRef = useRef<HTMLDivElement>(null)
 
-  // Agregar debug info
+  // Auto-scroll logs to bottom
+  useEffect(() => {
+    if (logsEndRef.current && showLogs) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [debugInfo, showLogs])
+
+  // Agregar debug info - mantener historial completo
   const addDebugInfo = useCallback((info: string) => {
-    console.log("🔍 DEBUG:", info)
+    const timestamp = new Date().toLocaleTimeString()
+    const logEntry = `${timestamp}: ${info}`
+    console.log("🔍 DEBUG:", logEntry)
     if (mountedRef.current) {
-      // Solo mantener el último log relevante para copia
-      setDebugInfo([`${new Date().toLocaleTimeString()}: ${info}`])
+      setDebugInfo((prev) => [...prev.slice(-100), logEntry]) // Mantener últimos 100 logs
     }
   }, [])
+
+  // Limpiar logs manualmente
+  const clearDebugInfo = useCallback(() => {
+    setDebugInfo([])
+    addDebugInfo("🧹 Logs limpiados manualmente")
+  }, [addDebugInfo])
 
   // Función para copiar logs al portapapeles
   const copyLogsToClipboard = useCallback(() => {
@@ -136,11 +159,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         addDebugInfo(`🔍 DEVICE: ${settings.deviceId?.slice(0, 8)}..., facing=${settings.facingMode}`)
       }
 
-      // Diagnóstico del elemento DOM
-      const computedStyle = window.getComputedStyle(video)
-      addDebugInfo(`🔍 CSS: display=${computedStyle.display}, visibility=${computedStyle.visibility}`)
-      addDebugInfo(`🔍 CSS: transform=${computedStyle.transform}, objectFit=${computedStyle.objectFit}`)
-
       // Verificar si el video está realmente renderizando contenido
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         const canvas = document.createElement("canvas")
@@ -178,7 +196,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           }
         }
       }
-    }, 2000) // Cada 2 segundos
+    }, 3000) // Cada 3 segundos para no saturar
   }, [addDebugInfo])
 
   const stopDiagnostics = useCallback(() => {
@@ -191,6 +209,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   // Cleanup al desmontar
   useEffect(() => {
     mountedRef.current = true
+    addDebugInfo("🚀 Iniciando VehicleCapture - Logs en tiempo real activados")
     return () => {
       mountedRef.current = false
       stopDiagnostics()
@@ -199,7 +218,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       }
       cleanup()
     }
-  }, [cleanup, stopDiagnostics])
+  }, [cleanup, stopDiagnostics, addDebugInfo])
 
   // Detectar cámaras disponibles
   useEffect(() => {
@@ -227,7 +246,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             device.label.toLowerCase().includes("back") ||
             device.label.toLowerCase().includes("rear") ||
             device.label.toLowerCase().includes("environment") ||
-            device.label.toLowerCase().includes("camera2 0"), // Patrón común en Android
+            device.label.toLowerCase().includes("camera2 0"),
         )
 
         if (backCamera) {
@@ -416,7 +435,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         addDebugInfo(`  - Estado: ${videoTrack.readyState}`)
         addDebugInfo(`  - Enabled: ${videoTrack.enabled}`)
         addDebugInfo(`  - Muted: ${videoTrack.muted}`)
-        addDebugInfo(`📹 CAPABILITIES: ${JSON.stringify(capabilities)}`)
       }
 
       setIsCapturing(true)
@@ -457,13 +475,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       video.style.height = "auto"
       video.style.objectFit = "cover"
       video.style.backgroundColor = "black"
-
-      // Probar con z-index alto para forzar visibilidad
       video.style.position = "relative"
       video.style.zIndex = "10"
-
-      // NO aplicar transform por ahora para diagnosticar
-      // video.style.transform = cameraFacing === "user" ? "scaleX(-1)" : "none"
 
       addDebugInfo("📹 Asignando srcObject...")
       video.srcObject = stream
@@ -559,16 +572,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             setTimeout(checkVideoReady, 100)
           }
 
-          const onTimeUpdate = () => {
-            if (!mountedRef.current || resolved) return
-            addDebugInfo(`📹 TIME UPDATE - currentTime: ${video.currentTime}`)
-          }
-
           const onError = (e: Event) => {
             if (resolved) return
             addDebugInfo(`❌ ERROR EN VIDEO: ${e}`)
-            addDebugInfo(`❌ Video error code: ${(video as any).error?.code}`)
-            addDebugInfo(`❌ Video error message: ${(video as any).error?.message}`)
             resolved = true
             cleanup()
             reject(new Error("Error cargando video"))
@@ -579,7 +585,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             video.removeEventListener("loadeddata", onLoadedData)
             video.removeEventListener("canplay", onCanPlay)
             video.removeEventListener("playing", onPlaying)
-            video.removeEventListener("timeupdate", onTimeUpdate)
             video.removeEventListener("error", onError)
           }
 
@@ -587,7 +592,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           video.addEventListener("loadeddata", onLoadedData)
           video.addEventListener("canplay", onCanPlay)
           video.addEventListener("playing", onPlaying)
-          video.addEventListener("timeupdate", onTimeUpdate)
           video.addEventListener("error", onError)
 
           // Verificar estado actual
@@ -1046,45 +1050,62 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         }
       }
 
-      const finalData = {
-        placa: plateData.placa,
-        marca: vehicleResult.marca,
-        modelo: vehicleResult.modelo,
-        color: vehicleResult.color,
-        plateImageUrl: plateData.imageUrl,
-        vehicleImageUrl: capturedImages.vehicle,
-        plateConfidence: plateData.confidence,
-        vehicleConfidence: vehicleResult.confidence,
-      }
+      // Guardar resultado del vehículo
+      setVehicleResult(vehicleResult)
 
       addDebugInfo(
-        `🎯 FINAL DATA: placa=${finalData.placa}, vehicleUrl=${finalData.vehicleImageUrl ? "OK" : "MISSING"}`,
+        `🎯 PROCESAMIENTO COMPLETADO: placa=${plateData.placa}, vehículo=${vehicleResult.marca} ${vehicleResult.modelo}`,
       )
 
+      // Cambiar a paso completado en lugar de llamar onVehicleDetected inmediatamente
+      setCurrentStep("completed")
       setOcrStatus("")
-      onVehicleDetected(finalData)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Error desconocido"
       addDebugInfo(`💥 ERROR VEHICLE PROCESSING: ${errorMsg}`)
 
       // Fallback pero con logging del problema
-      const finalData = {
-        placa: plateData.placa,
+      setVehicleResult({
         marca: "",
         modelo: "",
         color: "",
-        plateImageUrl: plateData.imageUrl,
-        vehicleImageUrl: capturedImages.vehicle,
-        plateConfidence: plateData.confidence,
-        vehicleConfidence: 0,
-      }
+        confidence: 0,
+      })
 
-      addDebugInfo(`⚠️ FALLBACK DATA: vehicleUrl=${finalData.vehicleImageUrl ? "OK" : "MISSING"}`)
-      onVehicleDetected(finalData)
+      addDebugInfo(`⚠️ PROCESAMIENTO COMPLETADO CON ERRORES`)
+
+      // Cambiar a paso completado
+      setCurrentStep("completed")
+      setOcrStatus("")
     } finally {
       setIsProcessing(false)
     }
-  }, [capturedImages.vehicle, plateData, onVehicleDetected, addDebugInfo, processVehicle, simulationMode])
+  }, [capturedImages.vehicle, plateData, addDebugInfo, processVehicle, simulationMode])
+
+  const confirmAndRegister = useCallback(() => {
+    if (!plateData || !vehicleResult) {
+      addDebugInfo("❌ Datos incompletos para registro")
+      return
+    }
+
+    const finalData = {
+      placa: plateData.placa,
+      marca: vehicleResult.marca,
+      modelo: vehicleResult.modelo,
+      color: vehicleResult.color,
+      plateImageUrl: plateData.imageUrl,
+      vehicleImageUrl: capturedImages.vehicle || "",
+      plateConfidence: plateData.confidence,
+      vehicleConfidence: vehicleResult.confidence,
+    }
+
+    addDebugInfo(
+      `🎯 REGISTRANDO VEHÍCULO: placa=${finalData.placa}, vehicleUrl=${finalData.vehicleImageUrl ? "OK" : "MISSING"}`,
+    )
+    addDebugInfo("🏁 PROCESO FINALIZADO - enviando datos al formulario")
+
+    onVehicleDetected(finalData)
+  }, [plateData, vehicleResult, capturedImages.vehicle, onVehicleDetected, addDebugInfo])
 
   const retakePhoto = useCallback(() => {
     addDebugInfo("🔄 Retomando foto")
@@ -1129,103 +1150,118 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           frameClass: "",
           frameLabel: "",
         }
+      case "completed":
+        return {
+          title: "3. Proceso Completado",
+          description: "Revise los resultados y confirme el registro",
+          icon: <CheckCircle2 className="h-5 w-5" />,
+          frameClass: "",
+          frameLabel: "",
+        }
     }
   }
 
   const stepInfo = getStepInfo()
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center">
-            {stepInfo.icon}
-            <span className="ml-2">{stepInfo.title}</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDebugMode(!debugMode)}
-              className={debugMode ? "text-blue-600" : "text-gray-400"}
-            >
-              <Bug className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)}>
-              <Settings className="h-4 w-4" />
-            </Button>
-            <div className="flex space-x-1">
-              <Badge variant={currentStep === "plate" ? "default" : plateData ? "secondary" : "outline"}>1</Badge>
-              <Badge variant={currentStep === "vehicle" ? "default" : "outline"}>2</Badge>
-              <Badge variant={currentStep === "processing" ? "default" : "outline"}>3</Badge>
+    <div className="w-full max-w-4xl mx-auto space-y-4">
+      {/* Panel principal */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              {stepInfo.icon}
+              <span className="ml-2">{stepInfo.title}</span>
             </div>
-          </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 space-y-4">
-        {/* Panel de configuración */}
-        {showSettings && (
-          <Alert>
-            <Settings className="h-4 w-4" />
-            <AlertDescription>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium">Método de OCR:</label>
-                  <Select value={ocrMethod} onValueChange={(value: OCRMethod) => setOcrMethod(value)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Automático (Recomendado)</SelectItem>
-                      <SelectItem value="tesseract">Solo Tesseract.js</SelectItem>
-                      <SelectItem value="python">Solo API Python</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {availableCameras.length > 1 && (
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLogs(!showLogs)}
+                className={showLogs ? "text-blue-600" : "text-gray-400"}
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)}>
+                <Settings className="h-4 w-4" />
+              </Button>
+              <div className="flex space-x-1">
+                <Badge variant={currentStep === "plate" ? "default" : plateData ? "secondary" : "outline"}>1</Badge>
+                <Badge
+                  variant={currentStep === "vehicle" ? "default" : capturedImages.vehicle ? "secondary" : "outline"}
+                >
+                  2
+                </Badge>
+                <Badge variant={currentStep === "processing" || currentStep === "completed" ? "default" : "outline"}>
+                  3
+                </Badge>
+              </div>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-4">
+          {/* Panel de configuración */}
+          {showSettings && (
+            <Alert>
+              <Settings className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-3">
                   <div>
-                    <label className="text-sm font-medium">Cámara:</label>
-                    <Select value={selectedCameraId} onValueChange={setSelectedCameraId}>
+                    <label className="text-sm font-medium">Método de OCR:</label>
+                    <Select value={ocrMethod} onValueChange={(value: OCRMethod) => setOcrMethod(value)}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableCameras.map((camera) => (
-                          <SelectItem key={camera.deviceId} value={camera.deviceId}>
-                            {camera.label || `Cámara ${camera.deviceId.slice(0, 8)}...`}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="auto">Automático (Recomendado)</SelectItem>
+                        <SelectItem value="tesseract">Solo Tesseract.js</SelectItem>
+                        <SelectItem value="python">Solo API Python</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="useFileInput"
-                    checked={useFileInput}
-                    onChange={(e) => setUseFileInput(e.target.checked)}
-                  />
-                  <label htmlFor="useFileInput" className="text-sm">
-                    Usar subida de archivos en lugar de cámara
-                  </label>
-                </div>
+                  {availableCameras.length > 1 && (
+                    <div>
+                      <label className="text-sm font-medium">Cámara:</label>
+                      <Select value={selectedCameraId} onValueChange={setSelectedCameraId}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableCameras.map((camera) => (
+                            <SelectItem key={camera.deviceId} value={camera.deviceId}>
+                              {camera.label || `Cámara ${camera.deviceId.slice(0, 8)}...`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="forceLegacyMode"
-                    checked={forceLegacyMode}
-                    onChange={(e) => setForceLegacyMode(e.target.checked)}
-                  />
-                  <label htmlFor="forceLegacyMode" className="text-sm">
-                    Modo legacy (más compatible)
-                  </label>
-                </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="useFileInput"
+                      checked={useFileInput}
+                      onChange={(e) => setUseFileInput(e.target.checked)}
+                    />
+                    <label htmlFor="useFileInput" className="text-sm">
+                      Usar subida de archivos en lugar de cámara
+                    </label>
+                  </div>
 
-                {debugMode && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="forceLegacyMode"
+                      checked={forceLegacyMode}
+                      onChange={(e) => setForceLegacyMode(e.target.checked)}
+                    />
+                    <label htmlFor="forceLegacyMode" className="text-sm">
+                      Modo legacy (más compatible)
+                    </label>
+                  </div>
+
                   <div className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -1237,294 +1273,391 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       Modo simulación (solo debug)
                     </label>
                   </div>
-                )}
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              {error}
-              {retryCount > 0 && retryCount < 3 && !useFileInput && (
-                <div className="mt-2 space-x-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setError(null)
-                      startCamera()
-                    }}
-                  >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Reintentar
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={switchCamera}>
-                    <Camera className="h-3 w-3 mr-1" />
-                    Cambiar Cámara
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setUseFileInput(true)}>
-                    <Smartphone className="h-3 w-3 mr-1" />
-                    Usar Archivo
-                  </Button>
                 </div>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {plateData && currentStep !== "plate" && plateData.placa && (
-          <Alert>
-            <AlertDescription>
-              ✅ <strong>Placa detectada:</strong> {plateData.placa}
-              {plateData.confidence > 0 && ` (${Math.round(plateData.confidence * 100)}% confianza)`}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Panel de debug simplificado - solo último log */}
-        {debugMode && debugInfo.length > 0 && (
-          <Alert>
-            <AlertDescription>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm">🔍 Último Debug:</span>
-                  <Button variant="outline" size="sm" onClick={copyLogsToClipboard} className="h-8">
-                    {copySuccess ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    <span className="ml-1">{copySuccess ? "Copiado" : "Copiar"}</span>
-                  </Button>
-                </div>
-                <div className="text-xs font-mono bg-gray-100 p-2 rounded max-h-20 overflow-y-auto">
-                  {debugInfo[debugInfo.length - 1]}
-                </div>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {currentStep === "processing" && (
-          <div className="text-center space-y-4">
-            <div className="flex justify-center">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
-            </div>
-            <p className="text-sm text-gray-600">Procesando imágenes...</p>
-            {ocrStatus && <p className="text-xs text-blue-600">{ocrStatus}</p>}
-            <p className="text-xs text-gray-500">Esto puede tomar unos segundos</p>
-          </div>
-        )}
-
-        {!isCapturing && !capturedImages[currentStep] && currentStep !== "processing" && (
-          <div className="text-center space-y-4">
-            <Camera className="h-16 w-16 mx-auto text-gray-400" />
-            <p className="text-sm text-gray-600">{stepInfo.description}</p>
-
-            {useFileInput ? (
-              <div className="space-y-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <Button onClick={() => fileInputRef.current?.click()} className="w-full" size="lg">
-                  <Smartphone className="h-4 w-4 mr-2" />
-                  Seleccionar Imagen
-                </Button>
-                <Button
-                  onClick={() => {
-                    setUseFileInput(false)
-                    setError(null)
-                  }}
-                  variant="outline"
-                  className="w-full"
-                  size="sm"
-                >
-                  <Camera className="h-3 w-3 mr-2" />
-                  Intentar Cámara Nuevamente
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Button onClick={startCamera} className="w-full" size="lg">
-                  <Camera className="h-4 w-4 mr-2" />
-                  Abrir Cámara {forceLegacyMode ? "(Modo Legacy)" : ""}
-                </Button>
-                {availableCameras.length > 1 && (
-                  <Button onClick={switchCamera} variant="outline" className="w-full" size="sm">
-                    <RefreshCw className="h-3 w-3 mr-2" />
-                    Cambiar Cámara
-                  </Button>
-                )}
-                <Button onClick={() => setUseFileInput(true)} variant="outline" className="w-full" size="sm">
-                  <Smartphone className="h-3 w-3 mr-2" />
-                  Usar Archivo en su Lugar
-                </Button>
-              </div>
-            )}
-
-            <p className="text-xs text-gray-500">
-              {useFileInput
-                ? "Seleccione una imagen desde su galería o tome una foto"
-                : "Capture imágenes claras para mejor reconocimiento"}
-            </p>
-            {debugMode && <p className="text-xs text-blue-600">Modo debug activado - logs detallados disponibles</p>}
-          </div>
-        )}
-
-        {isCapturing && (
-          <div className="space-y-4">
-            <div className="relative">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full rounded-lg bg-black"
-                style={{
-                  maxHeight: "300px",
-                  minHeight: "200px",
-                  objectFit: "cover",
-                }}
-                onLoadedMetadata={() => {
-                  addDebugInfo("📹 Video metadata cargada")
-                  setVideoReady(true)
-                }}
-                onCanPlay={() => {
-                  addDebugInfo("📹 Video puede reproducirse")
-                  setStreamActive(true)
-                }}
-                onPlaying={() => {
-                  addDebugInfo("📹 Video está reproduciéndose")
-                  setStreamActive(true)
-                }}
-                onError={(e) => {
-                  addDebugInfo(`❌ Error en video element: ${e}`)
-                  setError("Error en el elemento de video")
-                }}
-              />
-              {videoReady && streamActive && (
-                <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none">
-                  <div
-                    className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 ${stepInfo.frameClass} border-2 border-yellow-400 rounded`}
-                  >
-                    <span className="absolute -top-6 left-0 text-xs text-yellow-400 font-medium">
-                      {stepInfo.frameLabel}
-                    </span>
+          {error && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                {error}
+                {retryCount > 0 && retryCount < 3 && !useFileInput && (
+                  <div className="mt-2 space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setError(null)
+                        startCamera()
+                      }}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Reintentar
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={switchCamera}>
+                      <Camera className="h-3 w-3 mr-1" />
+                      Cambiar Cámara
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setUseFileInput(true)}>
+                      <Smartphone className="h-3 w-3 mr-1" />
+                      Usar Archivo
+                    </Button>
                   </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {plateData && currentStep !== "plate" && plateData.placa && (
+            <Alert>
+              <AlertDescription>
+                ✅ <strong>Placa detectada:</strong> {plateData.placa}
+                {plateData.confidence > 0 && ` (${Math.round(plateData.confidence * 100)}% confianza)`}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {vehicleResult && currentStep === "completed" && (
+            <Alert>
+              <AlertDescription>
+                ✅ <strong>Vehículo procesado:</strong> {vehicleResult.marca} {vehicleResult.modelo}{" "}
+                {vehicleResult.color}
+                {vehicleResult.confidence > 0 && ` (${Math.round(vehicleResult.confidence * 100)}% confianza)`}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Paso 3: Procesando */}
+          {currentStep === "processing" && (
+            <div className="text-center space-y-4">
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
+              </div>
+              <p className="text-sm text-gray-600">Procesando imágenes...</p>
+              {ocrStatus && <p className="text-xs text-blue-600">{ocrStatus}</p>}
+              <p className="text-xs text-gray-500">Esto puede tomar unos segundos</p>
+            </div>
+          )}
+
+          {/* Paso 3: Completado */}
+          {currentStep === "completed" && (
+            <div className="space-y-4">
+              <div className="text-center space-y-4">
+                <CheckCircle2 className="h-16 w-16 mx-auto text-green-500" />
+                <div>
+                  <h3 className="text-lg font-semibold text-green-700">¡Proceso Completado!</h3>
+                  <p className="text-sm text-gray-600">Las imágenes han sido procesadas exitosamente</p>
                 </div>
-              )}
-              {(!videoReady || !streamActive) && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
-                  <div className="text-white text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+              </div>
+
+              {/* Resumen de resultados */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {plateData && (
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Imagen de Placa</h4>
+                    <img
+                      src={plateData.imageUrl || "/placeholder.svg"}
+                      alt="Placa capturada"
+                      className="w-full h-32 object-cover rounded border"
+                    />
                     <p className="text-sm">
-                      {!videoReady ? "Cargando cámara..." : !streamActive ? "Iniciando video..." : "Preparando..."}
+                      <strong>Placa:</strong> {plateData.placa || "No detectada"}
+                      {plateData.confidence > 0 && ` (${Math.round(plateData.confidence * 100)}%)`}
                     </p>
                   </div>
-                </div>
-              )}
-            </div>
-            <div className="flex space-x-2">
-              <Button onClick={capturePhoto} className="flex-1" size="lg" disabled={!videoReady || !streamActive}>
-                <Camera className="h-4 w-4 mr-2" />
-                {videoReady && streamActive ? "Capturar" : "Esperando..."}
-              </Button>
-              <Button onClick={switchCamera} variant="outline" size="sm">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button onClick={() => setUseFileInput(true)} variant="outline" size="sm">
-                <Smartphone className="h-4 w-4" />
-              </Button>
-              <Button onClick={onCancel} variant="outline">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            {videoReady && streamActive && debugMode && (
-              <p className="text-xs text-center text-green-600">✅ Cámara lista - Diagnóstico continuo activo</p>
-            )}
-            {(!videoReady || !streamActive) && (
-              <div className="text-center space-y-2">
-                <p className="text-xs text-yellow-600">⏳ Esperando que la cámara esté lista...</p>
-                <Button
-                  onClick={() => {
-                    stopCamera()
-                    setTimeout(startCamera, 1000)
-                  }}
-                  variant="outline"
-                  size="sm"
-                >
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Reintentar
+                )}
+
+                {capturedImages.vehicle && (
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Imagen de Vehículo</h4>
+                    <img
+                      src={capturedImages.vehicle || "/placeholder.svg"}
+                      alt="Vehículo capturado"
+                      className="w-full h-32 object-cover rounded border"
+                    />
+                    {vehicleResult && (
+                      <p className="text-sm">
+                        <strong>Vehículo:</strong> {vehicleResult.marca} {vehicleResult.modelo} {vehicleResult.color}
+                        {vehicleResult.confidence > 0 && ` (${Math.round(vehicleResult.confidence * 100)}%)`}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Botones de acción */}
+              <div className="flex space-x-2">
+                <Button onClick={confirmAndRegister} className="flex-1" size="lg">
+                  <Check className="h-4 w-4 mr-2" />
+                  Confirmar y Registrar
+                </Button>
+                <Button onClick={goBackToPlate} variant="outline" size="lg">
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reiniciar
+                </Button>
+                <Button onClick={onCancel} variant="outline" size="lg">
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            )}
-          </div>
-        )}
-
-        {capturedImages[currentStep] && currentStep !== "processing" && (
-          <div className="space-y-4">
-            <div className="relative">
-              <img
-                src={capturedImages[currentStep] || "/placeholder.svg"}
-                alt={`Captured ${currentStep}`}
-                className="w-full rounded-lg"
-                style={{ maxHeight: "300px", objectFit: "contain" }}
-              />
             </div>
-            <div className="flex space-x-2">
-              {currentStep === "plate" && (
-                <Button onClick={processPlateImage} disabled={isProcessing} className="flex-1" size="lg">
-                  {isProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Procesando...
-                    </>
+          )}
+
+          {/* Pasos 1 y 2: Captura */}
+          {currentStep !== "processing" && currentStep !== "completed" && (
+            <>
+              {!isCapturing && !capturedImages[currentStep] && (
+                <div className="text-center space-y-4">
+                  <Camera className="h-16 w-16 mx-auto text-gray-400" />
+                  <p className="text-sm text-gray-600">{stepInfo.description}</p>
+
+                  {useFileInput ? (
+                    <div className="space-y-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <Button onClick={() => fileInputRef.current?.click()} className="w-full" size="lg">
+                        <Smartphone className="h-4 w-4 mr-2" />
+                        Seleccionar Imagen
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setUseFileInput(false)
+                          setError(null)
+                        }}
+                        variant="outline"
+                        className="w-full"
+                        size="sm"
+                      >
+                        <Camera className="h-3 w-3 mr-2" />
+                        Intentar Cámara Nuevamente
+                      </Button>
+                    </div>
                   ) : (
-                    <>
-                      <Check className="h-4 w-4 mr-2" />
-                      Continuar
-                    </>
+                    <div className="space-y-2">
+                      <Button onClick={startCamera} className="w-full" size="lg">
+                        <Camera className="h-4 w-4 mr-2" />
+                        Abrir Cámara {forceLegacyMode ? "(Modo Legacy)" : ""}
+                      </Button>
+                      {availableCameras.length > 1 && (
+                        <Button onClick={switchCamera} variant="outline" className="w-full" size="sm">
+                          <RefreshCw className="h-3 w-3 mr-2" />
+                          Cambiar Cámara
+                        </Button>
+                      )}
+                      <Button onClick={() => setUseFileInput(true)} variant="outline" className="w-full" size="sm">
+                        <Smartphone className="h-3 w-3 mr-2" />
+                        Usar Archivo en su Lugar
+                      </Button>
+                    </div>
                   )}
-                </Button>
+
+                  <p className="text-xs text-gray-500">
+                    {useFileInput
+                      ? "Seleccione una imagen desde su galería o tome una foto"
+                      : "Capture imágenes claras para mejor reconocimiento"}
+                  </p>
+                </div>
               )}
-              {currentStep === "vehicle" && (
-                <Button onClick={processVehicleImage} disabled={isProcessing} className="flex-1" size="lg">
-                  {isProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-4 w-4 mr-2" />
-                      Finalizar
-                    </>
+
+              {isCapturing && (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full rounded-lg bg-black"
+                      style={{
+                        maxHeight: "300px",
+                        minHeight: "200px",
+                        objectFit: "cover",
+                      }}
+                      onLoadedMetadata={() => {
+                        addDebugInfo("📹 Video metadata loaded")
+                      }}
+                      onCanPlay={() => {
+                        addDebugInfo("📹 Video can play")
+                      }}
+                      onPlaying={() => {
+                        addDebugInfo("📹 Video is playing")
+                      }}
+                      onError={(e) => {
+                        addDebugInfo(`❌ Video error: ${e}`)
+                      }}
+                    />
+
+                    {/* Marco de guía */}
+                    {stepInfo.frameClass && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div
+                          className={`border-2 border-white border-dashed rounded-lg ${stepInfo.frameClass} flex items-center justify-center bg-black bg-opacity-20`}
+                        >
+                          <span className="text-white text-xs font-medium px-2 py-1 bg-black bg-opacity-50 rounded">
+                            {stepInfo.frameLabel}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Indicadores de estado */}
+                    <div className="absolute top-2 left-2 space-y-1">
+                      <Badge variant={videoReady ? "default" : "secondary"} className="text-xs">
+                        {videoReady ? "✅ Video" : "⏳ Video"}
+                      </Badge>
+                      <Badge variant={streamActive ? "default" : "secondary"} className="text-xs">
+                        {streamActive ? "✅ Stream" : "⏳ Stream"}
+                      </Badge>
+                    </div>
+
+                    {/* Botón de captura */}
+                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
+                      <Button
+                        onClick={capturePhoto}
+                        disabled={!videoReady || !streamActive}
+                        size="lg"
+                        className="rounded-full w-16 h-16 p-0"
+                      >
+                        <Camera className="h-6 w-6" />
+                      </Button>
+                    </div>
+
+                    {/* Controles adicionales */}
+                    <div className="absolute top-2 right-2 space-y-1">
+                      <Button onClick={switchCamera} size="sm" variant="secondary">
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                      <Button onClick={stopCamera} size="sm" variant="secondary">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <canvas ref={canvasRef} className="hidden" />
+
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">
+                      {videoReady && streamActive
+                        ? `Alinee ${currentStep === "plate" ? "la placa" : "el vehículo"} y presione el botón para capturar`
+                        : "Preparando cámara..."}
+                    </p>
+                    {ocrStatus && <p className="text-xs text-blue-600 mt-1">{ocrStatus}</p>}
+                  </div>
+                </div>
+              )}
+
+              {capturedImages[currentStep] && (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <img
+                      src={capturedImages[currentStep] || "/placeholder.svg"}
+                      alt={`${currentStep} capturada`}
+                      className="max-w-full h-48 mx-auto object-contain rounded-lg border"
+                    />
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <Button
+                      onClick={currentStep === "plate" ? processPlateImage : processVehicleImage}
+                      disabled={isProcessing}
+                      className="flex-1"
+                      size="lg"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Procesando...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4 mr-2" />
+                          Continuar
+                        </>
+                      )}
+                    </Button>
+                    <Button onClick={retakePhoto} variant="outline" size="lg">
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Retomar
+                    </Button>
+                    {currentStep === "vehicle" && (
+                      <Button onClick={goBackToPlate} variant="outline" size="lg">
+                        <X className="h-4 w-4 mr-2" />
+                        Volver
+                      </Button>
+                    )}
+                  </div>
+
+                  {ocrStatus && (
+                    <div className="text-center">
+                      <p className="text-sm text-blue-600">{ocrStatus}</p>
+                    </div>
                   )}
-                </Button>
+                </div>
               )}
-              <Button onClick={retakePhoto} variant="outline">
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Repetir
-              </Button>
-              {currentStep === "vehicle" && (
-                <Button onClick={goBackToPlate} variant="outline">
-                  ← Placa
-                </Button>
-              )}
-              <Button onClick={onCancel} variant="outline">
-                <X className="h-4 w-4" />
+            </>
+          )}
+
+          {/* Botón de cancelar */}
+          {currentStep !== "completed" && (
+            <div className="text-center pt-4">
+              <Button onClick={onCancel} variant="ghost" size="sm">
+                <X className="h-3 w-3 mr-1" />
+                Cancelar
               </Button>
             </div>
-            {isProcessing && ocrStatus && <p className="text-xs text-center text-blue-600">{ocrStatus}</p>}
-          </div>
-        )}
+          )}
+        </CardContent>
+      </Card>
 
-        <canvas ref={canvasRef} className="hidden" />
-      </CardContent>
-    </Card>
+      {/* Panel de logs en tiempo real */}
+      {showLogs && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-sm">
+              <div className="flex items-center">
+                <Bug className="h-4 w-4 mr-2" />
+                Logs del Sistema ({debugInfo.length})
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={copyLogsToClipboard}
+                  disabled={debugInfo.length === 0}
+                  className={copySuccess ? "text-green-600" : ""}
+                >
+                  {copySuccess ? <CheckCircle2 className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </Button>
+                <Button size="sm" variant="outline" onClick={clearDebugInfo} disabled={debugInfo.length === 0}>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="bg-gray-900 text-green-400 p-3 rounded-lg font-mono text-xs max-h-64 overflow-y-auto">
+              {debugInfo.length === 0 ? (
+                <div className="text-gray-500">No hay logs disponibles</div>
+              ) : (
+                debugInfo.map((log, index) => (
+                  <div key={index} className="mb-1 break-all">
+                    {log}
+                  </div>
+                ))
+              )}
+              <div ref={logsEndRef} />
+            </div>
+            {copySuccess && <p className="text-xs text-green-600 mt-2">✅ Logs copiados al portapapeles</p>}
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }
