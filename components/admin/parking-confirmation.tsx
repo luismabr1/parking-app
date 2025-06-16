@@ -33,10 +33,10 @@ export default function ParkingConfirmation() {
   useEffect(() => {
     fetchPendingParkings()
 
-    // Actualizar automáticamente cada 30 segundos
+    // Actualizar automáticamente cada 15 segundos (más frecuente)
     const interval = setInterval(() => {
       fetchPendingParkings()
-    }, 30000)
+    }, 15000)
 
     return () => clearInterval(interval)
   }, [])
@@ -45,11 +45,14 @@ export default function ParkingConfirmation() {
     try {
       setIsLoading(true)
       const timestamp = new Date().getTime()
-      const response = await fetch(`/api/admin/pending-parkings?t=${timestamp}`, {
+      const response = await fetch(`/api/admin/pending-parkings?t=${timestamp}&_=${Math.random()}`, {
+        method: "GET",
         headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
           Pragma: "no-cache",
           Expires: "0",
+          "If-Modified-Since": "0",
+          "If-None-Match": "no-match-for-this",
         },
       })
       if (response.ok) {
@@ -69,13 +72,15 @@ export default function ParkingConfirmation() {
       setMessage("")
 
       const timestamp = new Date().getTime()
-      const response = await fetch(`/api/admin/confirm-parking?t=${timestamp}`, {
+      const response = await fetch(`/api/admin/confirm-parking?t=${timestamp}&_=${Math.random()}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
           Pragma: "no-cache",
           Expires: "0",
+          "If-Modified-Since": "0",
+          "If-None-Match": "no-match-for-this",
         },
         body: JSON.stringify({ ticketCode }),
       })

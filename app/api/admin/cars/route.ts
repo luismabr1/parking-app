@@ -41,15 +41,34 @@ export async function POST(request: Request) {
       nombreDueño,
       telefono,
       ticketAsociado,
-      imagenes, // Nuevo campo para imágenes
+      imagenes, // Campo para imágenes
     } = body
+
+    console.log("🚗 CREATING CAR:", {
+      placa,
+      ticketAsociado,
+      hasImagenes: !!imagenes,
+      imagenesKeys: imagenes ? Object.keys(imagenes) : [],
+    })
 
     // Validar campos requeridos
     if (!placa || !ticketAsociado) {
       return NextResponse.json({ message: "Placa y ticket son requeridos" }, { status: 400 })
     }
 
-    // Verificar que el ticket existe y está disponible
+    // Log específico para imágenes
+    if (imagenes) {
+      console.log("📸 IMAGES DATA:", {
+        hasPlateImage: !!imagenes.plateImageUrl,
+        hasVehicleImage: !!imagenes.vehicleImageUrl,
+        plateImageLength: imagenes.plateImageUrl ? imagenes.plateImageUrl.length : 0,
+        vehicleImageLength: imagenes.vehicleImageUrl ? imagenes.vehicleImageUrl.length : 0,
+        plateImageType: imagenes.plateImageUrl ? imagenes.plateImageUrl.substring(0, 30) : "none",
+        vehicleImageType: imagenes.vehicleImageUrl ? imagenes.vehicleImageUrl.substring(0, 30) : "none",
+      })
+    }
+
+    // Resto del código de validación...
     const ticket = await db.collection("tickets").findOne({ codigoTicket: ticketAsociado })
 
     if (!ticket) {
@@ -60,7 +79,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "El ticket no está disponible" }, { status: 400 })
     }
 
-    // Verificar que no existe otro carro con la misma placa activo
     const existingCar = await db.collection("cars").findOne({
       placa: placa.toUpperCase(),
       estado: { $in: ["estacionado", "pagado"] },
@@ -70,7 +88,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Ya existe un carro con esta placa estacionado" }, { status: 400 })
     }
 
-    // Crear el registro del carro
+    // Crear el registro del carro con logging detallado
     const carData = {
       placa: placa.toUpperCase(),
       marca: marca || "Por definir",
@@ -90,9 +108,23 @@ export async function POST(request: Request) {
         : undefined,
     }
 
+    console.log("💾 SAVING CAR DATA:", {
+      placa: carData.placa,
+      hasImagenes: !!carData.imagenes,
+      imagenesStructure: carData.imagenes ? Object.keys(carData.imagenes) : [],
+    })
+
     const result = await db.collection("cars").insertOne(carData)
 
-    // Actualizar el estado del ticket a ocupado
+    // Verificar que se guardó correctamente
+    const savedCar = await db.collection("cars").findOne({ _id: result.insertedId })
+    console.log("✅ CAR SAVED:", {
+      id: result.insertedId,
+      hasImagenes: !!savedCar?.imagenes,
+      imagenesKeys: savedCar?.imagenes ? Object.keys(savedCar.imagenes) : [],
+    })
+
+    // Resto del código...
     await db.collection("tickets").updateOne(
       { codigoTicket: ticketAsociado },
       {
@@ -111,12 +143,17 @@ export async function POST(request: Request) {
       },
     )
 
-    // Agregar headers anti-cache
     const response = NextResponse.json({
       message: "Carro registrado exitosamente",
       carId: result.insertedId,
       imagenes: imagenes ? "Imágenes guardadas" : "Sin imágenes",
+      debug: {
+        hasImagenes: !!imagenes,
+        imagenesKeys: imagenes ? Object.keys(imagenes) : [],
+      },
     })
+
+    // Headers anti-cache
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
     response.headers.set("Pragma", "no-cache")
     response.headers.set("Expires", "0")
