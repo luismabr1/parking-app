@@ -675,7 +675,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
   }, [
     addDebugInfo,
-    cleanup,
     cameraFacing,
     retryCount,
     selectedCameraId,
@@ -1427,7 +1426,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                         Seleccionar Imagen
                       </Button>
                       <Button
-                        onClick={() => {
+                        onClick={ () => {
                           setUseFileInput(false)
                           setError(null)
                         }}

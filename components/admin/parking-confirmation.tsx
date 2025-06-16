@@ -48,11 +48,10 @@ export default function ParkingConfirmation() {
       const response = await fetch(`/api/admin/pending-parkings?t=${timestamp}&_=${Math.random()}`, {
         method: "GET",
         headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
           Expires: "0",
-          "If-Modified-Since": "0",
-          "If-None-Match": "no-match-for-this",
         },
       })
       if (response.ok) {

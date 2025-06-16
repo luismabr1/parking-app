@@ -196,7 +196,12 @@ export default function CarRegistration() {
 
       const response = await fetch("/api/admin/cars", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
         body: JSON.stringify(submitData),
       })
 
@@ -365,7 +370,7 @@ export default function CarRegistration() {
 
                 <Alert>
                   <AlertDescription className="text-center">
-                    💡 <strong>Tip:</strong> Use "Capturar Vehículo" para llenar automáticamente los datos
+                    💡 <strong>Tip:</strong> Use &quot;Capturar Vehículo&quot; para llenar automáticamente los datos
                   </AlertDescription>
                 </Alert>
               </>
