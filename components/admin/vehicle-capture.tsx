@@ -13,19 +13,15 @@ import {
   Car,
   CreditCard,
   AlertTriangle,
-  Settings,
   RefreshCw,
   Smartphone,
   Copy,
   CheckCircle2,
-  Bug,
-  Trash2,
   FileText,
+  Trash2,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { useOCRService } from "@/lib/ocr-service"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface VehicleData {
   placa: string
@@ -43,8 +39,7 @@ interface VehicleCaptureProps {
   onCancel: () => void
 }
 
-type CaptureStep = "plate" | "vehicle" | "processing" | "completed"
-type OCRMethod = "auto" | "tesseract" | "python"
+type CaptureStep = "plate" | "vehicle" | "assign" | "completed"
 
 export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleCaptureProps) {
   const [currentStep, setCurrentStep] = useState<CaptureStep>("plate")
@@ -53,43 +48,31 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     plate?: string
     vehicle?: string
   }>({})
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [debugInfo, setDebugInfo] = useState<string[]>([])
-  const [plateData, setPlateData] = useState<{
-    placa: string
-    imageUrl: string
-    confidence: number
-  } | null>(null)
-  const [vehicleResult, setVehicleResult] = useState<{
-    marca: string
-    modelo: string
-    color: string
-    confidence: number
-  } | null>(null)
+  const [uploadedUrls, setUploadedUrls] = useState<{
+    plateUrl?: string
+    vehicleUrl?: string
+  }>({})
   const [videoReady, setVideoReady] = useState(false)
   const [streamActive, setStreamActive] = useState(false)
-  const [ocrMethod, setOcrMethod] = useState<OCRMethod>("tesseract")
-  const [ocrStatus, setOcrStatus] = useState<string>("")
-  const [showSettings, setShowSettings] = useState(false)
-  const [cameraFacing, setCameraFacing] = useState<"environment" | "user">("environment")
   const [retryCount, setRetryCount] = useState(0)
   const [useFileInput, setUseFileInput] = useState(false)
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const [selectedCameraId, setSelectedCameraId] = useState<string>("")
   const [copySuccess, setCopySuccess] = useState(false)
-  const [forceLegacyMode, setForceLegacyMode] = useState(false)
-  const [simulationMode, setSimulationMode] = useState(false)
-  const [showLogs, setShowLogs] = useState(true) // Mostrar logs por defecto
+  const [showLogs, setShowLogs] = useState(true)
 
-  const { processPlate, processVehicle, cleanup } = useOCRService()
+  const [availableTickets, setAvailableTickets] = useState<any[]>([])
+  const [selectedTicket, setSelectedTicket] = useState<string>("")
+  const [isCreatingRecord, setIsCreatingRecord] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const mountedRef = useRef(true)
-  const diagnosticIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll logs to bottom
@@ -99,13 +82,13 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
   }, [debugInfo, showLogs])
 
-  // Agregar debug info - mantener historial completo
+  // Agregar debug info
   const addDebugInfo = useCallback((info: string) => {
     const timestamp = new Date().toLocaleTimeString()
     const logEntry = `${timestamp}: ${info}`
     console.log("🔍 DEBUG:", logEntry)
     if (mountedRef.current) {
-      setDebugInfo((prev) => [...prev.slice(-100), logEntry]) // Mantener últimos 100 logs
+      setDebugInfo((prev) => [...prev.slice(-50), logEntry])
     }
   }, [])
 
@@ -130,103 +113,23 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       })
   }, [debugInfo, addDebugInfo])
 
-  // Función de diagnóstico continuo
-  const startDiagnostics = useCallback(() => {
-    if (diagnosticIntervalRef.current) {
-      clearInterval(diagnosticIntervalRef.current)
-    }
-
-    diagnosticIntervalRef.current = setInterval(() => {
-      if (!videoRef.current || !streamRef.current) return
-
-      const video = videoRef.current
-      const stream = streamRef.current
-
-      // Diagnóstico detallado del video
-      addDebugInfo(`🔍 DIAGNÓSTICO: readyState=${video.readyState}, paused=${video.paused}`)
-      addDebugInfo(
-        `🔍 DIMENSIONES: video=${video.videoWidth}x${video.videoHeight}, element=${video.clientWidth}x${video.clientHeight}`,
-      )
-      addDebugInfo(`🔍 TIEMPO: currentTime=${video.currentTime.toFixed(2)}, duration=${video.duration}`)
-
-      // Diagnóstico del stream
-      const tracks = stream.getVideoTracks()
-      if (tracks.length > 0) {
-        const track = tracks[0]
-        const settings = track.getSettings()
-        addDebugInfo(`🔍 TRACK: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`)
-        addDebugInfo(`🔍 SETTINGS: ${settings.width}x${settings.height}, frameRate=${settings.frameRate}`)
-        addDebugInfo(`🔍 DEVICE: ${settings.deviceId?.slice(0, 8)}..., facing=${settings.facingMode}`)
-      }
-
-      // Verificar si el video está realmente renderizando contenido
-      if (video.videoWidth > 0 && video.videoHeight > 0) {
-        const canvas = document.createElement("canvas")
-        canvas.width = Math.min(video.videoWidth, 100)
-        canvas.height = Math.min(video.videoHeight, 100)
-        const ctx = canvas.getContext("2d")
-
-        if (ctx) {
-          try {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-            const pixels = imageData.data
-
-            let totalBrightness = 0
-            let nonZeroPixels = 0
-
-            for (let i = 0; i < pixels.length; i += 4) {
-              const brightness = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3
-              totalBrightness += brightness
-              if (brightness > 0) nonZeroPixels++
-            }
-
-            const avgBrightness = totalBrightness / (pixels.length / 4)
-            const pixelRatio = nonZeroPixels / (pixels.length / 4)
-
-            addDebugInfo(
-              `🔍 CONTENIDO: brillo=${avgBrightness.toFixed(2)}, píxeles_no_cero=${(pixelRatio * 100).toFixed(1)}%`,
-            )
-
-            if (avgBrightness < 5 && pixelRatio < 0.1) {
-              addDebugInfo(`⚠️ VIDEO RENDERIZANDO NEGRO - brillo muy bajo`)
-            }
-          } catch (err) {
-            addDebugInfo(`❌ Error analizando contenido: ${err}`)
-          }
-        }
-      }
-    }, 3000) // Cada 3 segundos para no saturar
-  }, [addDebugInfo])
-
-  const stopDiagnostics = useCallback(() => {
-    if (diagnosticIntervalRef.current) {
-      clearInterval(diagnosticIntervalRef.current)
-      diagnosticIntervalRef.current = null
-    }
-  }, [])
-
   // Cleanup al desmontar
   useEffect(() => {
     mountedRef.current = true
-    addDebugInfo("🚀 Iniciando VehicleCapture - Logs en tiempo real activados")
+    addDebugInfo("🚀 Iniciando VehicleCapture simplificado")
     return () => {
       mountedRef.current = false
-      stopDiagnostics()
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop())
       }
-      cleanup()
     }
-  }, [cleanup, stopDiagnostics, addDebugInfo])
+  }, [addDebugInfo])
 
   // Detectar cámaras disponibles
   useEffect(() => {
     const detectCameras = async () => {
       try {
         addDebugInfo("🔍 Detectando cámaras disponibles...")
-
-        // Solicitar permisos primero
         const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
         tempStream.getTracks().forEach((track) => track.stop())
 
@@ -236,17 +139,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         setAvailableCameras(videoDevices)
         addDebugInfo(`📹 ${videoDevices.length} cámaras detectadas`)
 
-        videoDevices.forEach((device, index) => {
-          addDebugInfo(`  ${index + 1}: ${device.label || `Cámara ${index + 1}`} (${device.deviceId.slice(0, 8)}...)`)
-        })
-
         // Seleccionar cámara trasera por defecto
         const backCamera = videoDevices.find(
           (device) =>
             device.label.toLowerCase().includes("back") ||
             device.label.toLowerCase().includes("rear") ||
-            device.label.toLowerCase().includes("environment") ||
-            device.label.toLowerCase().includes("camera2 0"),
+            device.label.toLowerCase().includes("environment"),
         )
 
         if (backCamera) {
@@ -265,53 +163,26 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     detectCameras()
   }, [addDebugInfo])
 
-  // Detectar capacidades del dispositivo
+  // Cargar tickets disponibles
   useEffect(() => {
-    addDebugInfo("🚀 Iniciando sistema de captura con diagnóstico avanzado")
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError("Su navegador no soporta acceso a la cámara")
-      addDebugInfo("❌ getUserMedia no disponible")
-      setUseFileInput(true)
-      return
+    const fetchAvailableTickets = async () => {
+      try {
+        const response = await fetch("/api/admin/available-tickets")
+        if (response.ok) {
+          const tickets = await response.json()
+          setAvailableTickets(tickets)
+          addDebugInfo(`📋 ${tickets.length} tickets disponibles cargados`)
+        }
+      } catch (err) {
+        addDebugInfo(`❌ Error cargando tickets: ${err}`)
+      }
     }
 
-    addDebugInfo("✅ getUserMedia disponible")
-
-    const isSecure = location.protocol === "https:" || location.hostname === "localhost"
-    addDebugInfo(`🔒 Protocolo seguro: ${isSecure ? "Sí" : "No"} (${location.protocol})`)
-
-    // Detectar tipo de dispositivo y navegador
-    const userAgent = navigator.userAgent.toLowerCase()
-    const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/.test(userAgent)
-    const isAndroid = /android/.test(userAgent)
-    const isIOS = /iphone|ipad|ipod/.test(userAgent)
-    const isChrome = /chrome/.test(userAgent)
-    const isFirefox = /firefox/.test(userAgent)
-    const isSamsung = /samsung/.test(userAgent)
-
-    addDebugInfo(`📱 Dispositivo: ${isMobile ? "Móvil" : "Desktop"}`)
-    addDebugInfo(`🤖 OS: ${isAndroid ? "Android" : isIOS ? "iOS" : "Otro"}`)
-    addDebugInfo(`🌐 Navegador: ${isChrome ? "Chrome" : isFirefox ? "Firefox" : "Otro"}`)
-    if (isSamsung) addDebugInfo(`📱 Samsung Internet detectado`)
-
-    // Verificar soporte de hardware acceleration
-    const canvas = document.createElement("canvas")
-    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl")
-    addDebugInfo(`🎮 WebGL: ${gl ? "Disponible" : "No disponible"}`)
-
-    if (typeof WebAssembly === "object") {
-      addDebugInfo("✅ WebAssembly soportado - Tesseract.js disponible")
-    } else {
-      addDebugInfo("⚠️ WebAssembly no soportado - Solo API remota")
-    }
+    fetchAvailableTickets()
   }, [addDebugInfo])
 
   const startCamera = useCallback(async () => {
-    if (!mountedRef.current) {
-      addDebugInfo("❌ Componente desmontado, cancelando")
-      return
-    }
+    if (!mountedRef.current) return
 
     try {
       setError(null)
@@ -323,375 +194,74 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop())
         streamRef.current = null
-        addDebugInfo("🧹 Stream anterior limpiado")
       }
 
-      stopDiagnostics()
-
-      // Configuraciones específicas por dispositivo
-      const constraints = []
-
-      // Modo legacy forzado (más compatible)
-      if (forceLegacyMode) {
-        addDebugInfo("🔧 Usando modo legacy forzado")
-        constraints.push({
-          video: true,
-          audio: false,
-        })
-      }
-      // Si tenemos una cámara específica seleccionada
-      else if (selectedCameraId) {
-        addDebugInfo(`🎯 Usando cámara específica: ${selectedCameraId.slice(0, 8)}...`)
-
-        constraints.push({
-          video: {
-            deviceId: { exact: selectedCameraId },
-            width: { min: 320, ideal: 640, max: 1920 },
-            height: { min: 240, ideal: 480, max: 1080 },
-            frameRate: { ideal: 30 },
-          },
-        })
-
-        constraints.push({
-          video: {
-            deviceId: selectedCameraId,
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-          },
-        })
-
-        constraints.push({
-          video: {
-            deviceId: selectedCameraId,
-          },
-        })
+      const constraints = {
+        video: selectedCameraId
+          ? { deviceId: selectedCameraId, width: { ideal: 640 }, height: { ideal: 480 } }
+          : { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
       }
 
-      // Configuraciones por facingMode
-      if (!forceLegacyMode) {
-        constraints.push(
-          {
-            video: {
-              facingMode: { exact: cameraFacing },
-              width: { min: 320, ideal: 640, max: 1920 },
-              height: { min: 240, ideal: 480, max: 1080 },
-              frameRate: { ideal: 30 },
-            },
-          },
-          {
-            video: {
-              facingMode: cameraFacing,
-              width: { ideal: 640 },
-              height: { ideal: 480 },
-            },
-          },
-          {
-            video: {
-              facingMode: cameraFacing,
-            },
-          },
-          {
-            video: true,
-          },
-        )
-      }
+      addDebugInfo(`📐 Usando constraint: ${JSON.stringify(constraints)}`)
 
-      let stream: MediaStream | null = null
-      let lastError: Error | null = null
-
-      for (let i = 0; i < constraints.length; i++) {
-        if (!mountedRef.current) {
-          addDebugInfo("❌ Componente desmontado durante configuración")
-          return
-        }
-
-        try {
-          addDebugInfo(`🔄 Probando configuración ${i + 1}/${constraints.length}`)
-          addDebugInfo(`📐 Constraint: ${JSON.stringify(constraints[i].video)}`)
-
-          stream = await navigator.mediaDevices.getUserMedia(constraints[i])
-          addDebugInfo(`✅ Configuración ${i + 1} exitosa`)
-          break
-        } catch (err) {
-          lastError = err as Error
-          addDebugInfo(`❌ Configuración ${i + 1} falló: ${err instanceof Error ? err.message : "Error desconocido"}`)
-        }
-      }
-
-      if (!stream) {
-        throw lastError || new Error("No se pudo acceder a ninguna cámara")
-      }
-
-      const videoTrack = stream.getVideoTracks()[0]
-      if (videoTrack) {
-        const settings = videoTrack.getSettings()
-        const capabilities = videoTrack.getCapabilities()
-
-        addDebugInfo(`📹 TRACK CONFIGURADO:`)
-        addDebugInfo(`  - Dimensiones: ${settings.width}x${settings.height}`)
-        addDebugInfo(`  - FrameRate: ${settings.frameRate}`)
-        addDebugInfo(`  - FacingMode: ${settings.facingMode}`)
-        addDebugInfo(`  - DeviceId: ${settings.deviceId?.slice(0, 8)}...`)
-        addDebugInfo(`  - Estado: ${videoTrack.readyState}`)
-        addDebugInfo(`  - Enabled: ${videoTrack.enabled}`)
-        addDebugInfo(`  - Muted: ${videoTrack.muted}`)
-      }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      addDebugInfo("✅ Stream obtenido exitosamente")
 
       setIsCapturing(true)
-      await new Promise((resolve) => setTimeout(resolve, 500))
 
       if (!videoRef.current || !mountedRef.current) {
-        addDebugInfo("❌ Elemento video no encontrado")
         stream.getTracks().forEach((track) => track.stop())
         setError("Error: elemento de video no disponible")
         return
       }
 
       const video = videoRef.current
-
-      addDebugInfo("🎬 CONFIGURANDO VIDEO ELEMENT:")
-
-      // Limpiar configuraciones anteriores
-      video.srcObject = null
-      video.removeAttribute("style")
-
-      // Configurar video element con propiedades específicas
-      video.setAttribute("playsinline", "true")
-      video.setAttribute("webkit-playsinline", "true")
-      video.setAttribute("x5-playsinline", "true")
-      video.setAttribute("x5-video-player-type", "h5")
-      video.muted = true
-      video.autoplay = true
-      video.controls = false
-      video.playsInline = true
-
-      addDebugInfo(`  - playsinline: ${video.getAttribute("playsinline")}`)
-      addDebugInfo(`  - webkit-playsinline: ${video.getAttribute("webkit-playsinline")}`)
-      addDebugInfo(`  - muted: ${video.muted}`)
-      addDebugInfo(`  - autoplay: ${video.autoplay}`)
-
-      // Aplicar estilos CSS específicos
-      video.style.width = "100%"
-      video.style.height = "auto"
-      video.style.objectFit = "cover"
-      video.style.backgroundColor = "black"
-      video.style.position = "relative"
-      video.style.zIndex = "10"
-
-      addDebugInfo("📹 Asignando srcObject...")
       video.srcObject = stream
       streamRef.current = stream
 
-      addDebugInfo("📹 Forzando load del video...")
-      video.load()
-
-      // Esperar a que el video esté listo con verificaciones exhaustivas
-      try {
-        await new Promise<void>((resolve, reject) => {
-          if (!video || !mountedRef.current) {
-            reject(new Error("Video element perdido durante setup"))
-            return
-          }
-
-          let resolved = false
-          let checkCount = 0
-          const maxChecks = 60 // 12 segundos máximo
-
-          const checkVideoReady = () => {
-            if (!mountedRef.current || resolved) return
-
-            checkCount++
-            const readyState = video.readyState
-            const videoWidth = video.videoWidth
-            const videoHeight = video.videoHeight
-            const currentTime = video.currentTime
-            const paused = video.paused
-            const ended = video.ended
-
-            addDebugInfo(`🔍 Check ${checkCount}: readyState=${readyState}, dimensions=${videoWidth}x${videoHeight}`)
-            addDebugInfo(`🔍 Check ${checkCount}: currentTime=${currentTime}, paused=${paused}, ended=${ended}`)
-
-            // Verificar si el video está realmente listo
-            if (readyState >= 2 && videoWidth > 0 && videoHeight > 0 && !paused) {
-              addDebugInfo(`✅ Video completamente listo: ${videoWidth}x${videoHeight}`)
-              resolved = true
-              cleanup()
-              setVideoReady(true)
-              setStreamActive(true)
-
-              // Iniciar diagnósticos continuos
-              setTimeout(() => {
-                startDiagnostics()
-              }, 1000)
-
-              resolve()
-              return
-            }
-
-            if (checkCount >= maxChecks) {
-              addDebugInfo("⏰ Timeout verificando video - continuando de todos modos")
-              resolved = true
-              cleanup()
-
-              // Marcar como listo aunque no esté perfecto
-              setVideoReady(true)
-              setStreamActive(true)
-              startDiagnostics()
-              resolve()
-              return
-            }
-
-            setTimeout(checkVideoReady, 200)
-          }
-
-          const onLoadedMetadata = () => {
-            if (!mountedRef.current || resolved) return
-            addDebugInfo(
-              `📹 METADATA LOADED: ${video.videoWidth}x${video.videoHeight}, readyState: ${video.readyState}`,
-            )
-            setTimeout(checkVideoReady, 100)
-          }
-
-          const onCanPlay = () => {
-            if (!mountedRef.current || resolved) return
-            addDebugInfo("📹 CAN PLAY - video puede reproducirse")
-            setStreamActive(true)
-            setTimeout(checkVideoReady, 100)
-          }
-
-          const onPlaying = () => {
-            if (!mountedRef.current || resolved) return
-            addDebugInfo("📹 PLAYING - video está reproduciéndose")
-            setStreamActive(true)
-            setTimeout(checkVideoReady, 100)
-          }
-
-          const onLoadedData = () => {
-            if (!mountedRef.current || resolved) return
-            addDebugInfo("📹 LOADED DATA - datos del video cargados")
-            setTimeout(checkVideoReady, 100)
-          }
-
-          const onError = (e: Event) => {
-            if (resolved) return
-            addDebugInfo(`❌ ERROR EN VIDEO: ${e}`)
-            resolved = true
-            cleanup()
-            reject(new Error("Error cargando video"))
-          }
-
-          const cleanup = () => {
-            video.removeEventListener("loadedmetadata", onLoadedMetadata)
-            video.removeEventListener("loadeddata", onLoadedData)
-            video.removeEventListener("canplay", onCanPlay)
-            video.removeEventListener("playing", onPlaying)
-            video.removeEventListener("error", onError)
-          }
-
-          video.addEventListener("loadedmetadata", onLoadedMetadata)
-          video.addEventListener("loadeddata", onLoadedData)
-          video.addEventListener("canplay", onCanPlay)
-          video.addEventListener("playing", onPlaying)
-          video.addEventListener("error", onError)
-
-          // Verificar estado actual
-          addDebugInfo(
-            `📹 Estado inicial: readyState=${video.readyState}, dimensions=${video.videoWidth}x${video.videoHeight}`,
-          )
-
-          if (video.readyState >= 1) {
-            addDebugInfo("📹 Video ya tiene metadata")
-            setTimeout(onLoadedMetadata, 100)
-          }
-
-          // Forzar reproducción con manejo detallado
-          addDebugInfo("📹 Intentando reproducir video...")
-          const playPromise = video.play()
-
-          if (playPromise !== undefined) {
-            playPromise
-              .then(() => {
-                addDebugInfo("📹 Video.play() EXITOSO")
-                setTimeout(checkVideoReady, 500)
-              })
-              .catch((playError) => {
-                addDebugInfo(`❌ Error en video.play(): ${playError}`)
-                addDebugInfo(`❌ Play error name: ${playError.name}`)
-                addDebugInfo(`❌ Play error message: ${playError.message}`)
-                // Continuar de todos modos
-                setTimeout(checkVideoReady, 500)
-              })
-          } else {
-            addDebugInfo("📹 video.play() no retornó Promise")
-            setTimeout(checkVideoReady, 500)
-          }
-        })
-
-        addDebugInfo("🎉 Cámara iniciada exitosamente")
-        setRetryCount(0)
-      } catch (setupError) {
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop())
-        }
-        throw setupError
+      video.onloadedmetadata = () => {
+        addDebugInfo("📹 Video metadata cargada")
+        setVideoReady(true)
       }
+
+      video.oncanplay = () => {
+        addDebugInfo("📹 Video listo para reproducir")
+        setStreamActive(true)
+      }
+
+      video.onerror = () => {
+        addDebugInfo("❌ Error en video element")
+        setError("Error en el elemento de video")
+      }
+
+      await video.play()
+      addDebugInfo("🎉 Cámara iniciada exitosamente")
+      setRetryCount(0)
     } catch (err) {
       if (!mountedRef.current) return
 
       const errorMessage = err instanceof Error ? err.message : "Error desconocido"
-      addDebugInfo(`💥 Error final: ${errorMessage}`)
+      addDebugInfo(`💥 Error: ${errorMessage}`)
 
       setRetryCount((prev) => prev + 1)
 
       if (retryCount >= 2) {
-        if (!forceLegacyMode) {
-          addDebugInfo("🔄 Activando modo legacy")
-          setForceLegacyMode(true)
-          setTimeout(() => {
-            startCamera()
-          }, 1000)
-        } else {
-          addDebugInfo("🔄 Demasiados intentos, activando modo archivo")
-          setUseFileInput(true)
-          setError(
-            "No se pudo acceder a la cámara después de varios intentos. Use el botón de archivo para subir una imagen.",
-          )
-        }
-      } else if (errorMessage.includes("Permission denied") || errorMessage.includes("NotAllowedError")) {
-        setError("Permisos de cámara denegados. Por favor, permita el acceso a la cámara y recargue la página.")
-      } else if (errorMessage.includes("NotFoundError") || errorMessage.includes("DevicesNotFoundError")) {
-        setError("No se encontró ninguna cámara en el dispositivo.")
+        addDebugInfo("🔄 Demasiados intentos, activando modo archivo")
         setUseFileInput(true)
-      } else if (errorMessage.includes("NotReadableError") || errorMessage.includes("TrackStartError")) {
-        setError("La cámara está siendo usada por otra aplicación. Cierre otras apps que usen la cámara.")
-      } else if (errorMessage.includes("Timeout")) {
-        setError("Timeout iniciando cámara. La cámara puede estar bloqueada por el sistema.")
+        setError("No se pudo acceder a la cámara. Use el botón de archivo para subir una imagen.")
       } else {
         setError(`Error accediendo a la cámara: ${errorMessage}`)
       }
 
       setIsCapturing(false)
-      console.error("Camera error:", err)
     }
-  }, [
-    addDebugInfo,
-    cameraFacing,
-    retryCount,
-    selectedCameraId,
-    startDiagnostics,
-    stopDiagnostics,
-    forceLegacyMode,
-  ])
+  }, [addDebugInfo, retryCount, selectedCameraId])
 
   const stopCamera = useCallback(() => {
     addDebugInfo("🛑 Deteniendo cámara")
-    stopDiagnostics()
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => {
-        track.stop()
-        addDebugInfo(`🔇 Track detenido: ${track.kind}`)
-      })
+      streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
     }
 
@@ -702,7 +272,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     setIsCapturing(false)
     setVideoReady(false)
     setStreamActive(false)
-  }, [addDebugInfo, stopDiagnostics])
+  }, [addDebugInfo])
 
   const switchCamera = useCallback(() => {
     addDebugInfo("🔄 Cambiando cámara")
@@ -713,15 +283,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       const nextIndex = (currentIndex + 1) % availableCameras.length
       setSelectedCameraId(availableCameras[nextIndex].deviceId)
       addDebugInfo(`📹 Cambiando a: ${availableCameras[nextIndex].label}`)
-    } else {
-      setCameraFacing((prev) => (prev === "environment" ? "user" : "environment"))
-      addDebugInfo(`📹 Cambiando facing mode a: ${cameraFacing === "environment" ? "user" : "environment"}`)
     }
 
     setTimeout(() => {
       startCamera()
     }, 1000)
-  }, [stopCamera, startCamera, addDebugInfo, availableCameras, selectedCameraId, cameraFacing])
+  }, [stopCamera, startCamera, addDebugInfo, availableCameras, selectedCameraId])
 
   const handleFileUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -754,10 +321,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   )
 
   const capturePhoto = useCallback(() => {
-    addDebugInfo("📸 INICIANDO CAPTURA DE FOTO")
+    addDebugInfo("📸 Capturando foto")
 
     if (!videoRef.current || !canvasRef.current) {
-      addDebugInfo("❌ Elementos video/canvas no disponibles")
       setError("Error: elementos de captura no disponibles")
       return
     }
@@ -767,344 +333,117 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     const context = canvas.getContext("2d")
 
     if (!context) {
-      addDebugInfo("❌ Contexto 2D no disponible")
       setError("Error: no se pudo obtener contexto de canvas")
       return
     }
 
-    // Diagnóstico exhaustivo antes de capturar
-    addDebugInfo(`📸 ESTADO PRE-CAPTURA:`)
-    addDebugInfo(`  - Video ready: ${videoReady}`)
-    addDebugInfo(`  - Stream active: ${streamActive}`)
-    addDebugInfo(`  - Video readyState: ${video.readyState}`)
-    addDebugInfo(`  - Video dimensions: ${video.videoWidth}x${video.videoHeight}`)
-    addDebugInfo(`  - Video element size: ${video.clientWidth}x${video.clientHeight}`)
-    addDebugInfo(`  - Video currentTime: ${video.currentTime}`)
-    addDebugInfo(`  - Video paused: ${video.paused}`)
-    addDebugInfo(`  - Video ended: ${video.ended}`)
-    addDebugInfo(`  - Video muted: ${video.muted}`)
-
     if (!videoReady || !streamActive) {
-      addDebugInfo(`❌ Video no está listo: ready=${videoReady}, active=${streamActive}`)
-      setError("Error: video no está listo para captura. Espere un momento.")
+      setError("Error: video no está listo para captura")
       return
     }
 
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      addDebugInfo(`❌ Video sin dimensiones: ${video.videoWidth}x${video.videoHeight}`)
-      setError("Error: video no tiene dimensiones válidas")
-      return
-    }
+    // Configurar canvas
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
 
-    if (video.paused || video.ended) {
-      addDebugInfo(`❌ Video no está reproduciendo: paused=${video.paused}, ended=${video.ended}`)
-      setError("Error: video no está reproduciendo")
-      return
-    }
+    // Dibujar el video en el canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    addDebugInfo(`📐 CAPTURANDO: ${video.videoWidth}x${video.videoHeight}`)
+    canvas.toBlob(
+      (blob) => {
+        if (!mountedRef.current || !blob) return
 
-    try {
-      // Configurar canvas
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
+        const imageUrl = URL.createObjectURL(blob)
+        addDebugInfo(`✅ Foto capturada: ${blob.size} bytes`)
 
-      addDebugInfo(`📐 Canvas configurado: ${canvas.width}x${canvas.height}`)
+        setCapturedImages((prev) => ({
+          ...prev,
+          [currentStep]: imageUrl,
+        }))
+        stopCamera()
+      },
+      "image/jpeg",
+      0.9,
+    )
+  }, [currentStep, stopCamera, addDebugInfo, videoReady, streamActive])
 
-      // Limpiar canvas
-      context.clearRect(0, 0, canvas.width, canvas.height)
+  // Subir imagen a Cloudinary
+  const uploadToCloudinary = useCallback(
+    async (imageUrl: string, type: "plate" | "vehicle") => {
+      try {
+        addDebugInfo(`📤 Subiendo imagen ${type} a Cloudinary...`)
 
-      // Configurar contexto
-      context.save()
+        const response = await fetch(imageUrl)
+        const blob = await response.blob()
 
-      // Aplicar transformaciones si es necesario
-      if (cameraFacing === "user") {
-        context.scale(-1, 1)
-        context.translate(-canvas.width, 0)
-        addDebugInfo("🔄 Aplicando transformación para cámara frontal")
+        const formData = new FormData()
+        formData.append("image", blob)
+        formData.append("type", type)
+
+        const uploadResponse = await fetch("/api/admin/process-vehicle", {
+          method: "POST",
+          body: formData,
+        })
+
+        const result = await uploadResponse.json()
+
+        if (result.success) {
+          addDebugInfo(`✅ Imagen ${type} subida: ${result.imageUrl}`)
+          return result.imageUrl
+        } else {
+          throw new Error(result.message || "Error subiendo imagen")
+        }
+      } catch (err) {
+        addDebugInfo(`❌ Error subiendo ${type}: ${err}`)
+        throw err
       }
+    },
+    [addDebugInfo],
+  )
 
-      // Dibujar el video en el canvas
-      addDebugInfo("🎨 Dibujando video en canvas...")
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
-      context.restore()
+  const processImage = useCallback(async () => {
+    if (!capturedImages[currentStep]) return
 
-      // Análisis exhaustivo de la imagen capturada
-      addDebugInfo("🔍 ANALIZANDO IMAGEN CAPTURADA:")
-
-      const imageData = context.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height))
-      const pixels = imageData.data
-
-      let totalBrightness = 0
-      let nonZeroPixels = 0
-      let maxBrightness = 0
-      let minBrightness = 255
-      const colorChannels = { r: 0, g: 0, b: 0 }
-
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i]
-        const g = pixels[i + 1]
-        const b = pixels[i + 2]
-        const brightness = (r + g + b) / 3
-
-        totalBrightness += brightness
-        colorChannels.r += r
-        colorChannels.g += g
-        colorChannels.b += b
-
-        if (brightness > 0) nonZeroPixels++
-        if (brightness > maxBrightness) maxBrightness = brightness
-        if (brightness < minBrightness) minBrightness = brightness
-      }
-
-      const pixelCount = pixels.length / 4
-      const avgBrightness = totalBrightness / pixelCount
-      const pixelRatio = nonZeroPixels / pixelCount
-      const avgColors = {
-        r: colorChannels.r / pixelCount,
-        g: colorChannels.g / pixelCount,
-        b: colorChannels.b / pixelCount,
-      }
-
-      addDebugInfo(`  - Brillo promedio: ${avgBrightness.toFixed(2)}`)
-      addDebugInfo(`  - Brillo min/max: ${minBrightness}/${maxBrightness}`)
-      addDebugInfo(`  - Píxeles no-cero: ${(pixelRatio * 100).toFixed(1)}%`)
-      addDebugInfo(
-        `  - Colores promedio: R=${avgColors.r.toFixed(1)}, G=${avgColors.g.toFixed(1)}, B=${avgColors.b.toFixed(1)}`,
-      )
-
-      // Verificaciones más estrictas
-      if (avgBrightness < 5) {
-        addDebugInfo("❌ IMAGEN MUY OSCURA - brillo promedio muy bajo")
-        setError("La imagen capturada está muy oscura. Verifique la iluminación.")
-        return
-      }
-
-      if (pixelRatio < 0.1) {
-        addDebugInfo("❌ IMAGEN MAYORMENTE NEGRA - muy pocos píxeles con contenido")
-        setError("La imagen capturada está mayormente en negro. Intente cambiar de cámara.")
-        return
-      }
-
-      if (maxBrightness - minBrightness < 10) {
-        addDebugInfo("❌ IMAGEN SIN CONTRASTE - diferencia de brillo muy baja")
-        setError("La imagen capturada no tiene suficiente contraste.")
-        return
-      }
-
-      // Si llegamos aquí, la imagen parece válida
-      addDebugInfo("✅ IMAGEN VÁLIDA - procediendo a crear blob")
-
-      canvas.toBlob(
-        (blob) => {
-          if (!mountedRef.current) return
-
-          if (blob) {
-            const imageUrl = URL.createObjectURL(blob)
-            addDebugInfo(`✅ FOTO CAPTURADA EXITOSAMENTE:`)
-            addDebugInfo(`  - Tamaño: ${blob.size} bytes`)
-            addDebugInfo(`  - Brillo: ${avgBrightness.toFixed(2)}`)
-            addDebugInfo(`  - Contraste: ${(maxBrightness - minBrightness).toFixed(1)}`)
-            addDebugInfo(`  - URL: ${imageUrl.slice(0, 50)}...`)
-
-            setCapturedImages((prev) => ({
-              ...prev,
-              [currentStep]: imageUrl,
-            }))
-            stopCamera()
-          } else {
-            addDebugInfo("❌ Error generando blob")
-            setError("Error generando imagen")
-          }
-        },
-        "image/jpeg",
-        0.9,
-      )
-    } catch (captureError) {
-      addDebugInfo(`❌ ERROR DURANTE CAPTURA: ${captureError}`)
-      setError("Error capturando imagen")
-    }
-  }, [currentStep, stopCamera, addDebugInfo, videoReady, streamActive, cameraFacing])
-
-  const processPlateImage = useCallback(async () => {
-    if (!capturedImages.plate) return
-
-    setIsProcessing(true)
+    setIsUploading(true)
     setError(null)
-    setOcrStatus("Preparando imagen...")
-    addDebugInfo(`🔍 Iniciando procesamiento OCR de placa con método: ${ocrMethod}`)
 
     try {
-      setOcrStatus("Obteniendo imagen...")
-      const response = await fetch(capturedImages.plate)
-      const blob = await response.blob()
+      const imageUrl = await uploadToCloudinary(capturedImages[currentStep]!, currentStep)
 
-      addDebugInfo(`📤 Imagen obtenida: ${blob.size} bytes`)
+      setUploadedUrls((prev) => ({
+        ...prev,
+        [currentStep === "plate" ? "plateUrl" : "vehicleUrl"]: imageUrl,
+      }))
 
-      // Intentar OCR solo si no estamos en modo simulación
-      if (!simulationMode) {
-        setOcrStatus("Analizando placa con IA...")
-        try {
-          const ocrResult = await processPlate(blob)
-
-          addDebugInfo(
-            `✅ OCR completado con ${ocrResult.method}: ${ocrResult.text} (${Math.round(ocrResult.confidence * 100)}%)`,
-          )
-
-          // Si la confianza es buena, usar el resultado
-          if (ocrResult.confidence >= 0.6 && ocrResult.text) {
-            setPlateData({
-              placa: ocrResult.text,
-              imageUrl: capturedImages.plate,
-              confidence: ocrResult.confidence,
-            })
-            setCurrentStep("vehicle")
-            setOcrStatus("")
-            setIsProcessing(false)
-            return
-          } else {
-            addDebugInfo("⚠️ Confianza baja en OCR local, continuando sin reconocimiento")
-          }
-        } catch (ocrError) {
-          addDebugInfo(`⚠️ Error en OCR local: ${ocrError}`)
-        }
+      if (currentStep === "plate") {
+        setCurrentStep("vehicle")
+        addDebugInfo("✅ Placa procesada, continuando con vehículo")
       } else {
-        addDebugInfo("🎭 Modo simulación activado, saltando OCR")
+        setCurrentStep("assign")
+        addDebugInfo("✅ Vehículo procesado, continuando con asignación")
       }
-
-      // Si llegamos aquí, el OCR falló o estamos en modo simulación
-      // Simplemente guardar la imagen y continuar sin reconocimiento
-      setPlateData({
-        placa: "", // Placa vacía para edición manual posterior
-        imageUrl: capturedImages.plate,
-        confidence: 0,
-      })
-
-      setCurrentStep("vehicle")
-      setOcrStatus("")
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Error desconocido"
-      addDebugInfo(`💥 Error procesando imagen: ${errorMsg}`)
-
-      // Fallback a guardar solo la imagen
-      setPlateData({
-        placa: "", // Placa vacía para edición manual posterior
-        imageUrl: capturedImages.plate,
-        confidence: 0,
-      })
-
-      setCurrentStep("vehicle")
-      setOcrStatus("")
+      setError("Error subiendo imagen. Intente nuevamente.")
     } finally {
-      setIsProcessing(false)
+      setIsUploading(false)
     }
-  }, [capturedImages.plate, addDebugInfo, processPlate, ocrMethod, simulationMode])
-
-  const processVehicleImage = useCallback(async () => {
-    if (!capturedImages.vehicle || !plateData) return
-
-    setIsProcessing(true)
-    setCurrentStep("processing")
-    setOcrStatus("Preparando análisis del vehículo...")
-    addDebugInfo("🚗 INICIANDO procesamiento de imagen de vehículo")
-
-    try {
-      setOcrStatus("Obteniendo imagen del vehículo...")
-      addDebugInfo(`📤 VEHICLE IMAGE URL: ${capturedImages.vehicle.slice(0, 100)}...`)
-
-      const response = await fetch(capturedImages.vehicle)
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const blob = await response.blob()
-      addDebugInfo(`✅ VEHICLE BLOB: size=${blob.size}, type=${blob.type}`)
-
-      if (blob.size === 0) {
-        throw new Error("Vehicle image blob is empty")
-      }
-
-      // Verificar que el blob es válido creando una URL temporal
-      const testUrl = URL.createObjectURL(blob)
-      addDebugInfo(`🔍 VEHICLE BLOB URL TEST: ${testUrl.slice(0, 50)}...`)
-
-      // Limpiar la URL de prueba
-      setTimeout(() => URL.revokeObjectURL(testUrl), 1000)
-
-      // Resto del código...
-      let vehicleResult = {
-        marca: "",
-        modelo: "",
-        color: "",
-        confidence: 0,
-      }
-
-      if (!simulationMode) {
-        setOcrStatus("Analizando vehículo con IA...")
-        try {
-          vehicleResult = await processVehicle(blob)
-          addDebugInfo(`✅ OCR vehículo completado: ${vehicleResult.marca} ${vehicleResult.modelo}`)
-        } catch (ocrError) {
-          addDebugInfo(`⚠️ Error en OCR de vehículo: ${ocrError}`)
-        }
-      }
-
-      // Guardar resultado del vehículo
-      setVehicleResult(vehicleResult)
-
-      addDebugInfo(
-        `🎯 PROCESAMIENTO COMPLETADO: placa=${plateData.placa}, vehículo=${vehicleResult.marca} ${vehicleResult.modelo}`,
-      )
-
-      // Cambiar a paso completado en lugar de llamar onVehicleDetected inmediatamente
-      setCurrentStep("completed")
-      setOcrStatus("")
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Error desconocido"
-      addDebugInfo(`💥 ERROR VEHICLE PROCESSING: ${errorMsg}`)
-
-      // Fallback pero con logging del problema
-      setVehicleResult({
-        marca: "",
-        modelo: "",
-        color: "",
-        confidence: 0,
-      })
-
-      addDebugInfo(`⚠️ PROCESAMIENTO COMPLETADO CON ERRORES`)
-
-      // Cambiar a paso completado
-      setCurrentStep("completed")
-      setOcrStatus("")
-    } finally {
-      setIsProcessing(false)
-    }
-  }, [capturedImages.vehicle, plateData, addDebugInfo, processVehicle, simulationMode])
+  }, [capturedImages, currentStep, uploadToCloudinary, addDebugInfo])
 
   const confirmAndRegister = useCallback(() => {
-    if (!plateData || !vehicleResult) {
-      addDebugInfo("❌ Datos incompletos para registro")
-      return
-    }
-
     const finalData = {
-      placa: plateData.placa,
-      marca: vehicleResult.marca,
-      modelo: vehicleResult.modelo,
-      color: vehicleResult.color,
-      plateImageUrl: plateData.imageUrl,
-      vehicleImageUrl: capturedImages.vehicle || "",
-      plateConfidence: plateData.confidence,
-      vehicleConfidence: vehicleResult.confidence,
+      placa: "",
+      marca: "",
+      modelo: "",
+      color: "",
+      plateImageUrl: uploadedUrls.plateUrl || "",
+      vehicleImageUrl: uploadedUrls.vehicleUrl || "",
+      plateConfidence: 0,
+      vehicleConfidence: 0,
     }
 
-    addDebugInfo(
-      `🎯 REGISTRANDO VEHÍCULO: placa=${finalData.placa}, vehicleUrl=${finalData.vehicleImageUrl ? "OK" : "MISSING"}`,
-    )
-    addDebugInfo("🏁 PROCESO FINALIZADO - enviando datos al formulario")
-
+    addDebugInfo("🎯 Proceso completado - volviendo al formulario principal")
     onVehicleDetected(finalData)
-  }, [plateData, vehicleResult, capturedImages.vehicle, onVehicleDetected, addDebugInfo])
+  }, [uploadedUrls, onVehicleDetected, addDebugInfo])
 
   const retakePhoto = useCallback(() => {
     addDebugInfo("🔄 Retomando foto")
@@ -1118,8 +457,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   const goBackToPlate = useCallback(() => {
     addDebugInfo("⬅️ Volviendo a captura de placa")
     setCurrentStep("plate")
-    setPlateData(null)
     setCapturedImages({})
+    setUploadedUrls({})
     setError(null)
   }, [addDebugInfo])
 
@@ -1128,31 +467,31 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       case "plate":
         return {
           title: "1. Capturar Placa",
-          description: "Alinee la placa del vehículo en el marco",
+          description: "Tome una foto de la placa del vehículo",
           icon: <CreditCard className="h-5 w-5" />,
-          frameClass: "w-48 h-24",
-          frameLabel: "Alinee la placa aquí",
+          frameClass: "w-32 h-16", // Más pequeño
+          frameLabel: "Placa aquí",
         }
       case "vehicle":
         return {
           title: "2. Capturar Vehículo",
           description: "Tome una foto completa del vehículo",
           icon: <Car className="h-5 w-5" />,
-          frameClass: "w-64 h-48",
-          frameLabel: "Vehículo completo aquí",
+          frameClass: "w-40 h-32", // Más pequeño
+          frameLabel: "Vehículo aquí",
         }
-      case "processing":
+      case "assign":
         return {
-          title: "3. Procesando...",
-          description: "Analizando las imágenes con IA",
-          icon: <Camera className="h-5 w-5" />,
+          title: "3. Asignar Puesto",
+          description: "Seleccione el puesto de estacionamiento",
+          icon: <Car className="h-5 w-5" />,
           frameClass: "",
           frameLabel: "",
         }
       case "completed":
         return {
-          title: "3. Proceso Completado",
-          description: "Revise los resultados y confirme el registro",
+          title: "4. Registro Completado",
+          description: "Vehículo registrado exitosamente",
           icon: <CheckCircle2 className="h-5 w-5" />,
           frameClass: "",
           frameLabel: "",
@@ -1161,6 +500,58 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   }
 
   const stepInfo = getStepInfo()
+
+  const createParkingRecord = useCallback(async () => {
+    if (!uploadedUrls.plateUrl || !uploadedUrls.vehicleUrl || !selectedTicket) {
+      addDebugInfo("❌ Datos incompletos para crear registro")
+      return
+    }
+
+    setIsCreatingRecord(true)
+    setError(null)
+
+    try {
+      addDebugInfo("🚗 Creando registro de estacionamiento...")
+
+      const recordData = {
+        placa: "", // Se llenará manualmente después
+        marca: "",
+        modelo: "",
+        color: "",
+        nombreDueño: "",
+        telefono: "",
+        ticketAsociado: selectedTicket,
+        imagenes: {
+          placaUrl: uploadedUrls.plateUrl,
+          vehiculoUrl: uploadedUrls.vehicleUrl,
+          fechaCaptura: new Date(),
+          capturaMetodo: "camara_movil",
+          confianzaPlaca: 0,
+          confianzaVehiculo: 0,
+        },
+      }
+
+      const response = await fetch("/api/admin/cars", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(recordData),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        addDebugInfo("✅ Registro creado exitosamente")
+        setCurrentStep("completed")
+      } else {
+        throw new Error(result.message || "Error creando registro")
+      }
+    } catch (err) {
+      addDebugInfo(`❌ Error creando registro: ${err}`)
+      setError("Error creando el registro. Intente nuevamente.")
+    } finally {
+      setIsCreatingRecord(false)
+    }
+  }, [uploadedUrls, selectedTicket, addDebugInfo])
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
@@ -1181,163 +572,64 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
               >
                 <FileText className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)}>
-                <Settings className="h-4 w-4" />
-              </Button>
               <div className="flex space-x-1">
-                <Badge variant={currentStep === "plate" ? "default" : plateData ? "secondary" : "outline"}>1</Badge>
+                <Badge variant={currentStep === "plate" ? "default" : uploadedUrls.plateUrl ? "secondary" : "outline"}>
+                  1
+                </Badge>
                 <Badge
-                  variant={currentStep === "vehicle" ? "default" : capturedImages.vehicle ? "secondary" : "outline"}
+                  variant={currentStep === "vehicle" ? "default" : uploadedUrls.vehicleUrl ? "secondary" : "outline"}
                 >
                   2
                 </Badge>
-                <Badge variant={currentStep === "processing" || currentStep === "completed" ? "default" : "outline"}>
+                <Badge variant={currentStep === "assign" ? "default" : selectedTicket ? "secondary" : "outline"}>
                   3
                 </Badge>
+                <Badge variant={currentStep === "completed" ? "default" : "outline"}>4</Badge>
               </div>
             </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
-          {/* Panel de configuración */}
-          {showSettings && (
-            <Alert>
-              <Settings className="h-4 w-4" />
-              <AlertDescription>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-sm font-medium">Método de OCR:</label>
-                    <Select value={ocrMethod} onValueChange={(value: OCRMethod) => setOcrMethod(value)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto">Automático (Recomendado)</SelectItem>
-                        <SelectItem value="tesseract">Solo Tesseract.js</SelectItem>
-                        <SelectItem value="python">Solo API Python</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {availableCameras.length > 1 && (
-                    <div>
-                      <label className="text-sm font-medium">Cámara:</label>
-                      <Select value={selectedCameraId} onValueChange={setSelectedCameraId}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableCameras.map((camera) => (
-                            <SelectItem key={camera.deviceId} value={camera.deviceId}>
-                              {camera.label || `Cámara ${camera.deviceId.slice(0, 8)}...`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="useFileInput"
-                      checked={useFileInput}
-                      onChange={(e) => setUseFileInput(e.target.checked)}
-                    />
-                    <label htmlFor="useFileInput" className="text-sm">
-                      Usar subida de archivos en lugar de cámara
-                    </label>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="forceLegacyMode"
-                      checked={forceLegacyMode}
-                      onChange={(e) => setForceLegacyMode(e.target.checked)}
-                    />
-                    <label htmlFor="forceLegacyMode" className="text-sm">
-                      Modo legacy (más compatible)
-                    </label>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="simulationMode"
-                      checked={simulationMode}
-                      onChange={(e) => setSimulationMode(e.target.checked)}
-                    />
-                    <label htmlFor="simulationMode" className="text-sm">
-                      Modo simulación (solo debug)
-                    </label>
-                  </div>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
           {error && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
                 {error}
-                {retryCount > 0 && retryCount < 3 && !useFileInput && (
-                  <div className="mt-2 space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setError(null)
-                        startCamera()
-                      }}
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      Reintentar
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={switchCamera}>
-                      <Camera className="h-3 w-3 mr-1" />
-                      Cambiar Cámara
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setUseFileInput(true)}>
-                      <Smartphone className="h-3 w-3 mr-1" />
-                      Usar Archivo
-                    </Button>
-                  </div>
-                )}
+                <div className="mt-2 space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setError(null)
+                      startCamera()
+                    }}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Reintentar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setUseFileInput(true)}>
+                    <Smartphone className="h-3 w-3 mr-1" />
+                    Usar Archivo
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
 
-          {plateData && currentStep !== "plate" && plateData.placa && (
+          {uploadedUrls.plateUrl && currentStep !== "plate" && (
             <Alert>
               <AlertDescription>
-                ✅ <strong>Placa detectada:</strong> {plateData.placa}
-                {plateData.confidence > 0 && ` (${Math.round(plateData.confidence * 100)}% confianza)`}
+                ✅ <strong>Placa guardada exitosamente</strong>
               </AlertDescription>
             </Alert>
           )}
 
-          {vehicleResult && currentStep === "completed" && (
+          {uploadedUrls.vehicleUrl && currentStep === "completed" && (
             <Alert>
               <AlertDescription>
-                ✅ <strong>Vehículo procesado:</strong> {vehicleResult.marca} {vehicleResult.modelo}{" "}
-                {vehicleResult.color}
-                {vehicleResult.confidence > 0 && ` (${Math.round(vehicleResult.confidence * 100)}% confianza)`}
+                ✅ <strong>Vehículo guardado exitosamente</strong>
               </AlertDescription>
             </Alert>
-          )}
-
-          {/* Paso 3: Procesando */}
-          {currentStep === "processing" && (
-            <div className="text-center space-y-4">
-              <div className="flex justify-center">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
-              </div>
-              <p className="text-sm text-gray-600">Procesando imágenes...</p>
-              {ocrStatus && <p className="text-xs text-blue-600">{ocrStatus}</p>}
-              <p className="text-xs text-gray-500">Esto puede tomar unos segundos</p>
-            </div>
           )}
 
           {/* Paso 3: Completado */}
@@ -1346,65 +638,139 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
               <div className="text-center space-y-4">
                 <CheckCircle2 className="h-16 w-16 mx-auto text-green-500" />
                 <div>
-                  <h3 className="text-lg font-semibold text-green-700">¡Proceso Completado!</h3>
-                  <p className="text-sm text-gray-600">Las imágenes han sido procesadas exitosamente</p>
+                  <h3 className="text-lg font-semibold text-green-700">¡Imágenes Guardadas!</h3>
+                  <p className="text-sm text-gray-600">Las fotos han sido subidas a Cloudinary exitosamente</p>
                 </div>
               </div>
 
               {/* Resumen de resultados */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {plateData && (
+                {uploadedUrls.plateUrl && (
                   <div className="space-y-2">
                     <h4 className="font-medium">Imagen de Placa</h4>
                     <img
-                      src={plateData.imageUrl || "/placeholder.svg"}
-                      alt="Placa capturada"
+                      src={uploadedUrls.plateUrl || "/placeholder.svg"}
+                      alt="Placa guardada"
                       className="w-full h-32 object-cover rounded border"
                     />
-                    <p className="text-sm">
-                      <strong>Placa:</strong> {plateData.placa || "No detectada"}
-                      {plateData.confidence > 0 && ` (${Math.round(plateData.confidence * 100)}%)`}
-                    </p>
+                    <p className="text-xs text-gray-500 break-all">{uploadedUrls.plateUrl}</p>
                   </div>
                 )}
 
-                {capturedImages.vehicle && (
+                {uploadedUrls.vehicleUrl && (
                   <div className="space-y-2">
                     <h4 className="font-medium">Imagen de Vehículo</h4>
                     <img
-                      src={capturedImages.vehicle || "/placeholder.svg"}
-                      alt="Vehículo capturado"
+                      src={uploadedUrls.vehicleUrl || "/placeholder.svg"}
+                      alt="Vehículo guardado"
                       className="w-full h-32 object-cover rounded border"
                     />
-                    {vehicleResult && (
-                      <p className="text-sm">
-                        <strong>Vehículo:</strong> {vehicleResult.marca} {vehicleResult.modelo} {vehicleResult.color}
-                        {vehicleResult.confidence > 0 && ` (${Math.round(vehicleResult.confidence * 100)}%)`}
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-500 break-all">{uploadedUrls.vehicleUrl}</p>
                   </div>
                 )}
               </div>
 
-              {/* Botones de acción */}
-              <div className="flex space-x-2">
-                <Button onClick={confirmAndRegister} className="flex-1" size="lg">
+              {/* Botones de acción en vertical */}
+              <div className="space-y-2">
+                <Button onClick={confirmAndRegister} className="w-full" size="lg">
                   <Check className="h-4 w-4 mr-2" />
-                  Confirmar y Registrar
+                  Continuar con Registro
                 </Button>
-                <Button onClick={goBackToPlate} variant="outline" size="lg">
+                <Button onClick={goBackToPlate} variant="outline" className="w-full" size="lg">
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Reiniciar
                 </Button>
-                <Button onClick={onCancel} variant="outline" size="lg">
+                <Button onClick={onCancel} variant="outline" className="w-full" size="lg">
                   <X className="h-4 w-4" />
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Paso 3: Asignar Puesto */}
+          {currentStep === "assign" && (
+            <div className="space-y-4">
+              <div className="text-center space-y-4">
+                <Car className="h-16 w-16 mx-auto text-blue-500" />
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-700">Asignar Puesto de Estacionamiento</h3>
+                  <p className="text-sm text-gray-600">Seleccione el ticket/puesto donde se estacionará el vehículo</p>
+                </div>
+              </div>
+
+              {/* Selector de ticket */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Puesto de Estacionamiento:</label>
+                <select
+                  value={selectedTicket}
+                  onChange={(e) => setSelectedTicket(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                >
+                  <option value="">Seleccione un puesto disponible</option>
+                  {availableTickets.map((ticket) => (
+                    <option key={ticket._id} value={ticket.codigoTicket}>
+                      {ticket.codigoTicket}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500">{availableTickets.length} puestos disponibles</p>
+              </div>
+
+              {/* Resumen de imágenes */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Placa</h4>
+                  <img
+                    src={uploadedUrls.plateUrl || "/placeholder.svg"}
+                    alt="Placa"
+                    className="w-full h-20 object-cover rounded border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Vehículo</h4>
+                  <img
+                    src={uploadedUrls.vehicleUrl || "/placeholder.svg"}
+                    alt="Vehículo"
+                    className="w-full h-20 object-cover rounded border"
+                  />
+                </div>
+              </div>
+
+              {/* Botones de acción en vertical */}
+              <div className="space-y-2">
+                <Button
+                  onClick={createParkingRecord}
+                  disabled={!selectedTicket || isCreatingRecord}
+                  className="w-full"
+                  size="lg"
+                >
+                  {isCreatingRecord ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Creando Registro...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Confirmar Estacionamiento
+                    </>
+                  )}
+                </Button>
+                <Button onClick={goBackToPlate} variant="outline" className="w-full" size="lg">
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reiniciar Proceso
+                </Button>
+                <Button onClick={onCancel} variant="outline" className="w-full" size="lg">
+                  <X className="h-4 w-4" />
+                  Cancelar
                 </Button>
               </div>
             </div>
           )}
 
           {/* Pasos 1 y 2: Captura */}
-          {currentStep !== "processing" && currentStep !== "completed" && (
+          {currentStep !== "completed" && currentStep !== "assign" && (
             <>
               {!isCapturing && !capturedImages[currentStep] && (
                 <div className="text-center space-y-4">
@@ -1426,7 +792,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                         Seleccionar Imagen
                       </Button>
                       <Button
-                        onClick={ () => {
+                        onClick={() => {
                           setUseFileInput(false)
                           setError(null)
                         }}
@@ -1435,14 +801,14 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                         size="sm"
                       >
                         <Camera className="h-3 w-3 mr-2" />
-                        Intentar Cámara Nuevamente
+                        Usar Cámara
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-2">
                       <Button onClick={startCamera} className="w-full" size="lg">
                         <Camera className="h-4 w-4 mr-2" />
-                        Abrir Cámara {forceLegacyMode ? "(Modo Legacy)" : ""}
+                        Abrir Cámara
                       </Button>
                       {availableCameras.length > 1 && (
                         <Button onClick={switchCamera} variant="outline" className="w-full" size="sm">
@@ -1452,16 +818,10 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       )}
                       <Button onClick={() => setUseFileInput(true)} variant="outline" className="w-full" size="sm">
                         <Smartphone className="h-3 w-3 mr-2" />
-                        Usar Archivo en su Lugar
+                        Usar Archivo
                       </Button>
                     </div>
                   )}
-
-                  <p className="text-xs text-gray-500">
-                    {useFileInput
-                      ? "Seleccione una imagen desde su galería o tome una foto"
-                      : "Capture imágenes claras para mejor reconocimiento"}
-                  </p>
                 </div>
               )}
 
@@ -1475,25 +835,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       muted
                       className="w-full rounded-lg bg-black"
                       style={{
-                        maxHeight: "300px",
-                        minHeight: "200px",
+                        height: "250px", // Altura fija más pequeña
                         objectFit: "cover",
-                      }}
-                      onLoadedMetadata={() => {
-                        addDebugInfo("📹 Video metadata loaded")
-                      }}
-                      onCanPlay={() => {
-                        addDebugInfo("📹 Video can play")
-                      }}
-                      onPlaying={() => {
-                        addDebugInfo("📹 Video is playing")
-                      }}
-                      onError={(e) => {
-                        addDebugInfo(`❌ Video error: ${e}`)
                       }}
                     />
 
-                    {/* Marco de guía */}
+                    {/* Marco de guía más pequeño */}
                     {stepInfo.frameClass && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div
@@ -1516,19 +863,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       </Badge>
                     </div>
 
-                    {/* Botón de captura */}
-                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                      <Button
-                        onClick={capturePhoto}
-                        disabled={!videoReady || !streamActive}
-                        size="lg"
-                        className="rounded-full w-16 h-16 p-0"
-                      >
-                        <Camera className="h-6 w-6" />
-                      </Button>
-                    </div>
-
-                    {/* Controles adicionales */}
+                    {/* Controles en la esquina */}
                     <div className="absolute top-2 right-2 space-y-1">
                       <Button onClick={switchCamera} size="sm" variant="secondary">
                         <RefreshCw className="h-3 w-3" />
@@ -1539,15 +874,25 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     </div>
                   </div>
 
+                  {/* Botones principales debajo del video */}
+                  <div className="flex space-x-2">
+                    <Button onClick={capturePhoto} disabled={!videoReady || !streamActive} className="flex-1" size="lg">
+                      <Camera className="h-4 w-4 mr-2" />
+                      {videoReady && streamActive ? "Capturar Foto" : "Esperando..."}
+                    </Button>
+                    <Button onClick={() => setUseFileInput(true)} variant="outline" size="lg">
+                      <Smartphone className="h-4 w-4" />
+                    </Button>
+                  </div>
+
                   <canvas ref={canvasRef} className="hidden" />
 
                   <div className="text-center">
                     <p className="text-sm text-gray-600">
                       {videoReady && streamActive
-                        ? `Alinee ${currentStep === "plate" ? "la placa" : "el vehículo"} y presione el botón para capturar`
+                        ? `Alinee ${currentStep === "plate" ? "la placa" : "el vehículo"} en el marco y presione capturar`
                         : "Preparando cámara..."}
                     </p>
-                    {ocrStatus && <p className="text-xs text-blue-600 mt-1">{ocrStatus}</p>}
                   </div>
                 </div>
               )}
@@ -1563,21 +908,16 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                   </div>
 
                   <div className="flex space-x-2">
-                    <Button
-                      onClick={currentStep === "plate" ? processPlateImage : processVehicleImage}
-                      disabled={isProcessing}
-                      className="flex-1"
-                      size="lg"
-                    >
-                      {isProcessing ? (
+                    <Button onClick={processImage} disabled={isUploading} className="flex-1" size="lg">
+                      {isUploading ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Procesando...
+                          Subiendo...
                         </>
                       ) : (
                         <>
                           <Check className="h-4 w-4 mr-2" />
-                          Continuar
+                          Guardar y Continuar
                         </>
                       )}
                     </Button>
@@ -1592,19 +932,13 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       </Button>
                     )}
                   </div>
-
-                  {ocrStatus && (
-                    <div className="text-center">
-                      <p className="text-sm text-blue-600">{ocrStatus}</p>
-                    </div>
-                  )}
                 </div>
               )}
             </>
           )}
 
           {/* Botón de cancelar */}
-          {currentStep !== "completed" && (
+          {currentStep !== "completed" && currentStep !== "assign" && (
             <div className="text-center pt-4">
               <Button onClick={onCancel} variant="ghost" size="sm">
                 <X className="h-3 w-3 mr-1" />
@@ -1621,7 +955,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           <CardHeader>
             <CardTitle className="flex items-center justify-between text-sm">
               <div className="flex items-center">
-                <Bug className="h-4 w-4 mr-2" />
+                <FileText className="h-4 w-4 mr-2" />
                 Logs del Sistema ({debugInfo.length})
               </div>
               <div className="flex space-x-2">
