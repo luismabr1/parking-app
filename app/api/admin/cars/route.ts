@@ -51,10 +51,13 @@ export async function POST(request: Request) {
       imagenesKeys: imagenes ? Object.keys(imagenes) : [],
     })
 
-    // Validar campos requeridos
-    if (!placa || !ticketAsociado) {
-      return NextResponse.json({ message: "Placa y ticket son requeridos" }, { status: 400 })
+    // Validar campos requeridos - solo ticket es obligatorio
+    if (!ticketAsociado) {
+      return NextResponse.json({ message: "Ticket es requerido" }, { status: 400 })
     }
+
+    // Si no hay placa, usar placeholder
+    const placaFinal = placa && placa.trim() ? placa.toUpperCase() : "PENDIENTE"
 
     // Log específico para imágenes
     if (imagenes) {
@@ -90,7 +93,7 @@ export async function POST(request: Request) {
 
     // Crear el registro del carro con logging detallado
     const carData = {
-      placa: placa.toUpperCase(),
+      placa: placaFinal,
       marca: marca || "Por definir",
       modelo: modelo || "Por definir",
       color: color || "Por definir",
@@ -132,7 +135,7 @@ export async function POST(request: Request) {
           estado: "ocupado",
           horaOcupacion: new Date(),
           carInfo: {
-            placa: placa.toUpperCase(),
+            placa: placaFinal,
             marca: marca || "Por definir",
             modelo: modelo || "Por definir",
             color: color || "Por definir",

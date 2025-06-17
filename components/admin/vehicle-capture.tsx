@@ -514,16 +514,16 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       addDebugInfo("🚗 Creando registro de estacionamiento...")
 
       const recordData = {
-        placa: "", // Se llenará manualmente después
-        marca: "",
-        modelo: "",
-        color: "",
-        nombreDueño: "",
-        telefono: "",
+        placa: "PENDIENTE", // Placeholder para indicar que se llenará manualmente
+        marca: "Por definir",
+        modelo: "Por definir",
+        color: "Por definir",
+        nombreDueño: "Por definir",
+        telefono: "Por definir",
         ticketAsociado: selectedTicket,
         imagenes: {
-          placaUrl: uploadedUrls.plateUrl,
-          vehiculoUrl: uploadedUrls.vehicleUrl,
+          plateImageUrl: uploadedUrls.plateUrl, // Cambiar de placaUrl a plateImageUrl
+          vehicleImageUrl: uploadedUrls.vehicleUrl, // Cambiar de vehiculoUrl a vehicleImageUrl
           fechaCaptura: new Date(),
           capturaMetodo: "camara_movil",
           confianzaPlaca: 0,
