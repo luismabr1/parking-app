@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, XCircle, RefreshCw, Car } from "lucide-react"
+import { CheckCircle, XCircle, RefreshCw, Car, ImageIcon } from "lucide-react"
 import { formatCurrency, formatDateTime } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ExitTimeDisplay } from "./exit-time-display"
@@ -29,6 +29,14 @@ interface PendingPayment {
     color: string
     nombreDueño: string
     telefono: string
+    horaIngreso?: string
+    fechaRegistro?: string
+    imagenes?: {
+      plateImageUrl?: string
+      vehicleImageUrl?: string
+      fechaCaptura?: string
+      capturaMetodo?: string
+    }
   }
 }
 
@@ -155,6 +163,14 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
     }
   }
 
+  // Función para formatear datos con fallback
+  const formatDataWithFallback = (value: string | undefined) => {
+    if (!value || value === "Por definir" || value === "PENDIENTE") {
+      return "Dato no proporcionado"
+    }
+    return value
+  }
+
   if (isLoading) {
     return (
       <Card>
@@ -227,31 +243,123 @@ export default function PendingPayments({ onStatsUpdate }: PendingPaymentsProps)
                   variant="full"
                 />
 
-                {/* Información del Vehículo si existe */}
+                {/* Información del Vehículo con imágenes de referencia */}
                 {payment.carInfo && (
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-3">
                       <Car className="h-4 w-4 text-blue-600" />
-                      <h4 className="font-medium text-blue-800">Información del Vehículo</h4>
+                      <h4 className="font-medium text-blue-800">Vehículo a Retirar</h4>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-600">Placa:</span>
-                        <span className="font-medium ml-2">{payment.carInfo.placa}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Vehículo:</span>
-                        <span className="font-medium ml-2">
-                          {payment.carInfo.marca} {payment.carInfo.modelo}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Color:</span>
-                        <span className="font-medium ml-2">{payment.carInfo.color}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Propietario:</span>
-                        <span className="font-medium ml-2">{payment.carInfo.nombreDueño}</span>
+
+                    {/* Layout con imágenes y datos */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      {/* Columna 1: Imágenes de referencia */}
+                      {(payment.carInfo.imagenes?.plateImageUrl || payment.carInfo.imagenes?.vehicleImageUrl) && (
+                        <div className="space-y-3">
+                          <h5 className="text-sm font-medium text-gray-700 flex items-center">
+                            <ImageIcon className="h-4 w-4 mr-1" />
+                            Imágenes de Referencia
+                          </h5>
+
+                          <div className="space-y-2">
+                            {/* Imagen de la placa */}
+                            {payment.carInfo.imagenes?.plateImageUrl && (
+                              <div className="text-center">
+                                <p className="text-xs text-gray-500 mb-1">Placa</p>
+                                <img
+                                  src={payment.carInfo.imagenes.plateImageUrl || "/placeholder.svg"}
+                                  alt="Placa del vehículo"
+                                  className="w-full max-w-32 h-16 object-cover rounded border mx-auto"
+                                  onError={(e) => {
+                                    console.error("Error loading plate image:", payment.carInfo.imagenes?.plateImageUrl)
+                                    e.currentTarget.style.display = "none"
+                                  }}
+                                />
+                              </div>
+                            )}
+
+                            {/* Imagen del vehículo */}
+                            {payment.carInfo.imagenes?.vehicleImageUrl && (
+                              <div className="text-center">
+                                <p className="text-xs text-gray-500 mb-1">Vehículo</p>
+                                <img
+                                  src={payment.carInfo.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                                  alt="Vehículo"
+                                  className="w-full max-w-40 h-24 object-cover rounded border mx-auto"
+                                  onError={(e) => {
+                                    console.error(
+                                      "Error loading vehicle image:",
+                                      payment.carInfo.imagenes?.vehicleImageUrl,
+                                    )
+                                    e.currentTarget.style.display = "none"
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Metadatos de captura */}
+                          {payment.carInfo.imagenes?.fechaCaptura && (
+                            <div className="text-xs text-gray-500 text-center">
+                              <p>Capturado: {formatDateTime(payment.carInfo.imagenes.fechaCaptura)}</p>
+                              {payment.carInfo.imagenes.capturaMetodo && (
+                                <p className="capitalize">
+                                  Método: {payment.carInfo.imagenes.capturaMetodo.replace("_", " ")}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Columna 2 y 3: Datos del vehículo */}
+                      <div
+                        className={`${payment.carInfo.imagenes?.plateImageUrl || payment.carInfo.imagenes?.vehicleImageUrl ? "lg:col-span-2" : "lg:col-span-3"} grid grid-cols-1 md:grid-cols-2 gap-3`}
+                      >
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-gray-600 text-sm">Placa:</span>
+                            <span className="font-medium ml-2 text-lg">
+                              {formatDataWithFallback(payment.carInfo.placa)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 text-sm">Vehículo:</span>
+                            <span className="font-medium ml-2">
+                              {formatDataWithFallback(payment.carInfo.marca)}{" "}
+                              {formatDataWithFallback(payment.carInfo.modelo)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 text-sm">Color:</span>
+                            <span className="font-medium ml-2">{formatDataWithFallback(payment.carInfo.color)}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-gray-600 text-sm">Propietario:</span>
+                            <span className="font-medium ml-2">
+                              {formatDataWithFallback(payment.carInfo.nombreDueño)}
+                            </span>
+                          </div>
+                          {payment.carInfo.telefono &&
+                            payment.carInfo.telefono !== "Por definir" &&
+                            payment.carInfo.telefono !== "Dato no proporcionado" && (
+                              <div>
+                                <span className="text-gray-600 text-sm">Teléfono:</span>
+                                <span className="font-medium ml-2">{payment.carInfo.telefono}</span>
+                              </div>
+                            )}
+                          {(payment.carInfo.horaIngreso || payment.carInfo.fechaRegistro) && (
+                            <div>
+                              <span className="text-gray-600 text-sm">Ingreso:</span>
+                              <span className="font-medium ml-2 text-sm">
+                                {formatDateTime(payment.carInfo.fechaRegistro || payment.carInfo.horaIngreso)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

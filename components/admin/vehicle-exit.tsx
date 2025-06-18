@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { LogOut, Car, RefreshCw } from "lucide-react"
+import { LogOut, Car, RefreshCw, ImageIcon } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/utils"
 import { ExitTimeDisplay } from "./exit-time-display"
@@ -27,6 +27,14 @@ interface PaidTicket {
     color: string
     nombreDueño: string
     telefono: string
+    horaIngreso?: string
+    fechaRegistro?: string
+    imagenes?: {
+      plateImageUrl?: string
+      vehicleImageUrl?: string
+      fechaCaptura?: string
+      capturaMetodo?: string
+    }
   }
 }
 
@@ -146,6 +154,14 @@ export default function VehicleExit() {
     }
   }
 
+  // Función para formatear datos con fallback
+  const formatDataWithFallback = (value: string | undefined) => {
+    if (!value || value === "Por definir" || value === "PENDIENTE") {
+      return "Dato no proporcionado"
+    }
+    return value
+  }
+
   const filteredTickets = paidTickets.filter(
     (ticket) =>
       ticket.codigoTicket.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -219,7 +235,7 @@ export default function VehicleExit() {
         </div>
 
         {/* Lista de Tickets Pagados */}
-        <div className="space-y-3 max-h-96 overflow-y-auto">
+        <div className="space-y-4 max-h-96 overflow-y-auto">
           {filteredTickets.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -228,7 +244,8 @@ export default function VehicleExit() {
             </div>
           ) : (
             filteredTickets.map((ticket) => (
-              <div key={ticket._id} className="border rounded-lg p-4 space-y-3">
+              <div key={ticket._id} className="border rounded-lg p-4 space-y-4">
+                {/* Header con código y monto */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <h3 className="font-semibold text-lg">Espacio: {ticket.codigoTicket}</h3>
@@ -240,7 +257,7 @@ export default function VehicleExit() {
                   </div>
                 </div>
 
-                {/* Tiempo de salida programado - COMPONENTE REUTILIZABLE */}
+                {/* Tiempo de salida programado */}
                 {ticket.fechaPago && (
                   <ExitTimeDisplay
                     tiempoSalida={ticket.tiempoSalida}
@@ -251,41 +268,131 @@ export default function VehicleExit() {
                   />
                 )}
 
+                {/* Información del vehículo con imágenes */}
                 {ticket.carInfo && (
-                  <div className="bg-green-50 p-3 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-3">
                       <Car className="h-4 w-4 text-green-600" />
                       <h4 className="font-medium text-green-800">Vehículo a Retirar</h4>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-600">Placa:</span>
-                        <span className="font-medium ml-2">{ticket.carInfo.placa}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Vehículo:</span>
-                        <span className="font-medium ml-2">
-                          {ticket.carInfo.marca} {ticket.carInfo.modelo}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Color:</span>
-                        <span className="font-medium ml-2">{ticket.carInfo.color}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Propietario:</span>
-                        <span className="font-medium ml-2">{ticket.carInfo.nombreDueño}</span>
+
+                    {/* Layout con imágenes y datos */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      {/* Columna 1: Imágenes */}
+                      {(ticket.carInfo.imagenes?.plateImageUrl || ticket.carInfo.imagenes?.vehicleImageUrl) && (
+                        <div className="space-y-3">
+                          <h5 className="text-sm font-medium text-gray-700 flex items-center">
+                            <ImageIcon className="h-4 w-4 mr-1" />
+                            Imágenes de Referencia
+                          </h5>
+
+                          <div className="space-y-2">
+                            {/* Imagen de la placa */}
+                            {ticket.carInfo.imagenes?.plateImageUrl && (
+                              <div className="text-center">
+                                <p className="text-xs text-gray-500 mb-1">Placa</p>
+                                <img
+                                  src={ticket.carInfo.imagenes.plateImageUrl || "/placeholder.svg"}
+                                  alt="Placa del vehículo"
+                                  className="w-full max-w-32 h-16 object-cover rounded border mx-auto"
+                                  onError={(e) => {
+                                    console.error("Error loading plate image:", ticket.carInfo.imagenes?.plateImageUrl)
+                                    e.currentTarget.style.display = "none"
+                                  }}
+                                />
+                              </div>
+                            )}
+
+                            {/* Imagen del vehículo */}
+                            {ticket.carInfo.imagenes?.vehicleImageUrl && (
+                              <div className="text-center">
+                                <p className="text-xs text-gray-500 mb-1">Vehículo</p>
+                                <img
+                                  src={ticket.carInfo.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                                  alt="Vehículo"
+                                  className="w-full max-w-40 h-24 object-cover rounded border mx-auto"
+                                  onError={(e) => {
+                                    console.error(
+                                      "Error loading vehicle image:",
+                                      ticket.carInfo.imagenes?.vehicleImageUrl,
+                                    )
+                                    e.currentTarget.style.display = "none"
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Metadatos de captura */}
+                          {ticket.carInfo.imagenes?.fechaCaptura && (
+                            <div className="text-xs text-gray-500 text-center">
+                              <p>Capturado: {formatDateTime(ticket.carInfo.imagenes.fechaCaptura)}</p>
+                              {ticket.carInfo.imagenes.capturaMetodo && (
+                                <p className="capitalize">
+                                  Método: {ticket.carInfo.imagenes.capturaMetodo.replace("_", " ")}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Columna 2 y 3: Datos del vehículo */}
+                      <div
+                        className={`${ticket.carInfo.imagenes?.plateImageUrl || ticket.carInfo.imagenes?.vehicleImageUrl ? "lg:col-span-2" : "lg:col-span-3"} grid grid-cols-1 md:grid-cols-2 gap-3`}
+                      >
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-gray-600 text-sm">Placa:</span>
+                            <span className="font-medium ml-2 text-lg">
+                              {formatDataWithFallback(ticket.carInfo.placa)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 text-sm">Vehículo:</span>
+                            <span className="font-medium ml-2">
+                              {formatDataWithFallback(ticket.carInfo.marca)}{" "}
+                              {formatDataWithFallback(ticket.carInfo.modelo)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 text-sm">Color:</span>
+                            <span className="font-medium ml-2">{formatDataWithFallback(ticket.carInfo.color)}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-gray-600 text-sm">Propietario:</span>
+                            <span className="font-medium ml-2">
+                              {formatDataWithFallback(ticket.carInfo.nombreDueño)}
+                            </span>
+                          </div>
+                          {ticket.carInfo.telefono &&
+                            ticket.carInfo.telefono !== "Por definir" &&
+                            ticket.carInfo.telefono !== "Dato no proporcionado" && (
+                              <div>
+                                <span className="text-gray-600 text-sm">Teléfono:</span>
+                                <span className="font-medium ml-2">{ticket.carInfo.telefono}</span>
+                              </div>
+                            )}
+                          {(ticket.carInfo.horaIngreso || ticket.carInfo.fechaRegistro || ticket.horaOcupacion) && (
+                            <div>
+                              <span className="text-gray-600 text-sm">Ingreso:</span>
+                              <span className="font-medium ml-2 text-sm">
+                                {formatDateTime(
+                                  ticket.carInfo.fechaRegistro || ticket.carInfo.horaIngreso || ticket.horaOcupacion,
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {ticket.horaOcupacion && (
-                  <div className="text-sm text-gray-500">
-                    <p>Ingreso: {formatDateTime(ticket.horaOcupacion)}</p>
-                  </div>
-                )}
-
+                {/* Botón de salida */}
                 <Button
                   onClick={() => handleVehicleExit(ticket.codigoTicket)}
                   disabled={isProcessing === ticket.codigoTicket}

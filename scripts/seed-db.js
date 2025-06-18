@@ -7,7 +7,7 @@
  */
 
 const { MongoClient } = require("mongodb")
-require("dotenv").config({ path: ".env.local" })
+require("dotenv").config({ path: ".env" })
 
 const uri = process.env.MONGODB_URI
 
@@ -68,126 +68,22 @@ async function seedDatabase() {
     await db.collection("cars").deleteMany({})
     await db.collection("car_history").deleteMany({})
 
-    // Crear tickets de ejemplo con nuevo formato
-    const tickets = [
-      // Tickets nuevos disponibles para asignar
-      {
-        codigoTicket: "PARK001",
+    // Crear solo tickets disponibles para empezar con datos reales
+    const tickets = []
+    for (let i = 1; i <= 20; i++) {
+      tickets.push({
+        codigoTicket: `PARK${i.toString().padStart(3, "0")}`,
         estado: "disponible",
         fechaCreacion: new Date(),
         horaOcupacion: null,
         horaConfirmacion: null,
         montoCalculado: 0,
         ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "PARK002",
-        estado: "disponible",
-        fechaCreacion: new Date(),
-        horaOcupacion: null,
-        horaConfirmacion: null,
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "PARK003",
-        estado: "disponible",
-        fechaCreacion: new Date(),
-        horaOcupacion: null,
-        horaConfirmacion: null,
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "PARK004",
-        estado: "disponible",
-        fechaCreacion: new Date(),
-        horaOcupacion: null,
-        horaConfirmacion: null,
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "PARK005",
-        estado: "disponible",
-        fechaCreacion: new Date(),
-        horaOcupacion: null,
-        horaConfirmacion: null,
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      // Tickets con carros registrados pero pendientes de confirmación
-      {
-        codigoTicket: "PARK006",
-        estado: "ocupado",
-        fechaCreacion: new Date(),
-        horaOcupacion: new Date(Date.now() - 10 * 60 * 1000), // 10 minutos atrás
-        horaConfirmacion: null,
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "PARK007",
-        estado: "ocupado",
-        fechaCreacion: new Date(),
-        horaOcupacion: new Date(Date.now() - 15 * 60 * 1000), // 15 minutos atrás
-        horaConfirmacion: null,
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      // Tickets confirmados y listos para pagar
-      {
-        codigoTicket: "TEST001",
-        horaEntrada: new Date(Date.now() - 60 * 60 * 1000), // 1 hora atrás
-        horaSalida: null,
-        estado: "estacionado_confirmado",
-        horaOcupacion: new Date(Date.now() - 60 * 60 * 1000),
-        horaConfirmacion: new Date(Date.now() - 55 * 60 * 1000), // Confirmado 5 min después
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "TEST002",
-        horaEntrada: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 horas atrás
-        horaSalida: null,
-        estado: "estacionado_confirmado",
-        horaOcupacion: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        horaConfirmacion: new Date(Date.now() - 115 * 60 * 1000), // Confirmado 5 min después
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      // Tickets legacy confirmados (LISTOS PARA PAGAR)
-      {
-        codigoTicket: "ABC123",
-        horaEntrada: new Date(Date.now() - 30 * 60 * 1000), // 30 minutos atrás
-        horaSalida: null,
-        estado: "estacionado_confirmado",
-        horaConfirmacion: new Date(Date.now() - 25 * 60 * 1000),
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "XYZ789",
-        horaEntrada: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 horas atrás
-        horaSalida: null,
-        estado: "estacionado_confirmado",
-        horaConfirmacion: new Date(Date.now() - 235 * 60 * 1000),
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-      {
-        codigoTicket: "TEST003",
-        horaEntrada: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 horas atrás
-        horaSalida: null,
-        estado: "estacionado_confirmado",
-        horaConfirmacion: new Date(Date.now() - 175 * 60 * 1000),
-        montoCalculado: 0,
-        ultimoPagoId: null,
-      },
-    ]
+      })
+    }
 
     const result = await db.collection("tickets").insertMany(tickets)
-    console.log(`✅ ${result.insertedCount} tickets insertados`)
+    console.log(`✅ ${result.insertedCount} tickets disponibles creados`)
 
     // Crear datos de ejemplo para el personal
     const staffMembers = [
@@ -235,169 +131,28 @@ async function seedDatabase() {
     await db.collection("banks").insertMany(venezuelanBanks)
     console.log(`✅ ${venezuelanBanks.length} bancos insertados`)
 
-    // Crear algunos carros de ejemplo correctamente asociados
-    const exampleCars = [
-      // Carros confirmados y listos para pagar
-      {
-        placa: "ABC123",
-        marca: "Toyota",
-        modelo: "Corolla",
-        color: "Blanco",
-        nombreDueño: "Juan Pérez",
-        telefono: "0414-1234567",
-        ticketAsociado: "TEST001",
-        horaIngreso: new Date(Date.now() - 60 * 60 * 1000),
-        estado: "estacionado",
-        fechaRegistro: new Date(),
-      },
-      {
-        placa: "XYZ789",
-        marca: "Chevrolet",
-        modelo: "Aveo",
-        color: "Azul",
-        nombreDueño: "María González",
-        telefono: "0424-9876543",
-        ticketAsociado: "TEST002",
-        horaIngreso: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        estado: "estacionado",
-        fechaRegistro: new Date(),
-      },
-      // Carros registrados pero pendientes de confirmación
-      {
-        placa: "DEF456",
-        marca: "Ford",
-        modelo: "Fiesta",
-        color: "Rojo",
-        nombreDueño: "Carlos Rodríguez",
-        telefono: "0412-5555555",
-        ticketAsociado: "PARK006",
-        horaIngreso: new Date(Date.now() - 10 * 60 * 1000),
-        estado: "registrado",
-        fechaRegistro: new Date(),
-      },
-      {
-        placa: "GHI789",
-        marca: "Nissan",
-        modelo: "Sentra",
-        color: "Negro",
-        nombreDueño: "Ana López",
-        telefono: "0416-7777777",
-        ticketAsociado: "PARK007",
-        horaIngreso: new Date(Date.now() - 15 * 60 * 1000),
-        estado: "registrado",
-        fechaRegistro: new Date(),
-      },
-    ]
+    console.log("\n🎉 Base de datos inicializada para datos reales")
+    console.log("\n📋 TICKETS DISPONIBLES:")
+    console.log("   📝 PARK001-PARK020: Listos para asignar nuevos vehículos")
+    console.log("   ⚠️  Estos tickets están disponibles para el registro de vehículos")
 
-    const carsResult = await db.collection("cars").insertMany(exampleCars)
-    console.log(`✅ ${carsResult.insertedCount} carros de ejemplo insertados`)
-
-    // Crear entradas en el historial para los carros de ejemplo
-    const historyEntries = [
-      // Carros confirmados
-      {
-        carId: carsResult.insertedIds[0].toString(),
-        placa: "ABC123",
-        marca: "Toyota",
-        modelo: "Corolla",
-        color: "Blanco",
-        nombreDueño: "Juan Pérez",
-        telefono: "0414-1234567",
-        ticketAsociado: "TEST001",
-        horaIngreso: new Date(Date.now() - 60 * 60 * 1000),
-        horaSalida: null,
-        montoTotal: 0,
-        pagoId: null,
-        estado: "estacionado",
-        fechaRegistro: new Date(),
-      },
-      {
-        carId: carsResult.insertedIds[1].toString(),
-        placa: "XYZ789",
-        marca: "Chevrolet",
-        modelo: "Aveo",
-        color: "Azul",
-        nombreDueño: "María González",
-        telefono: "0424-9876543",
-        ticketAsociado: "TEST002",
-        horaIngreso: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        horaSalida: null,
-        montoTotal: 0,
-        pagoId: null,
-        estado: "estacionado",
-        fechaRegistro: new Date(),
-      },
-      // Carros pendientes de confirmación
-      {
-        carId: carsResult.insertedIds[2].toString(),
-        placa: "DEF456",
-        marca: "Ford",
-        modelo: "Fiesta",
-        color: "Rojo",
-        nombreDueño: "Carlos Rodríguez",
-        telefono: "0412-5555555",
-        ticketAsociado: "PARK006",
-        horaIngreso: new Date(Date.now() - 10 * 60 * 1000),
-        horaSalida: null,
-        montoTotal: 0,
-        pagoId: null,
-        estado: "registrado",
-        fechaRegistro: new Date(),
-      },
-      {
-        carId: carsResult.insertedIds[3].toString(),
-        placa: "GHI789",
-        marca: "Nissan",
-        modelo: "Sentra",
-        color: "Negro",
-        nombreDueño: "Ana López",
-        telefono: "0416-7777777",
-        ticketAsociado: "PARK007",
-        horaIngreso: new Date(Date.now() - 15 * 60 * 1000),
-        horaSalida: null,
-        montoTotal: 0,
-        pagoId: null,
-        estado: "registrado",
-        fechaRegistro: new Date(),
-      },
-    ]
-
-    await db.collection("car_history").insertMany(historyEntries)
-    console.log(`✅ ${historyEntries.length} entradas de historial creadas`)
-
-    console.log("\n🎉 Base de datos inicializada con datos de ejemplo")
-    console.log("\n🚗 TICKETS LISTOS PARA PAGAR (confirmados):")
-    console.log("   ✅ TEST001: Toyota Corolla (ABC123) - Juan Pérez - $3.00 aprox")
-    console.log("   ✅ TEST002: Chevrolet Aveo (XYZ789) - María González - $6.00 aprox")
-    console.log("   ✅ ABC123: Ticket legacy - $1.50 aprox (25 min)")
-    console.log("   ✅ XYZ789: Ticket legacy - $12.00 aprox (4 horas)")
-    console.log("   ✅ TEST003: Ticket legacy - $9.00 aprox (3 horas)")
-
-    console.log("\n⚠️  VEHÍCULOS PENDIENTES DE CONFIRMACIÓN:")
-    console.log("   🚗 PARK006: Ford Fiesta (DEF456) - Carlos Rodríguez")
-    console.log("   🚗 PARK007: Nissan Sentra (GHI789) - Ana López")
-    console.log("   📋 Estos aparecen en la pestaña 'Confirmar' del admin")
-
-    console.log("\n📋 TICKETS DISPONIBLES (sin carros asignados):")
-    console.log("   📝 PARK001-PARK005: Disponibles para asignar nuevos carros")
-    console.log("   ⚠️  Estos NO se pueden buscar hasta asignar un carro")
-
-    console.log("\n🧪 PRUEBAS RECOMENDADAS:")
-    console.log("   1. 🔍 Buscar TEST001, TEST002, ABC123, XYZ789, TEST003")
-    console.log("   2. 📋 Confirmar PARK006 y PARK007 en pestaña 'Confirmar'")
-    console.log("   3. 💳 Completar proceso de pago para cualquiera")
-    console.log("   4. 🚗 Registrar nuevo carro con PARK001 en panel admin")
-    console.log("   5. 🚪 Procesar salidas en pestaña 'Salidas'")
-    console.log("   6. 📱 Generar y escanear códigos QR")
+    console.log("\n🚗 FLUJO RECOMENDADO:")
+    console.log("   1. 📸 Registrar vehículo con fotos (Captura de Vehículo)")
+    console.log("   2. ✅ Confirmar estacionamiento (pestaña 'Confirmar')")
+    console.log("   3. 💳 Cliente realiza pago")
+    console.log("   4. ✅ Validar pago (pestaña 'Pagos Pendientes')")
+    console.log("   5. 🚪 Procesar salida (pestaña 'Salidas')")
 
     console.log("\n🔐 Acceso al panel de administración:")
     console.log("   URL: http://localhost:3000/admin")
     console.log("   Usuario: admin")
     console.log("   Contraseña: admin123")
-    console.log("\n🎯 FLUJO COMPLETO:")
-    console.log(
-      "   1. Registrar carro → 2. Confirmar estacionamiento → 3. Cliente paga → 4. Validar pago → 5. Procesar salida",
-    )
+
+    console.log("\n✨ SISTEMA LISTO PARA DATOS REALES:")
+    console.log("   • Sin datos dummy - empezar desde cero")
+    console.log("   • 20 espacios de estacionamiento disponibles")
+    console.log("   • Configuración básica lista")
+    console.log("   • Bancos venezolanos configurados")
   } catch (err) {
     console.error("❌ Error:", err)
   } finally {
