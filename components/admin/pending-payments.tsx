@@ -1,57 +1,57 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { CheckCircle, XCircle, RefreshCw, Car, ImageIcon } from "lucide-react"
-import { formatCurrency, formatDateTime } from "@/lib/utils"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import  ExitTimeDisplay from "./exit-time-display"
-import { sortPaymentsByUrgency } from "@/lib/payment-utils"
-import ImageWithFallback from "../image-with-fallback"
-import React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, XCircle, RefreshCw, Car, ImageIcon } from "lucide-react";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import ExitTimeDisplay from "./exit-time-display";
+import { sortPaymentsByUrgency } from "@/lib/payment-utils";
+import ImageWithFallback from "../image-with-fallback";
+import React from "react";
 
 export interface PendingPayment {
-  _id: string
-  codigoTicket: string
-  referenciaTransferencia: string
-  banco: string
-  telefono: string
-  numeroIdentidad: string
-  montoPagado: number
-  montoCalculado: number
-  fechaPago: string
-  estado: string
-  tiempoSalida?: string
-  tiempoSalidaEstimado?: string
+  _id: string;
+  codigoTicket: string;
+  referenciaTransferencia: string;
+  banco: string;
+  telefono: string;
+  numeroIdentidad: string;
+  montoPagado: number;
+  montoCalculado: number;
+  fechaPago: string;
+  estado: string;
+  tiempoSalida?: string;
+  tiempoSalidaEstimado?: string;
   carInfo: {
-    placa: string
-    marca: string
-    modelo: string
-    color: string
-    nombreDueño: string
-    telefono: string
-    horaIngreso?: string
-    fechaRegistro?: string
+    placa: string;
+    marca: string;
+    modelo: string;
+    color: string;
+    nombreDueño: string;
+    telefono: string;
+    horaIngreso?: string;
+    fechaRegistro?: string;
     imagenes?: {
-      plateImageUrl?: string
-      vehicleImageUrl?: string
-      fechaCaptura?: string
-      capturaMetodo?: string
-    }
-  }
+      plateImageUrl?: string;
+      vehicleImageUrl?: string;
+      fechaCaptura?: string;
+      capturaMetodo?: string;
+    };
+  };
 }
 
 interface PendingPaymentsProps {
-  onStatsUpdate: () => void
+  onStatsUpdate: () => void;
 }
 
 interface PendingPaymentCardProps {
-  payment: PendingPayment
-  onValidate: (id: string) => void
-  onReject: (id: string) => void
-  isProcessing: boolean
+  payment: PendingPayment;
+  onValidate: (id: string) => void;
+  onReject: (id: string) => void;
+  isProcessing: boolean;
 }
 
 const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
@@ -61,15 +61,15 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
   isProcessing,
 }) => {
   if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizando PendingPaymentCard para ticket ${payment.codigoTicket}`)
+    console.log(`🔍 DEBUG: Renderizando PendingPaymentCard para ticket ${payment.codigoTicket}`);
   }
 
   const formatDataWithFallback = (value: string | undefined) => {
     if (!value || value === "Por definir" || value === "PENDIENTE") {
-      return "Dato no proporcionado"
+      return "Dato no proporcionado";
     }
-    return value
-  }
+    return value;
+  };
 
   return (
     <div className="border rounded-lg p-4 space-y-4 bg-white shadow-sm">
@@ -100,59 +100,7 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {(payment.carInfo.imagenes?.plateImageUrl || payment.carInfo.imagenes?.vehicleImageUrl) && (
-              <div className="space-y-3">
-                <h5 className="text-sm font-medium text-gray-700 flex items-center">
-                  <ImageIcon className="h-4 w-4 mr-1" />
-                  Imágenes de Referencia
-                </h5>
-
-                <div className="space-y-4">
-                  {payment.carInfo.imagenes?.plateImageUrl && (
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500 mb-1">Placa</p>
-                      <ImageWithFallback
-                        src={payment.carInfo.imagenes.plateImageUrl}
-                        alt={`Placa del vehículo ${payment.carInfo.placa}`}
-                        className="w-full max-w-32 h-16 object-cover rounded border mx-auto"
-                        fallback="/placeholder.svg"
-                      />
-                    </div>
-                  )}
-
-                  {payment.carInfo.imagenes?.vehicleImageUrl && (
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500 mb-1">Vehículo</p>
-                      <ImageWithFallback
-                        src={payment.carInfo.imagenes.vehicleImageUrl}
-                        alt={`Vehículo ${payment.carInfo.marca} ${payment.carInfo.modelo}`}
-                        className="w-full max-w-40 h-24 object-cover rounded border mx-auto"
-                        fallback="/placeholder.svg"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {payment.carInfo.imagenes?.fechaCaptura && (
-                  <div className="text-xs text-gray-500 text-center">
-                    <p>Capturado: {formatDateTime(payment.carInfo.imagenes.fechaCaptura)}</p>
-                    {payment.carInfo.imagenes.capturaMetodo && (
-                      <p className="capitalize">
-                        Método: {payment.carInfo.imagenes.capturaMetodo.replace("_", " ")}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div
-              className={`${
-                payment.carInfo.imagenes?.plateImageUrl || payment.carInfo.imagenes?.vehicleImageUrl
-                  ? "lg:col-span-2"
-                  : "lg:col-span-3"
-              } grid grid-cols-1 md:grid-cols-2 gap-3`}
-            >
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <div>
                   <span className="text-gray-600 text-sm">Placa:</span>
@@ -191,6 +139,49 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
                 )}
               </div>
             </div>
+
+            {(payment.carInfo.imagenes?.plateImageUrl || payment.carInfo.imagenes?.vehicleImageUrl) && (
+              <div className="lg:col-span-3 mt-4">
+                <h5 className="text-sm font-medium text-gray-700 flex items-center mb-2">
+                  <ImageIcon className="h-4 w-4 mr-1" />
+                  Imágenes de Referencia
+                </h5>
+                <div className="flex flex-wrap gap-4 justify-center">
+                  {payment.carInfo.imagenes?.plateImageUrl && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 mb-1">Placa</p>
+                      <ImageWithFallback
+                        src={payment.carInfo.imagenes.plateImageUrl}
+                        alt={`Placa del vehículo ${payment.carInfo.placa}`}
+                        className="w-64 h-48 object-cover rounded border"
+                        fallback="/placeholder.svg"
+                      />
+                    </div>
+                  )}
+                  {payment.carInfo.imagenes?.vehicleImageUrl && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 mb-1">Vehículo</p>
+                      <ImageWithFallback
+                        src={payment.carInfo.imagenes.vehicleImageUrl}
+                        alt={`Vehículo ${payment.carInfo.marca} ${payment.carInfo.modelo}`}
+                        className="w-64 h-48 object-cover rounded border"
+                        fallback="/placeholder.svg"
+                      />
+                    </div>
+                  )}
+                </div>
+                {payment.carInfo.imagenes?.fechaCaptura && (
+                  <div className="text-xs text-gray-500 text-center mt-2">
+                    <p>Capturado: {formatDateTime(payment.carInfo.imagenes.fechaCaptura)}</p>
+                    {payment.carInfo.imagenes.capturaMetodo && (
+                      <p className="capitalize">
+                        Método: {payment.carInfo.imagenes.capturaMetodo.replace("_", " ")}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -257,78 +248,80 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
         </Button>
       </div>
     </div>
-  )
-}
+  );
+};
 
 const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
-  const [payments, setPayments] = useState<PendingPayment[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [processingId, setProcessingId] = useState<string | null>(null)
-  const [error, setError] = useState("")
-  const isFetchingRef = useRef(false)
-  const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
-  const fetchCounterRef = useRef(0)
-  const renderCountRef = useRef(0)
-  const prevOnStatsUpdateRef = useRef(onStatsUpdate)
-  const prevPaymentsRef = useRef<PendingPayment[]>(payments)
+  const [payments, setPayments] = useState<PendingPayment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const isFetchingRef = useRef(false);
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchCounterRef = useRef(0);
+  const renderCountRef = useRef(0);
+  const prevOnStatsUpdateRef = useRef(onStatsUpdate);
+  const prevPaymentsRef = useRef<PendingPayment[]>(payments);
 
   // Log para cambios de estado
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log(`🔍 DEBUG: Estado actualizado - payments.length: ${payments.length}, isLoading: ${isLoading}, error: ${error}`)
+      console.log(
+        `🔍 DEBUG: Estado actualizado - payments.length: ${payments.length}, isLoading: ${isLoading}, error: ${error}`
+      );
     }
-  }, [payments, isLoading, error])
+  }, [payments, isLoading, error]);
 
   // Log para renderizados
-  renderCountRef.current += 1
+  renderCountRef.current += 1;
   if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizado de PendingPayments #${renderCountRef.current}`)
+    console.log(`🔍 DEBUG: Renderizado de PendingPayments #${renderCountRef.current}`);
     if (prevOnStatsUpdateRef.current !== onStatsUpdate) {
-      console.log("🔍 DEBUG: onStatsUpdate cambió, posible causa de re-render")
-      prevOnStatsUpdateRef.current = onStatsUpdate
+      console.log("🔍 DEBUG: onStatsUpdate cambió, posible causa de re-render");
+      prevOnStatsUpdateRef.current = onStatsUpdate;
     }
   }
 
   // Log para montaje/desmontaje
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG: Montando PendingPayments")
+      console.log("🔍 DEBUG: Montando PendingPayments");
     }
     return () => {
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Desmontando PendingPayments")
+        console.log("🔍 DEBUG: Desmontando PendingPayments");
       }
-    }
-  }, [])
+    };
+  }, []);
 
   const sortedPayments = useMemo(() => {
-    return [...payments].sort(sortPaymentsByUrgency)
-  }, [payments])
+    return [...payments].sort(sortPaymentsByUrgency);
+  }, [payments]);
 
   const arePaymentsEqual = (newPayments: PendingPayment[], oldPayments: PendingPayment[]) => {
-    if (newPayments.length !== oldPayments.length) return false
-    if (newPayments.length === 0) return true // Ambos vacíos
-    return newPayments.every((newPayment, index) => newPayment._id === oldPayments[index]._id)
-  }
+    if (newPayments.length !== oldPayments.length) return false;
+    if (newPayments.length === 0) return true; // Ambos vacíos
+    return newPayments.every((newPayment, index) => newPayment._id === oldPayments[index]._id);
+  };
 
   const fetchPendingPayments = useCallback(async (showLoading = true, source = "unknown") => {
-    fetchCounterRef.current += 1
-    const fetchId = fetchCounterRef.current
+    fetchCounterRef.current += 1;
+    const fetchId = fetchCounterRef.current;
     if (isFetchingRef.current) {
       if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Solicitud #${fetchId} en curso (fuente: ${source}), omitiendo fetch`)
+        console.log(`🔍 DEBUG: Solicitud #${fetchId} en curso (fuente: ${source}), omitiendo fetch`);
       }
-      return
+      return;
     }
 
     try {
       if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Iniciando solicitud #${fetchId} (fuente: ${source})`)
+        console.log(`🔍 DEBUG: Iniciando solicitud #${fetchId} (fuente: ${source})`);
       }
-      if (showLoading) setIsLoading(true)
-      isFetchingRef.current = true
+      if (showLoading) setIsLoading(true);
+      isFetchingRef.current = true;
 
-      const timestamp = new Date().getTime()
+      const timestamp = new Date().getTime();
       const response = await fetch(`/api/admin/pending-payments?t=${timestamp}`, {
         method: "GET",
         headers: {
@@ -336,48 +329,48 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
           Pragma: "no-cache",
           Expires: "0",
         },
-      })
+      });
 
       if (!response.ok) {
-        throw new Error("Error al cargar pagos pendientes")
+        throw new Error("Error al cargar pagos pendientes");
       }
 
-      const data = await response.json()
+      const data = await response.json();
       if (!Array.isArray(data)) {
-        throw new Error("Formato de datos inválido: se esperaba un array")
+        throw new Error("Formato de datos inválido: se esperaba un array");
       }
 
       if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Respuesta de solicitud #${fetchId} (fuente: ${source})`, data)
+        console.log(`🔍 DEBUG: Respuesta de solicitud #${fetchId} (fuente: ${source})`, data);
       }
 
       // Evitar actualizar si los datos no han cambiado
       if (!arePaymentsEqual(data as PendingPayment[], prevPaymentsRef.current)) {
-        setPayments(data as PendingPayment[])
-        prevPaymentsRef.current = data as PendingPayment[]
+        setPayments(data as PendingPayment[]);
+        prevPaymentsRef.current = data as PendingPayment[];
       } else {
         if (process.env.NODE_ENV === "development") {
-          console.log(`🔍 DEBUG: Omitiendo actualización de payments, datos idénticos (fuente: ${source})`)
+          console.log(`🔍 DEBUG: Omitiendo actualización de payments, datos idénticos (fuente: ${source})`);
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar datos")
+      setError(err instanceof Error ? err.message : "Error al cargar datos");
       if (process.env.NODE_ENV === "development") {
-        console.error(`🔍 DEBUG: Error en solicitud #${fetchId} (fuente: ${source})`, err)
+        console.error(`🔍 DEBUG: Error en solicitud #${fetchId} (fuente: ${source})`, err);
       }
     } finally {
-      if (showLoading) setIsLoading(false)
-      isFetchingRef.current = false
+      if (showLoading) setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [])
+  }, []);
 
   const handlePaymentAction = useCallback(
     async (paymentId: string, action: "validate" | "reject") => {
       try {
-        setProcessingId(paymentId)
-        setError("")
+        setProcessingId(paymentId);
+        setError("");
 
-        const timestamp = new Date().getTime()
+        const timestamp = new Date().getTime();
         const response = await fetch(`/api/admin/${action}-payment?t=${timestamp}`, {
           method: "PUT",
           headers: {
@@ -387,54 +380,56 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
             Expires: "0",
           },
           body: JSON.stringify({ paymentId }),
-        })
+        });
 
         if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.message || `Error al ${action === "validate" ? "validar" : "rechazar"} el pago`)
+          const errorData = await response.json();
+          throw new Error(
+            errorData.message || `Error al ${action === "validate" ? "validar" : "rechazar"} el pago`
+          );
         }
 
-        await fetchPendingPayments(false, `${action}-payment`)
-        onStatsUpdate()
+        await fetchPendingPayments(false, `${action}-payment`);
+        onStatsUpdate();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al procesar la acción")
+        setError(err instanceof Error ? err.message : "Error al procesar la acción");
       } finally {
-        setProcessingId(null)
+        setProcessingId(null);
       }
     },
     [fetchPendingPayments, onStatsUpdate]
-  )
+  );
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG: Configurando useEffect inicial")
+      console.log("🔍 DEBUG: Configurando useEffect inicial");
     }
-    fetchPendingPayments(true, "initial-mount")
+    fetchPendingPayments(true, "initial-mount");
 
     if (intervalIdRef.current) {
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Limpiando intervalo previo antes de crear uno nuevo")
+        console.log("🔍 DEBUG: Limpiando intervalo previo antes de crear uno nuevo");
       }
-      clearInterval(intervalIdRef.current)
+      clearInterval(intervalIdRef.current);
     }
 
     intervalIdRef.current = setInterval(() => {
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Ejecutando fetch desde intervalo")
+        console.log("🔍 DEBUG: Ejecutando fetch desde intervalo");
       }
-      fetchPendingPayments(false, "interval")
-    }, 10000)
+      fetchPendingPayments(false, "interval");
+    }, 10000);
 
     return () => {
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Limpiando intervalo en desmontaje")
+        console.log("🔍 DEBUG: Limpiando intervalo en desmontaje");
       }
       if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current)
-        intervalIdRef.current = null
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
       }
-    }
-  }, [fetchPendingPayments])
+    };
+  }, [fetchPendingPayments]);
 
   if (isLoading) {
     return (
@@ -448,7 +443,7 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -482,9 +477,7 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
           <div className="text-center py-8 text-gray-500">
             <p className="text-lg font-medium">No hay pagos pendientes</p>
             <p className="text-sm">Todos los pagos han sido procesados</p>
-            {process.env.NODE_ENV === "development" && (
-              <p>🔍 DEBUG: Renderizando vista de lista vacía</p>
-            )}
+            {process.env.NODE_ENV === "development" && <p>🔍 DEBUG: Renderizando vista de lista vacía</p>}
           </div>
         ) : (
           <div className="space-y-4">
@@ -501,7 +494,7 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
         )}
       </CardContent>
     </Card>
-  )
-}
+  );
+};
 
-export default React.memo(PendingPayments)
+export default React.memo(PendingPayments);

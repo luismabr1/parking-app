@@ -1,45 +1,46 @@
-"use client"
+"use client";
 
-import { memo, useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronUp, CarIcon, RefreshCw, ImageIcon, Edit } from "lucide-react"
-import { formatDateTime } from "@/lib/utils"
+import { memo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronUp, CarIcon, RefreshCw, ImageIcon, Edit } from "lucide-react";
+import { formatDateTime } from "@/lib/utils";
+import ImageWithFallback from "../image-with-fallback";
 
 interface CarProps {
-  _id: string
-  placa: string
-  marca: string
-  modelo: string
-  color: string
-  nombreDueño: string
-  telefono: string
-  ticketAsociado: string
-  horaIngreso: string
-  estado: string
+  _id: string;
+  placa: string;
+  marca: string;
+  modelo: string;
+  color: string;
+  nombreDueño: string;
+  telefono: string;
+  ticketAsociado: string;
+  horaIngreso: string;
+  estado: string;
   imagenes?: {
-    placaUrl?: string
-    vehiculoUrl?: string
-    fechaCaptura?: string
-    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
-    confianzaPlaca?: number
-    confianzaVehiculo?: number
-  }
+    plateImageUrl?: string;
+    vehicleImageUrl?: string;
+    fechaCaptura?: string;
+    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop";
+    confianzaPlaca?: number;
+    confianzaVehiculo?: number;
+  };
 }
 
 interface MobileCarListProps {
-  cars: CarProps[]
-  onRefresh: () => void
-  onViewImages: (car: CarProps) => void
+  cars: CarProps[];
+  onRefresh: () => void;
+  onViewImages: (car: CarProps) => void;
 }
 
 function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  const activeCars = cars.filter((car) => car.estado === "estacionado")
+  const activeCars = cars.filter((car) => car.estado === "estacionado");
 
   if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizando MobileCarList con ${activeCars.length} carros`)
+    console.log(`🔍 DEBUG: Renderizando MobileCarList con ${activeCars.length} carros`);
   }
 
   return (
@@ -57,8 +58,8 @@ function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
           <div className="flex items-center space-x-2">
             <button
               onClick={(e) => {
-                e.stopPropagation()
-                onRefresh()
+                e.stopPropagation();
+                onRefresh();
               }}
               className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-gray-200"
               aria-label="Actualizar lista"
@@ -71,12 +72,29 @@ function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
 
         {!isExpanded && activeCars.length > 0 && (
           <div className="mt-3 pt-3 border-t">
-            <div className="text-center text-sm text-gray-600">
+            <div className="text-center text-sm text-gray-600 flex items-center justify-center flex-wrap">
               Últimos:{" "}
-              {activeCars
-                .slice(0, 3)
-                .map((car) => car.placa)
-                .join(", ")}
+              {activeCars.slice(0, 3).map((car, index) => (
+                <div key={car._id} className="flex items-center space-x-2 mr-2 mb-2">
+                  <span>{car.placa}</span>
+                  {car.imagenes && (
+                    <div className="flex space-x-1">
+                      <ImageWithFallback
+                        src={car.imagenes.plateImageUrl || "/placeholder.svg"}
+                        alt={`Placa de ${car.placa}`}
+                        className="w-12 h-8 object-cover rounded border" // Increased to 12x8px
+                        fallback="/placeholder.svg"
+                      />
+                      <ImageWithFallback
+                        src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                        alt={`Vehículo de ${car.placa}`}
+                        className="w-12 h-8 object-cover rounded border" // Increased to 12x8px
+                        fallback="/placeholder.svg"
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
               {activeCars.length > 3 && ` +${activeCars.length - 3} más`}
             </div>
           </div>
@@ -92,30 +110,43 @@ function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
             ) : (
               activeCars.map((car) => (
                 <div key={car._id} className="p-3 border rounded-lg bg-gray-50">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-lg">{car.placa}</p>
-                      <p className="text-sm text-gray-600">Ticket: {car.ticketAsociado}</p>
-                      {car.imagenes && (
-                        <div className="flex items-center space-x-1 mt-1">
-                          <ImageIcon className="h-4 w-4 text-blue-500" />
-                          <span className="text-xs text-blue-600">Con imágenes</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-right space-y-1">
-                      <p className="text-xs text-gray-500">
-                        {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
-                      </p>
-                      {car.imagenes && (
-                        <button
-                          onClick={() => onViewImages(car)}
-                          className="text-blue-600 hover:underline text-xs"
-                        >
-                          <Edit className="h-3 w-3 inline mr-1" />
-                          Ver/Editar
-                        </button>
-                      )}
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium text-lg">{car.placa}</p>
+                        <p className="text-sm text-gray-600">Ticket: {car.ticketAsociado}</p>
+                        {car.imagenes && (
+                          <div className="flex items-center space-x-2 mt-1">
+                            <ImageWithFallback
+                              src={car.imagenes.plateImageUrl || "/placeholder.svg"}
+                              alt={`Placa de ${car.placa}`}
+                              className="w-24 h-16 object-cover rounded border" // Increased to 24x16px
+                              fallback="/placeholder.svg"
+                            />
+                            <ImageWithFallback
+                              src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                              alt={`Vehículo de ${car.placa}`}
+                              className="w-24 h-16 object-cover rounded border" // Increased to 24x16px
+                              fallback="/placeholder.svg"
+                            />
+                            <span className="text-xs text-blue-600">Con imágenes</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right space-y-1">
+                        <p className="text-xs text-gray-500">
+                          {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
+                        </p>
+                        {car.imagenes && (
+                          <button
+                            onClick={() => onViewImages(car)}
+                            className="text-blue-600 hover:underline text-xs"
+                          >
+                            <Edit className="h-3 w-3 inline mr-1" />
+                            Ver/Editar
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -125,7 +156,7 @@ function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
 
-export default memo(MobileCarList)
+export default memo(MobileCarList);

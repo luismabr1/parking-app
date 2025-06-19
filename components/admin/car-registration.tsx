@@ -1,78 +1,77 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { memo, useState, useEffect, useCallback } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CarIcon, RefreshCw, Plus, Camera, Smartphone, Monitor, ImageIcon, Edit } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { formatDateTime } from "@/lib/utils"
-import { useMobileDetection } from "@/hooks/use-mobile-detection"
-import VehicleCapture from "./vehicle-capture"
-import MobileStats from "./mobile-stats"
-import MobileCarList from "./mobile-car-list"
-import CarImageViewer from "./car-image-viewer"
+import type React from "react";
+import { memo, useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CarIcon, RefreshCw, Plus, Camera, Smartphone, Monitor, ImageIcon, Edit } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatDateTime } from "@/lib/utils";
+import { useMobileDetection } from "@/hooks/use-mobile-detection";
+import VehicleCapture from "./vehicle-capture";
+import MobileStats from "./mobile-stats";
+import MobileCarList from "./mobile-car-list";
+import CarImageViewer from "./car-image-viewer";
+import ImageWithFallback from "../image-with-fallback"; // Import the existing component
 
 interface AvailableTicket {
-  _id: string
-  codigoTicket: string
-  estado: string
+  _id: string;
+  codigoTicket: string;
+  estado: string;
 }
 
 interface Car {
-  _id: string
-  placa: string
-  marca: string
-  modelo: string
-  color: string
-  nombreDueño: string
-  telefono: string
-  ticketAsociado: string
-  horaIngreso: string
-  estado: string
+  _id: string;
+  placa: string;
+  marca: string;
+  modelo: string;
+  color: string;
+  nombreDueño: string;
+  telefono: string;
+  ticketAsociado: string;
+  horaIngreso: string;
+  estado: string;
   imagenes?: {
-    placaUrl?: string
-    vehiculoUrl?: string
-    fechaCaptura?: string
-    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
-    confianzaPlaca?: number
-    confianzaVehiculo?: number
-  }
+    plateImageUrl?: string;  // Updated to match API
+    vehicleImageUrl?: string; // Updated to match API
+    fechaCaptura?: string;
+    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop";
+    confianzaPlaca?: number;
+    confianzaVehiculo?: number;
+  };
 }
 
 interface CarFormData {
-  placa: string
-  marca: string
-  modelo: string
-  color: string
-  nombreDueño: string
-  telefono: string
-  ticketAsociado: string
+  placa: string;
+  marca: string;
+  modelo: string;
+  color: string;
+  nombreDueño: string;
+  telefono: string;
+  ticketAsociado: string;
 }
 
 // Deep comparison for arrays
 const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
-  if (arr1.length !== arr2.length) return false
+  if (arr1.length !== arr2.length) return false;
   return arr1.every((item1, i) => {
-    const item2 = arr2[i]
-    return Object.keys(item1).every(
-      (key) => item1[key as keyof T] === item2[key as keyof T]
-    )
-  })
-}
+    const item2 = arr2[i];
+    return Object.keys(item1).every((key) => item1[key as keyof T] === item2[key as keyof T]);
+  });
+};
 
 function CarRegistration() {
-  const [cars, setCars] = useState<Car[]>([])
-  const [availableTickets, setAvailableTickets] = useState<AvailableTicket[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [message, setMessage] = useState("")
-  const [showVehicleCapture, setShowVehicleCapture] = useState(false)
-  const [selectedCarImages, setSelectedCarImages] = useState<Car | null>(null)
-  const isMobile = useMobileDetection()
+  const [cars, setCars] = useState<Car[]>([]);
+  const [availableTickets, setAvailableTickets] = useState<AvailableTicket[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [showVehicleCapture, setShowVehicleCapture] = useState(false);
+  const [selectedCarImages, setSelectedCarImages] = useState<Car | null>(null);
+  const isMobile = useMobileDetection();
 
   const [formData, setFormData] = useState<CarFormData>({
     placa: "",
@@ -82,115 +81,123 @@ function CarRegistration() {
     nombreDueño: "",
     telefono: "",
     ticketAsociado: "",
-  })
+  });
 
   const [capturedImages, setCapturedImages] = useState<{
-    placaUrl?: string
-    vehiculoUrl?: string
-    confianzaPlaca?: number
-    confianzaVehiculo?: number
-  } | null>(null)
+    placaUrl?: string;  // Temporary mismatch here, will align below
+    vehiculoUrl?: string;
+    confianzaPlaca?: number;
+    confianzaVehiculo?: number;
+  } | null>(null);
 
   const fetchCars = useCallback(async () => {
     try {
-      const timestamp = new Date().getTime()
+      const timestamp = new Date().getTime();
       const response = await fetch(`/api/admin/cars?t=${timestamp}`, {
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
           Expires: "0",
         },
-      })
+      });
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json();
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG: FetchCars response:", data);
+          data.forEach((car: Car, index: number) => {
+            console.log(`🔍 DEBUG: Car ${index} - imagenes:`, car.imagenes);
+          });
+        }
         setCars((prev) => {
           if (!areArraysEqual(prev, data)) {
             if (process.env.NODE_ENV === "development") {
-              console.log(`🔍 DEBUG: Actualizando cars: ${data.length} vehículos`)
+              console.log(`🔍 DEBUG: Actualizando cars: ${data.length} vehículos`);
             }
-            return data
+            return data;
           }
-          return prev
-        })
+          return prev;
+        });
+      } else {
+        console.error("🔍 DEBUG: FetchCars response not ok:", response.status);
       }
     } catch (error) {
-      console.error("Error fetching cars:", error)
+      console.error("Error fetching cars:", error);
     }
-  }, [])
+  }, []);
 
   const fetchAvailableTickets = useCallback(async () => {
     try {
-      const timestamp = new Date().getTime()
+      const timestamp = new Date().getTime();
       const response = await fetch(`/api/admin/available-tickets?t=${timestamp}`, {
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
           Expires: "0",
         },
-      })
+      });
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json();
         setAvailableTickets((prev) => {
           if (!areArraysEqual(prev, data)) {
             if (process.env.NODE_ENV === "development") {
-              console.log(`🔍 DEBUG: Actualizando tickets: ${data.length} disponibles`)
+              console.log(`🔍 DEBUG: Actualizando tickets: ${data.length} disponibles`);
             }
-            return data
+            return data;
           }
-          return prev
-        })
+          return prev;
+        });
       }
     } catch (error) {
-      console.error("Error fetching available tickets:", error)
+      console.error("Error fetching available tickets:", error);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log(`🔍 DEBUG: Iniciando fetch de cars y tickets, isMobile: ${isMobile}`)
+      console.log(`🔍 DEBUG: Iniciando fetch de cars y tickets, isMobile: ${isMobile}`);
     }
     Promise.all([fetchCars(), fetchAvailableTickets()])
       .then(() => {
-        setIsLoading(false)
+        setIsLoading(false);
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG: Fetch completado, isLoading: false")
+          console.log("🔍 DEBUG: Fetch completado, isLoading: false");
         }
       })
       .catch(() => {
-        setIsLoading(false)
+        setIsLoading(false);
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG: Fetch fallido, isLoading: false")
+          console.log("🔍 DEBUG: Fetch fallido, isLoading: false");
         }
-      })
-  }, [fetchCars, fetchAvailableTickets, isMobile])
+      });
+  }, [fetchCars, fetchAvailableTickets, isMobile]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchCars()
-      fetchAvailableTickets()
-    }, 60000) // Increased to 60 seconds
-    return () => clearInterval(interval)
-  }, [fetchCars, fetchAvailableTickets])
+      fetchCars();
+      fetchAvailableTickets();
+    }, 60000); // Increased to 60 seconds
+    return () => clearInterval(interval);
+  }, [fetchCars, fetchAvailableTickets]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }, [])
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  }, []);
 
   const handleTicketChange = useCallback((value: string) => {
-    setFormData((prev) => ({ ...prev, ticketAsociado: value }))
-  }, [])
+    setFormData((prev) => ({ ...prev, ticketAsociado: value }));
+  }, []);
 
   const handleVehicleDetected = useCallback(
     (vehicleData: {
-      placa: string
-      marca: string
-      modelo: string
-      color: string
-      plateImageUrl: string
-      vehicleImageUrl: string
-      plateConfidence: number
-      vehicleConfidence: number
+      placa: string;
+      marca: string;
+      modelo: string;
+      color: string;
+      plateImageUrl: string;  // Updated to match API
+      vehicleImageUrl: string; // Updated to match API
+      plateConfidence: number;
+      vehicleConfidence: number;
     }) => {
       setFormData((prev) => ({
         ...prev,
@@ -198,40 +205,40 @@ function CarRegistration() {
         marca: vehicleData.marca,
         modelo: vehicleData.modelo,
         color: vehicleData.color,
-      }))
+      }));
       setCapturedImages({
-        placaUrl: vehicleData.plateImageUrl,
-        vehiculoUrl: vehicleData.vehicleImageUrl,
+        placaUrl: vehicleData.plateImageUrl,  // Updated to align with API
+        vehiculoUrl: vehicleData.vehicleImageUrl, // Updated to align with API
         confianzaPlaca: vehicleData.plateConfidence,
         confianzaVehiculo: vehicleData.vehicleConfidence,
-      })
-      setShowVehicleCapture(false)
+      });
+      setShowVehicleCapture(false);
       setMessage(
         `✅ Vehículo capturado: ${vehicleData.marca} ${vehicleData.modelo} ${vehicleData.color} - Placa: ${vehicleData.placa}`
-      )
-      setTimeout(() => setMessage(""), 5000)
+      );
+      setTimeout(() => setMessage(""), 5000);
     },
     []
-  )
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
-      e.preventDefault()
-      setIsSubmitting(true)
-      setMessage("")
+      e.preventDefault();
+      setIsSubmitting(true);
+      setMessage("");
       try {
         const submitData = {
           ...formData,
           imagenes: capturedImages
             ? {
-                placaUrl: capturedImages.placaUrl,
-                vehiculoUrl: capturedImages.vehiculoUrl,
+                plateImageUrl: capturedImages.placaUrl,  // Updated to match API
+                vehicleImageUrl: capturedImages.vehiculoUrl, // Updated to match API
                 capturaMetodo: isMobile ? "camara_movil" : "camara_desktop",
                 confianzaPlaca: capturedImages.confianzaPlaca,
                 confianzaVehiculo: capturedImages.confianzaVehiculo,
               }
             : undefined,
-        }
+        };
         const response = await fetch("/api/admin/cars", {
           method: "POST",
           headers: {
@@ -241,10 +248,10 @@ function CarRegistration() {
           },
           next: { revalidate: 0 },
           body: JSON.stringify(submitData),
-        })
-        const data = await response.json()
+        });
+        const data = await response.json();
         if (response.ok) {
-          setMessage(`✅ ${data.message}`)
+          setMessage(`✅ ${data.message}`);
           setFormData({
             placa: "",
             marca: "",
@@ -253,35 +260,35 @@ function CarRegistration() {
             nombreDueño: "",
             telefono: "",
             ticketAsociado: "",
-          })
-          setCapturedImages(null)
-          await Promise.all([fetchCars(), fetchAvailableTickets()])
+          });
+          setCapturedImages(null);
+          await Promise.all([fetchCars(), fetchAvailableTickets()]);
         } else {
-          setMessage(`❌ ${data.message}`)
+          setMessage(`❌ ${data.message}`);
         }
-        setTimeout(() => setMessage(""), 5000)
+        setTimeout(() => setMessage(""), 5000);
       } catch (error) {
-        setMessage("❌ Error al registrar el carro")
-        setTimeout(() => setMessage(""), 5000)
+        setMessage("❌ Error al registrar el carro");
+        setTimeout(() => setMessage(""), 5000);
       } finally {
-        setIsSubmitting(false)
+        setIsSubmitting(false);
       }
     },
     [formData, capturedImages, isMobile, fetchCars, fetchAvailableTickets]
-  )
+  );
 
   const isFormValid = useCallback(() => {
     if (isMobile) {
-      return formData.placa.trim() !== "" && formData.ticketAsociado.trim() !== ""
+      return formData.placa.trim() !== "" && formData.ticketAsociado.trim() !== "";
     }
-    return Object.values(formData).every((value) => value.trim() !== "")
-  }, [formData, isMobile])
+    return Object.values(formData).every((value) => value.trim() !== "");
+  }, [formData, isMobile]);
 
   // Log render conditions to debug hydration
   if (process.env.NODE_ENV === "development") {
     console.log(
       `🔍 DEBUG: Renderizando CarRegistration - isLoading: ${isLoading}, showVehicleCapture: ${showVehicleCapture}, selectedCarImages: ${!!selectedCarImages}, isMobile: ${isMobile}, cars: ${cars.length}, tickets: ${availableTickets.length}`
-    )
+    );
   }
 
   if (isLoading) {
@@ -299,15 +306,15 @@ function CarRegistration() {
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (showVehicleCapture) {
-    return <VehicleCapture onVehicleDetected={handleVehicleDetected} onCancel={() => setShowVehicleCapture(false)} />
+    return <VehicleCapture onVehicleDetected={handleVehicleDetected} onCancel={() => setShowVehicleCapture(false)} />;
   }
 
   if (selectedCarImages) {
-    return <CarImageViewer car={selectedCarImages} onClose={() => setSelectedCarImages(null)} onUpdate={fetchCars} />
+    return <CarImageViewer car={selectedCarImages} onClose={() => setSelectedCarImages(null)} onUpdate={fetchCars} />;
   }
 
   if (isMobile) {
@@ -399,7 +406,7 @@ function CarRegistration() {
                 </form>
                 <Alert>
                   <AlertDescription className="text-center">
-                    💡 <strong>Tip:</strong> Usa &quot;Capturar Vehículo" para llenar datos automáticamente
+                    💡 <strong>Tip:</strong> Usa "Capturar Vehículo" para llenar datos automáticamente
                   </AlertDescription>
                 </Alert>
               </>
@@ -408,7 +415,7 @@ function CarRegistration() {
         </Card>
         <MobileCarList cars={cars} onRefresh={fetchCars} onViewImages={setSelectedCarImages} />
       </div>
-    )
+    );
   }
 
   return (
@@ -549,9 +556,9 @@ function CarRegistration() {
                     key={car._id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-1 flex-1">
                       <div className="flex items-center space-x-4">
-                        <div>
+                        <div className="space-y-1">
                           <p className="font-medium text-lg">{car.placa}</p>
                           <p className="text-sm text-gray-600">
                             {car.marca} {car.modelo} - {car.color}
@@ -560,8 +567,19 @@ function CarRegistration() {
                             Dueño: {car.nombreDueño} | Tel: {car.telefono}
                           </p>
                           {car.imagenes && (
-                            <div className="flex items-center space-x-2 mt-1">
-                              <ImageIcon className="h-4 w-4 text-blue-600" />
+                            <div className="flex items-center space-x-2 mt-1 flex-wrap">
+                              <ImageWithFallback
+                                src={car.imagenes.plateImageUrl || "/placeholder.svg"}
+                                alt={`Placa de ${car.placa}`}
+                                className="w-32 h-24 object-cover rounded border mr-2" // Increased to 32x24px
+                                fallback="/placeholder.svg"
+                              />
+                              <ImageWithFallback
+                                src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                                alt={`Vehículo de ${car.placa}`}
+                                className="w-32 h-24 object-cover rounded border mr-2" // Increased to 32x24px
+                                fallback="/placeholder.svg"
+                              />
                               <span className="text-xs text-blue-600">Con imágenes</span>
                               <Button
                                 onClick={() => setSelectedCarImages(car)}
@@ -590,7 +608,7 @@ function CarRegistration() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
-export default memo(CarRegistration)
+export default memo(CarRegistration);
