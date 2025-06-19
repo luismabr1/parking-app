@@ -1,12 +1,53 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, Car, RefreshCw, Clock, ImageIcon } from "lucide-react"
+import { CheckCircle, Car, RefreshCw, Clock } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/utils"
+import ImageWithFallback from "../image-with-fallback"
+import React from "react"
+
+// Deep comparison for arrays with verbose logging (unchanged)
+const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
+  if (process.env.NODE_ENV === "development") {
+    console.log(
+      "🔍 DEBUG areArraysEqual - Comparing lengths: arr1.length=",
+      arr1.length,
+      "arr2.length=",
+      arr2.length
+    )
+  }
+  if (arr1.length !== arr2.length) return false
+  const result = arr1.every((item1, i) => {
+    const item2 = arr2[i]
+    const keysMatch = Object.keys(item1).every(
+      (key) => {
+        const match = item1[key as keyof T] === item2[key as keyof T]
+        if (process.env.NODE_ENV === "development" && !match) {
+          console.log(
+            "🔍 DEBUG areArraysEqual - Mismatch at index",
+            i,
+            "key",
+            key,
+            "item1.",
+            item1[key as keyof T],
+            "item2.",
+            item2[key as keyof T]
+          )
+        }
+        return match
+      }
+    )
+    return keysMatch
+  })
+  if (process.env.NODE_ENV === "development") {
+    console.log("🔍 DEBUG areArraysEqual - Result:", result)
+  }
+  return result
+}
 
 interface PendingParking {
   _id: string
@@ -31,96 +72,234 @@ interface PendingParking {
   }
 }
 
-export default function ParkingConfirmation() {
+function ParkingConfirmation() {
   const [pendingParkings, setPendingParkings] = useState<PendingParking[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [message, setMessage] = useState("")
+  const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null)
+  const [isDataStable, setIsDataStable] = useState(false)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const effectRunCount = useRef(0)
+  const renderCount = useRef(0)
 
-  useEffect(() => {
-    fetchPendingParkings()
-
-    // Actualizar automáticamente cada 15 segundos (más frecuente)
-    const interval = setInterval(() => {
-      fetchPendingParkings()
-    }, 15000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const fetchPendingParkings = async () => {
+  const fetchPendingParkings = useCallback(async () => {
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔍 DEBUG fetchPendingParkings - Starting fetch")
+    }
     try {
       setIsLoading(true)
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG fetchPendingParkings - Set isLoading to true")
+      }
       const timestamp = new Date().getTime()
-      const response = await fetch(`/api/admin/pending-parkings?t=${timestamp}&_=${Math.random()}`, {
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG fetchPendingParkings - Timestamp:", timestamp)
+      }
+      const response = await fetch(`/api/admin/pending-parkings?t=${timestamp}`, {
         method: "GET",
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
           Pragma: "no-cache",
           Expires: "0",
-          "If-Modified-Since": "0",
-          "If-None-Match": "no-match-for-this",
+          "If-Modified-Since": lastFetchTime ? new Date(lastFetchTime).toUTCString() : "0",
         },
       })
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG fetchPendingParkings - Response status:", response.status)
+      }
+
       if (response.ok) {
         const data = await response.json()
-        console.log("🔍 DEBUG ParkingConfirmation - Raw data:", data)
-        setPendingParkings(data)
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG fetchPendingParkings - Received data:", data)
+          data.forEach((parking: PendingParking, index: number) => {
+            if (parking.carInfo && parking.carInfo.imagenes) {
+              console.log(`🔍 DEBUG fetchPendingParkings - imagenes for ${parking.codigoTicket} at index ${index}:`, parking.carInfo.imagenes)
+            }
+          })
+        }
+        if (!areArraysEqual(pendingParkings, data)) {
+          setPendingParkings(data)
+          setIsDataStable(false)
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `🔍 DEBUG ParkingConfirmation - Updated parkings: ${data.length} items`,
+              "New data:",
+              data
+            )
+          }
+        } else {
+          setIsDataStable(true)
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              "🔍 DEBUG ParkingConfirmation - Data unchanged, skipping update",
+              "Current parkings:",
+              pendingParkings
+            )
+          }
+        }
+        setLastFetchTime(new Date())
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG fetchPendingParkings - Updated lastFetchTime:", lastFetchTime)
+        }
+      } else if (response.status === 304) {
+        setIsDataStable(true)
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG ParkingConfirmation - Not Modified (304), data stable")
+        }
       }
     } catch (error) {
-      console.error("Error fetching pending parkings:", error)
+      console.error("🔍 DEBUG fetchPendingParkings - Error caught:", error)
+      setMessage("❌ Error fetching parking data")
+      setTimeout(() => setMessage(""), 5000)
     } finally {
       setIsLoading(false)
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG fetchPendingParkings - Set isLoading to false")
+      }
     }
-  }
+  }, [pendingParkings, lastFetchTime])
+
+  useEffect(() => {
+    renderCount.current += 1
+    effectRunCount.current += 1
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `🔍 DEBUG useEffect - Entering effect for ParkingConfirmation, run count: ${effectRunCount.current}, render count: ${renderCount.current}`
+      )
+    }
+
+    if (effectRunCount.current === 1) {
+      fetchPendingParkings()
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG useEffect - Completed initial fetch")
+      }
+    } else {
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG useEffect - Skipping initial fetch, not first run")
+      }
+    }
+
+    const startInterval = () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current)
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG useEffect - Cleared previous interval")
+        }
+      }
+      const intervalId = setInterval(() => {
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "🔍 DEBUG useEffect - Interval triggered, calling fetchPendingParkings",
+            "isDataStable:",
+            isDataStable
+          )
+        }
+        fetchPendingParkings()
+      }, isDataStable ? 60000 : 30000)
+      intervalRef.current = intervalId
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `🔍 DEBUG useEffect - Set new interval: ${isDataStable ? 60000 : 30000}ms`,
+          "isDataStable:",
+          isDataStable
+        )
+      }
+    }
+
+    startInterval()
+
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current)
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG useEffect - Cleared interval on cleanup")
+        }
+      }
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG useEffect - Exiting effect for ParkingConfirmation")
+      }
+    }
+  }, [fetchPendingParkings])
 
   const confirmParking = async (ticketCode: string) => {
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔍 DEBUG confirmParking - Starting confirmation for ticket:", ticketCode)
+    }
     try {
       setConfirmingId(ticketCode)
       setMessage("")
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG confirmParking - Set confirmingId and cleared message")
+      }
 
       const timestamp = new Date().getTime()
-      const response = await fetch(`/api/admin/confirm-parking?t=${timestamp}&_=${Math.random()}`, {
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG confirmParking - Timestamp:", timestamp)
+      }
+      const response = await fetch(`/api/admin/confirm-parking?t=${timestamp}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
           Pragma: "no-cache",
           Expires: "0",
-          "If-Modified-Since": "0",
-          "If-None-Match": "no-match-for-this",
         },
-        next: { revalidate: 0 },
         body: JSON.stringify({ ticketCode }),
       })
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG confirmParking - Response status:", response.status)
+      }
 
       const data = await response.json()
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG confirmParking - Response data:", data)
+      }
 
       if (response.ok) {
         setMessage(`✅ ${data.message}`)
         await fetchPendingParkings()
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG confirmParking - Success, updated message and refetched")
+        }
       } else {
         setMessage(`❌ ${data.message}`)
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG confirmParking - Failed, updated message")
+        }
       }
 
       setTimeout(() => setMessage(""), 5000)
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG confirmParking - Scheduled message clear after 5s")
+      }
     } catch (error) {
       setMessage("❌ Error al confirmar el estacionamiento")
+      console.error("🔍 DEBUG confirmParking - Error:", error)
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG confirmParking - Set error message")
+      }
       setTimeout(() => setMessage(""), 5000)
     } finally {
       setConfirmingId(null)
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG confirmParking - Cleared confirmingId")
+      }
     }
   }
 
-  // Función para formatear datos con fallback
   const formatDataWithFallback = (value: string | undefined) => {
-    if (!value || value === "Por definir" || value === "PENDIENTE") {
+    if (value === undefined || value === null) {
       return "Dato no proporcionado"
     }
-    return value
+    return value || "Dato no proporcionado"
   }
 
   if (isLoading) {
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔍 DEBUG render - Rendering loading state, render count:", renderCount.current)
+    }
     return (
       <Card>
         <CardHeader>
@@ -133,6 +312,10 @@ export default function ParkingConfirmation() {
         </CardContent>
       </Card>
     )
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    console.log("🔍 DEBUG render - Rendering main content, pendingParkings:", pendingParkings, "render count:", renderCount.current)
   }
 
   return (
@@ -199,70 +382,64 @@ export default function ParkingConfirmation() {
                       <h4 className="font-medium text-orange-800">Vehículo a Confirmar</h4>
                     </div>
 
-                    {/* Layout con imágenes y datos */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      {/* Columna 1: Imágenes de referencia */}
-                      {(parking.carInfo.imagenes?.plateImageUrl || parking.carInfo.imagenes?.vehicleImageUrl) && (
-                        <div className="space-y-3">
-                          <h5 className="text-sm font-medium text-gray-700 flex items-center">
-                            <ImageIcon className="h-4 w-4 mr-1" />
-                            Imágenes de Referencia
-                          </h5>
+                      <div className="space-y-3">
+                        <h5 className="text-sm font-medium text-gray-700 flex items-center">
+                          Imágenes de Referencia
+                        </h5>
 
-                          <div className="space-y-2">
-                            {/* Imagen de la placa */}
-                            {parking.carInfo.imagenes?.plateImageUrl && (
-                              <div className="text-center">
-                                <p className="text-xs text-gray-500 mb-1">Placa</p>
-                                <img
-                                  src={parking.carInfo.imagenes.plateImageUrl || "/placeholder.svg"}
-                                  alt="Placa del vehículo"
-                                  className="w-full max-w-32 h-16 object-cover rounded border mx-auto"
-                                  onError={(e) => {
-                                    console.error("Error loading plate image:", parking.carInfo.imagenes?.plateImageUrl)
-                                    e.currentTarget.style.display = "none"
-                                  }}
-                                />
-                              </div>
+                        <div className="space-y-2">
+                          <div className="text-center">
+                            <p className="text-xs text-gray-500 mb-1">Placa</p>
+                            {process.env.NODE_ENV === "development" && (
+                              console.log(
+                                "🔍 ParkingConfirmation - Passing plateImageUrl to ImageWithFallback:",
+                                parking.carInfo.imagenes?.plateImageUrl
+                              )
                             )}
-
-                            {/* Imagen del vehículo */}
-                            {parking.carInfo.imagenes?.vehicleImageUrl && (
-                              <div className="text-center">
-                                <p className="text-xs text-gray-500 mb-1">Vehículo</p>
-                                <img
-                                  src={parking.carInfo.imagenes.vehicleImageUrl || "/placeholder.svg"}
-                                  alt="Vehículo"
-                                  className="w-full max-w-40 h-24 object-cover rounded border mx-auto"
-                                  onError={(e) => {
-                                    console.error(
-                                      "Error loading vehicle image:",
-                                      parking.carInfo.imagenes?.vehicleImageUrl,
-                                    )
-                                    e.currentTarget.style.display = "none"
-                                  }}
-                                />
-                              </div>
-                            )}
+                            <ImageWithFallback
+                              src={parking.carInfo.imagenes?.plateImageUrl || "/placeholder.svg"}
+                              alt="Placa del vehículo"
+                              className="w-full max-w-32 h-16 object-cover rounded border mx-auto"
+                              fallback="/placeholder.svg"
+                            />
                           </div>
 
-                          {/* Metadatos de captura */}
-                          {parking.carInfo.imagenes?.fechaCaptura && (
-                            <div className="text-xs text-gray-500 text-center">
-                              <p>Capturado: {formatDateTime(parking.carInfo.imagenes.fechaCaptura)}</p>
-                              {parking.carInfo.imagenes.capturaMetodo && (
-                                <p className="capitalize">
-                                  Método: {parking.carInfo.imagenes.capturaMetodo.replace("_", " ")}
-                                </p>
-                              )}
-                            </div>
-                          )}
+                          <div className="text-center">
+                            <p className="text-xs text-gray-500 mb-1">Vehículo</p>
+                            {process.env.NODE_ENV === "development" && (
+                              console.log(
+                                "🔍 ParkingConfirmation - Passing vehicleImageUrl to ImageWithFallback:",
+                                parking.carInfo.imagenes?.vehicleImageUrl
+                              )
+                            )}
+                            <ImageWithFallback
+                              src={parking.carInfo.imagenes?.vehicleImageUrl || "/placeholder.svg"}
+                              alt="Vehículo"
+                              className="w-full max-w-40 h-24 object-cover rounded border mx-auto"
+                              fallback="/placeholder.svg"
+                            />
+                          </div>
                         </div>
-                      )}
 
-                      {/* Columna 2 y 3: Datos del vehículo */}
+                        {parking.carInfo.imagenes?.fechaCaptura && (
+                          <div className="text-xs text-gray-500 text-center">
+                            <p>Capturado: {formatDateTime(parking.carInfo.imagenes.fechaCaptura)}</p>
+                            {parking.carInfo.imagenes.capturaMetodo && (
+                              <p className="capitalize">
+                                Método: {parking.carInfo.imagenes.capturaMetodo.replace("_", " ")}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
                       <div
-                        className={`${parking.carInfo.imagenes?.plateImageUrl || parking.carInfo.imagenes?.vehicleImageUrl ? "lg:col-span-2" : "lg:col-span-3"} grid grid-cols-1 md:grid-cols-2 gap-3`}
+                        className={`${
+                          parking.carInfo.imagenes?.plateImageUrl || parking.carInfo.imagenes?.vehicleImageUrl
+                            ? "lg:col-span-2"
+                            : "lg:col-span-3"
+                        } grid grid-cols-1 md:grid-cols-2 gap-3`}
                       >
                         <div className="space-y-2">
                           <div>
@@ -339,3 +516,5 @@ export default function ParkingConfirmation() {
     </Card>
   )
 }
+
+export default React.memo(ParkingConfirmation)

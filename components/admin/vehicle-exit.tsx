@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { LogOut, Car, RefreshCw, ImageIcon } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/utils"
-import { ExitTimeDisplay } from "./exit-time-display"
+import  ExitTimeDisplay  from "./exit-time-display"
 
 interface PaidTicket {
   _id: string

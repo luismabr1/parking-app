@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import { Clock, AlertTriangle, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useRealTimeCountdown } from "@/hooks/use-real-time-countdown"
@@ -8,24 +9,20 @@ interface ExitTimeDisplayProps {
   tiempoSalida?: string | null
   tiempoSalidaEstimado?: string | null
   fechaPago: string
-  codigoTicket?: string // Para debug
-  variant?: "full" | "compact" // Para diferentes tamaños
+  codigoTicket?: string
+  variant?: "full" | "compact"
 }
 
-export function ExitTimeDisplay({
+function ExitTimeDisplay({
   tiempoSalida,
   tiempoSalidaEstimado,
   fechaPago,
   codigoTicket = "Unknown",
   variant = "full",
 }: ExitTimeDisplayProps) {
-  // DEBUG: Log de los datos recibidos
-  console.log(`🔍 DEBUG ExitTimeDisplay [${codigoTicket}]:`, {
-    tiempoSalida,
-    tiempoSalidaEstimado,
-    fechaPago,
-    variant,
-  })
+  if (process.env.NODE_ENV === "development") {
+    console.log(`🔍 DEBUG: Renderizando ExitTimeDisplay para ticket ${codigoTicket}`)
+  }
 
   const countdown = useRealTimeCountdown({
     tiempoSalida,
@@ -33,15 +30,10 @@ export function ExitTimeDisplay({
     fechaPago,
   })
 
-  // Si no hay tiempo de salida, no mostrar nada
   if (!tiempoSalida) {
-    console.log(`❌ No tiempoSalida for ${codigoTicket}`)
     return null
   }
 
-  console.log(`⏰ Countdown result for ${codigoTicket}:`, countdown)
-
-  // Estilos basados en urgencia
   const getUrgencyStyles = () => {
     switch (countdown.urgencyLevel) {
       case "critical":
@@ -77,7 +69,6 @@ export function ExitTimeDisplay({
 
   const styles = getUrgencyStyles()
 
-  // Opciones de tiempo de salida para mostrar labels
   const exitTimeLabels: { [key: string]: string } = {
     now: "Inmediatamente",
     "5min": "En 5 minutos",
@@ -91,7 +82,6 @@ export function ExitTimeDisplay({
 
   const originalLabel = exitTimeLabels[tiempoSalida] || tiempoSalida
 
-  // Icono según urgencia
   const UrgencyIcon =
     countdown.urgencyLevel === "critical" ? Zap : countdown.urgencyLevel === "urgent" ? AlertTriangle : Clock
 
@@ -148,7 +138,6 @@ export function ExitTimeDisplay({
     )
   }
 
-  // Versión completa (full)
   return (
     <div className={`p-4 rounded-lg ${styles.container}`}>
       <div className="flex items-center justify-between mb-3">
@@ -196,7 +185,6 @@ export function ExitTimeDisplay({
         </div>
       )}
 
-      {/* DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === "development" && (
         <div className="mt-3 p-2 bg-gray-100 rounded text-xs text-gray-600">
           <p>🔧 DEBUG: {codigoTicket}</p>
@@ -209,3 +197,5 @@ export function ExitTimeDisplay({
     </div>
   )
 }
+
+export default memo(ExitTimeDisplay)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import QRGenerator from "./qr-generator"
 import ParkingConfirmation from "./parking-confirmation"
 import { Badge } from "@/components/ui/badge"
 import { useMobileDetection } from "@/hooks/use-mobile-detection"
+import React from "react"
 
 interface DashboardStats {
   pendingPayments: number
@@ -28,7 +29,13 @@ interface DashboardStats {
   pendingConfirmations: number
 }
 
-export default function AdminDashboard() {
+const areStatsEqual = (newStats: DashboardStats, oldStats: DashboardStats) => {
+  return Object.keys(newStats).every(
+    (key) => newStats[key as keyof DashboardStats] === oldStats[key as keyof DashboardStats]
+  )
+}
+
+function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     pendingPayments: 0,
     totalStaff: 0,
@@ -42,21 +49,38 @@ export default function AdminDashboard() {
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [showStats, setShowStats] = useState(false)
   const isMobile = useMobileDetection()
-  const [activeTab, setActiveTab] = useState(isMobile ? "confirmations" : "cars")
+  const [activeTab, setActiveTab] = useState(isMobile ? "cars" : "cars") // Change default to "cars"
+  const prevStatsRef = useRef(stats)
+  const prevMobileRef = useRef(isMobile)
+  const renderCountRef = useRef(0)
 
+  // Log renders
+  renderCountRef.current += 1
+  if (process.env.NODE_ENV === "development") {
+    console.log(`🔍 DEBUG: Renderizando AdminDashboard #${renderCountRef.current}`)
+  }
+
+  // Log state changes
   useEffect(() => {
-    fetchStats()
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `🔍 DEBUG: Estado actualizado en AdminDashboard - activeTab: ${activeTab}, showStats: ${showStats}, isLoadingStats: ${isLoadingStats}, stats.pendingPayments: ${stats.pendingPayments}`
+      )
+    }
+  }, [activeTab, showStats, isLoadingStats, stats])
 
-    // Actualizar estadísticas cada 30 segundos
-    const interval = setInterval(fetchStats, 30000)
+  // Log isMobile changes
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.log(`🔍 DEBUG: isMobile cambió: ${isMobile}`)
+    }
+  }, [isMobile])
 
-    return () => clearInterval(interval)
-  }, [])
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
-      setIsLoadingStats(true)
-      // Agregar un timestamp para evitar el caché
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG: Iniciando fetchStats")
+      }
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/admin/stats?t=${timestamp}`, {
         headers: {
@@ -69,20 +93,48 @@ export default function AdminDashboard() {
 
       if (response.ok) {
         const data = await response.json()
-        setStats(data)
+        setIsLoadingStats(false)
+        if (!areStatsEqual(data, prevStatsRef.current)) {
+          setStats(data)
+          prevStatsRef.current = data
+          if (process.env.NODE_ENV === "development") {
+            console.log("🔍 DEBUG: Stats actualizadas", data)
+          }
+        } else {
+          if (process.env.NODE_ENV === "development") {
+            console.log("🔍 DEBUG: Omitiendo actualización de stats, datos idénticos")
+          }
+        }
+      } else {
+        throw new Error("Error fetching stats")
       }
     } catch (error) {
       console.error("Error fetching stats:", error)
-    } finally {
       setIsLoadingStats(false)
     }
-  }
+  }, [])
 
-  // Renderizado móvil optimizado
+  useEffect(() => {
+    fetchStats()
+    const interval = setInterval(fetchStats, 30000)
+    return () => clearInterval(interval)
+  }, [fetchStats])
+
+  // Synchronize activeTab with isMobile, only if isMobile changes
+  useEffect(() => {
+    if (prevMobileRef.current !== isMobile) {
+      setActiveTab(isMobile ? "cars" : "cars")
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🔍 DEBUG: Actualizando activeTab a ${isMobile ? "cars" : "cars"} por cambio en isMobile`)
+      }
+      prevMobileRef.current = isMobile
+    }
+  }, [isMobile])
+
+  // Render mobile view
   if (isMobile) {
     return (
       <div className="space-y-4">
-        {/* Header móvil simplificado */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl font-bold text-gray-800">Panel Admin</h1>
@@ -93,7 +145,6 @@ export default function AdminDashboard() {
           </Button>
         </div>
 
-        {/* Estadísticas colapsables */}
         <Card className="border border-gray-200">
           <CardHeader className="py-2 px-4 cursor-pointer" onClick={() => setShowStats(!showStats)}>
             <div className="flex justify-between items-center">
@@ -141,7 +192,6 @@ export default function AdminDashboard() {
           )}
         </Card>
 
-        {/* Tabs móviles optimizadas */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid grid-cols-4 h-auto">
             <TabsTrigger value="cars" className="py-2 text-xs">
@@ -183,98 +233,26 @@ export default function AdminDashboard() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Contenido de las pestañas */}
           <TabsContent value="cars" className="m-0">
             <CarRegistration />
           </TabsContent>
-
           <TabsContent value="confirmations" className="m-0">
             <ParkingConfirmation />
           </TabsContent>
-
           <TabsContent value="payments" className="m-0">
             <PendingPayments onStatsUpdate={fetchStats} />
           </TabsContent>
-
           <TabsContent value="exit" className="m-0">
             <VehicleExit />
-          </TabsContent>
-
-          {/* Pestañas secundarias colapsadas en un menú desplegable */}
-          <Card className="mt-4">
-            <CardHeader className="py-2 px-4">
-              <CardTitle className="text-sm font-medium">Otras opciones</CardTitle>
-            </CardHeader>
-            <CardContent className="py-2 px-4">
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-auto py-2"
-                  onClick={() => setActiveTab("tickets")}
-                >
-                  Espacios
-                </Button>
-                <Button variant="outline" size="sm" className="text-xs h-auto py-2" onClick={() => setActiveTab("qr")}>
-                  QR
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-auto py-2"
-                  onClick={() => setActiveTab("history")}
-                >
-                  Historial
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-auto py-2"
-                  onClick={() => setActiveTab("staff")}
-                >
-                  Personal
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-auto py-2 col-span-2"
-                  onClick={() => setActiveTab("settings")}
-                >
-                  Configuración
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Contenido de pestañas secundarias */}
-          <TabsContent value="tickets" className="m-0">
-            <TicketManagement />
-          </TabsContent>
-
-          <TabsContent value="qr" className="m-0">
-            <QRGenerator />
-          </TabsContent>
-
-          <TabsContent value="history" className="m-0">
-            <CarHistory />
-          </TabsContent>
-
-          <TabsContent value="staff" className="m-0">
-            <StaffManagement onStatsUpdate={fetchStats} />
-          </TabsContent>
-
-          <TabsContent value="settings" className="m-0">
-            <CompanySettings />
           </TabsContent>
         </Tabs>
       </div>
     )
   }
 
-  // Vista desktop original
+  // Desktop view
   return (
     <div className="space-y-6">
-      {/* Header with refresh button */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Panel de Administración</h1>
@@ -286,7 +264,6 @@ export default function AdminDashboard() {
         </Button>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -300,7 +277,6 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Confirmaciones</CardTitle>
@@ -315,7 +291,6 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Personal Activo</CardTitle>
@@ -326,7 +301,6 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Usuarios registrados</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pagos Hoy</CardTitle>
@@ -337,7 +311,6 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Procesados hoy</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Espacios</CardTitle>
@@ -348,7 +321,6 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Espacios totales</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Espacios Libres</CardTitle>
@@ -359,7 +331,6 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Disponibles</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Carros Estacionados</CardTitle>
@@ -370,7 +341,6 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Actualmente</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Listos para Salir</CardTitle>
@@ -383,8 +353,7 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Main Content Tabs */}
-      <Tabs defaultValue="confirmations" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-9">
           <TabsTrigger value="confirmations">
             Confirmar
@@ -417,35 +386,27 @@ export default function AdminDashboard() {
         <TabsContent value="confirmations">
           <ParkingConfirmation />
         </TabsContent>
-
         <TabsContent value="payments">
           <PendingPayments onStatsUpdate={fetchStats} />
         </TabsContent>
-
         <TabsContent value="tickets">
           <TicketManagement />
         </TabsContent>
-
         <TabsContent value="cars">
           <CarRegistration />
         </TabsContent>
-
         <TabsContent value="exit">
           <VehicleExit />
         </TabsContent>
-
         <TabsContent value="qr">
           <QRGenerator />
         </TabsContent>
-
         <TabsContent value="history">
           <CarHistory />
         </TabsContent>
-
         <TabsContent value="staff">
           <StaffManagement onStatsUpdate={fetchStats} />
         </TabsContent>
-
         <TabsContent value="settings">
           <CompanySettings />
         </TabsContent>
@@ -453,3 +414,5 @@ export default function AdminDashboard() {
     </div>
   )
 }
+
+export default React.memo(AdminDashboard)

@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { memo, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronUp, CarIcon, RefreshCw } from "lucide-react"
+import { ChevronDown, ChevronUp, CarIcon, RefreshCw, ImageIcon, Edit } from "lucide-react"
 import { formatDateTime } from "@/lib/utils"
 
 interface CarProps {
@@ -17,17 +17,30 @@ interface CarProps {
   ticketAsociado: string
   horaIngreso: string
   estado: string
+  imagenes?: {
+    placaUrl?: string
+    vehiculoUrl?: string
+    fechaCaptura?: string
+    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
+    confianzaPlaca?: number
+    confianzaVehiculo?: number
+  }
 }
 
 interface MobileCarListProps {
   cars: CarProps[]
   onRefresh: () => void
+  onViewImages: (car: CarProps) => void
 }
 
-export default function MobileCarList({ cars, onRefresh }: MobileCarListProps) {
+function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   const activeCars = cars.filter((car) => car.estado === "estacionado")
+
+  if (process.env.NODE_ENV === "development") {
+    console.log(`🔍 DEBUG: Renderizando MobileCarList con ${activeCars.length} carros`)
+  }
 
   return (
     <Card>
@@ -42,17 +55,16 @@ export default function MobileCarList({ cars, onRefresh }: MobileCarListProps) {
             <span className="font-medium">Carros Estacionados ({activeCars.length})</span>
           </div>
           <div className="flex items-center space-x-2">
-            <Button
+            <button
               onClick={(e) => {
                 e.stopPropagation()
                 onRefresh()
               }}
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
+              className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-gray-200"
+              aria-label="Actualizar lista"
             >
               <RefreshCw className="h-3 w-3" />
-            </Button>
+            </button>
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>
         </Button>
@@ -84,11 +96,26 @@ export default function MobileCarList({ cars, onRefresh }: MobileCarListProps) {
                     <div>
                       <p className="font-medium text-lg">{car.placa}</p>
                       <p className="text-sm text-gray-600">Ticket: {car.ticketAsociado}</p>
+                      {car.imagenes && (
+                        <div className="flex items-center space-x-1 mt-1">
+                          <ImageIcon className="h-4 w-4 text-blue-500" />
+                          <span className="text-xs text-blue-600">Con imágenes</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-right space-y-1">
                       <p className="text-xs text-gray-500">
                         {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
                       </p>
+                      {car.imagenes && (
+                        <button
+                          onClick={() => onViewImages(car)}
+                          className="text-blue-600 hover:underline text-xs"
+                        >
+                          <Edit className="h-3 w-3 inline mr-1" />
+                          Ver/Editar
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -100,3 +127,5 @@ export default function MobileCarList({ cars, onRefresh }: MobileCarListProps) {
     </Card>
   )
 }
+
+export default memo(MobileCarList)

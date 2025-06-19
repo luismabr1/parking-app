@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { memo, useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -54,7 +53,18 @@ interface CarFormData {
   ticketAsociado: string
 }
 
-export default function CarRegistration() {
+// Deep comparison for arrays
+const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
+  if (arr1.length !== arr2.length) return false
+  return arr1.every((item1, i) => {
+    const item2 = arr2[i]
+    return Object.keys(item1).every(
+      (key) => item1[key as keyof T] === item2[key as keyof T]
+    )
+  })
+}
+
+function CarRegistration() {
   const [cars, setCars] = useState<Car[]>([])
   const [availableTickets, setAvailableTickets] = useState<AvailableTicket[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -81,13 +91,7 @@ export default function CarRegistration() {
     confianzaVehiculo?: number
   } | null>(null)
 
-  useEffect(() => {
-    Promise.all([fetchCars(), fetchAvailableTickets()])
-      .then(() => setIsLoading(false))
-      .catch(() => setIsLoading(false))
-  }, [])
-
-  const fetchCars = async () => {
+  const fetchCars = useCallback(async () => {
     try {
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/admin/cars?t=${timestamp}`, {
@@ -99,14 +103,22 @@ export default function CarRegistration() {
       })
       if (response.ok) {
         const data = await response.json()
-        setCars(data)
+        setCars((prev) => {
+          if (!areArraysEqual(prev, data)) {
+            if (process.env.NODE_ENV === "development") {
+              console.log(`🔍 DEBUG: Actualizando cars: ${data.length} vehículos`)
+            }
+            return data
+          }
+          return prev
+        })
       }
     } catch (error) {
       console.error("Error fetching cars:", error)
     }
-  }
+  }, [])
 
-  const fetchAvailableTickets = async () => {
+  const fetchAvailableTickets = useCallback(async () => {
     try {
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/admin/available-tickets?t=${timestamp}`, {
@@ -118,128 +130,158 @@ export default function CarRegistration() {
       })
       if (response.ok) {
         const data = await response.json()
-        setAvailableTickets(data)
+        setAvailableTickets((prev) => {
+          if (!areArraysEqual(prev, data)) {
+            if (process.env.NODE_ENV === "development") {
+              console.log(`🔍 DEBUG: Actualizando tickets: ${data.length} disponibles`)
+            }
+            return data
+          }
+          return prev
+        })
       }
     } catch (error) {
       console.error("Error fetching available tickets:", error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.log(`🔍 DEBUG: Iniciando fetch de cars y tickets, isMobile: ${isMobile}`)
+    }
+    Promise.all([fetchCars(), fetchAvailableTickets()])
+      .then(() => {
+        setIsLoading(false)
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG: Fetch completado, isLoading: false")
+        }
+      })
+      .catch(() => {
+        setIsLoading(false)
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG: Fetch fallido, isLoading: false")
+        }
+      })
+  }, [fetchCars, fetchAvailableTickets, isMobile])
 
   useEffect(() => {
     const interval = setInterval(() => {
       fetchCars()
       fetchAvailableTickets()
-    }, 30000)
-
+    }, 60000) // Increased to 60 seconds
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchCars, fetchAvailableTickets])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+  }, [])
 
-  const handleTicketChange = (value: string) => {
+  const handleTicketChange = useCallback((value: string) => {
     setFormData((prev) => ({ ...prev, ticketAsociado: value }))
-  }
+  }, [])
 
-  const handleVehicleDetected = (vehicleData: {
-    placa: string
-    marca: string
-    modelo: string
-    color: string
-    plateImageUrl: string
-    vehicleImageUrl: string
-    plateConfidence: number
-    vehicleConfidence: number
-  }) => {
-    setFormData((prev) => ({
-      ...prev,
-      placa: vehicleData.placa,
-      marca: vehicleData.marca,
-      modelo: vehicleData.modelo,
-      color: vehicleData.color,
-    }))
-
-    setCapturedImages({
-      placaUrl: vehicleData.plateImageUrl,
-      vehiculoUrl: vehicleData.vehicleImageUrl,
-      confianzaPlaca: vehicleData.plateConfidence,
-      confianzaVehiculo: vehicleData.vehicleConfidence,
-    })
-
-    setShowVehicleCapture(false)
-    setMessage(
-      `✅ Vehículo capturado: ${vehicleData.marca} ${vehicleData.modelo} ${vehicleData.color} - Placa: ${vehicleData.placa}`,
-    )
-    setTimeout(() => setMessage(""), 5000)
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-    setMessage("")
-
-    try {
-      const submitData = {
-        ...formData,
-        imagenes: capturedImages
-          ? {
-              placaUrl: capturedImages.placaUrl,
-              vehiculoUrl: capturedImages.vehiculoUrl,
-              capturaMetodo: isMobile ? "camara_movil" : "camara_desktop",
-              confianzaPlaca: capturedImages.confianzaPlaca,
-              confianzaVehiculo: capturedImages.confianzaVehiculo,
-            }
-          : undefined,
-      }
-
-      const response = await fetch("/api/admin/cars", {
-        method: "POST",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-        next: { revalidate: 0 },
-        body: JSON.stringify(submitData),
+  const handleVehicleDetected = useCallback(
+    (vehicleData: {
+      placa: string
+      marca: string
+      modelo: string
+      color: string
+      plateImageUrl: string
+      vehicleImageUrl: string
+      plateConfidence: number
+      vehicleConfidence: number
+    }) => {
+      setFormData((prev) => ({
+        ...prev,
+        placa: vehicleData.placa,
+        marca: vehicleData.marca,
+        modelo: vehicleData.modelo,
+        color: vehicleData.color,
+      }))
+      setCapturedImages({
+        placaUrl: vehicleData.plateImageUrl,
+        vehiculoUrl: vehicleData.vehicleImageUrl,
+        confianzaPlaca: vehicleData.plateConfidence,
+        confianzaVehiculo: vehicleData.vehicleConfidence,
       })
+      setShowVehicleCapture(false)
+      setMessage(
+        `✅ Vehículo capturado: ${vehicleData.marca} ${vehicleData.modelo} ${vehicleData.color} - Placa: ${vehicleData.placa}`
+      )
+      setTimeout(() => setMessage(""), 5000)
+    },
+    []
+  )
 
-      const data = await response.json()
-
-      if (response.ok) {
-        setMessage(`✅ ${data.message}`)
-        setFormData({
-          placa: "",
-          marca: "",
-          modelo: "",
-          color: "",
-          nombreDueño: "",
-          telefono: "",
-          ticketAsociado: "",
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      setIsSubmitting(true)
+      setMessage("")
+      try {
+        const submitData = {
+          ...formData,
+          imagenes: capturedImages
+            ? {
+                placaUrl: capturedImages.placaUrl,
+                vehiculoUrl: capturedImages.vehiculoUrl,
+                capturaMetodo: isMobile ? "camara_movil" : "camara_desktop",
+                confianzaPlaca: capturedImages.confianzaPlaca,
+                confianzaVehiculo: capturedImages.confianzaVehiculo,
+              }
+            : undefined,
+        }
+        const response = await fetch("/api/admin/cars", {
+          method: "POST",
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+          next: { revalidate: 0 },
+          body: JSON.stringify(submitData),
         })
-        setCapturedImages(null)
-        await Promise.all([fetchCars(), fetchAvailableTickets()])
-      } else {
-        setMessage(`❌ ${data.message}`)
+        const data = await response.json()
+        if (response.ok) {
+          setMessage(`✅ ${data.message}`)
+          setFormData({
+            placa: "",
+            marca: "",
+            modelo: "",
+            color: "",
+            nombreDueño: "",
+            telefono: "",
+            ticketAsociado: "",
+          })
+          setCapturedImages(null)
+          await Promise.all([fetchCars(), fetchAvailableTickets()])
+        } else {
+          setMessage(`❌ ${data.message}`)
+        }
+        setTimeout(() => setMessage(""), 5000)
+      } catch (error) {
+        setMessage("❌ Error al registrar el carro")
+        setTimeout(() => setMessage(""), 5000)
+      } finally {
+        setIsSubmitting(false)
       }
+    },
+    [formData, capturedImages, isMobile, fetchCars, fetchAvailableTickets]
+  )
 
-      setTimeout(() => setMessage(""), 5000)
-    } catch (error) {
-      setMessage("❌ Error al registrar el carro")
-      setTimeout(() => setMessage(""), 5000)
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const isFormValid = () => {
+  const isFormValid = useCallback(() => {
     if (isMobile) {
-      // En móvil solo requerir placa y ticket
       return formData.placa.trim() !== "" && formData.ticketAsociado.trim() !== ""
     }
-    // En desktop requerir todos los campos
     return Object.values(formData).every((value) => value.trim() !== "")
+  }, [formData, isMobile])
+
+  // Log render conditions to debug hydration
+  if (process.env.NODE_ENV === "development") {
+    console.log(
+      `🔍 DEBUG: Renderizando CarRegistration - isLoading: ${isLoading}, showVehicleCapture: ${showVehicleCapture}, selectedCarImages: ${!!selectedCarImages}, isMobile: ${isMobile}, cars: ${cars.length}, tickets: ${availableTickets.length}`
+    )
   }
 
   if (isLoading) {
@@ -268,14 +310,10 @@ export default function CarRegistration() {
     return <CarImageViewer car={selectedCarImages} onClose={() => setSelectedCarImages(null)} onUpdate={fetchCars} />
   }
 
-  // Vista móvil simplificada
   if (isMobile) {
     return (
       <div className="space-y-4 p-4">
-        {/* Estadísticas compactas */}
         <MobileStats />
-
-        {/* Formulario principal - prominente */}
         <Card className="border-2 border-blue-200">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center justify-center text-xl">
@@ -289,14 +327,12 @@ export default function CarRegistration() {
                 <AlertDescription>{message}</AlertDescription>
               </Alert>
             )}
-
             {availableTickets.length === 0 ? (
               <Alert variant="destructive">
                 <AlertDescription>No hay tickets disponibles para asignar.</AlertDescription>
               </Alert>
             ) : (
               <>
-                {/* Botón principal de captura */}
                 <Button
                   onClick={() => setShowVehicleCapture(true)}
                   className="w-full py-8 text-lg bg-blue-600 hover:bg-blue-700"
@@ -305,8 +341,6 @@ export default function CarRegistration() {
                   <Camera className="h-6 w-6 mr-3" />
                   Capturar Vehículo
                 </Button>
-
-                {/* Mostrar imágenes capturadas */}
                 {capturedImages && (
                   <Alert>
                     <AlertDescription>
@@ -320,8 +354,6 @@ export default function CarRegistration() {
                     </AlertDescription>
                   </Alert>
                 )}
-
-                {/* Formulario simplificado */}
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="placa" className="text-lg">
@@ -337,7 +369,6 @@ export default function CarRegistration() {
                       className="text-lg py-6"
                     />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="ticketAsociado" className="text-lg">
                       Ticket de Estacionamiento
@@ -356,7 +387,6 @@ export default function CarRegistration() {
                     </Select>
                     <p className="text-sm text-gray-500 text-center">{availableTickets.length} espacios disponibles</p>
                   </div>
-
                   <Button
                     type="submit"
                     className="w-full py-6 text-lg"
@@ -367,27 +397,22 @@ export default function CarRegistration() {
                     {isSubmitting ? "Registrando..." : "Registrar Vehículo"}
                   </Button>
                 </form>
-
                 <Alert>
                   <AlertDescription className="text-center">
-                    💡 <strong>Tip:</strong> Use &quot;Capturar Vehículo&quot; para llenar automáticamente los datos
+                    💡 <strong>Tip:</strong> Usa &quot;Capturar Vehículo" para llenar datos automáticamente
                   </AlertDescription>
                 </Alert>
               </>
             )}
           </CardContent>
         </Card>
-
-        {/* Lista de carros - colapsable */}
         <MobileCarList cars={cars} onRefresh={fetchCars} onViewImages={setSelectedCarImages} />
       </div>
     )
   }
 
-  // Vista desktop completa
   return (
     <div className="space-y-6">
-      {/* Formulario de Registro Desktop */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
@@ -401,11 +426,10 @@ export default function CarRegistration() {
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
-
           {availableTickets.length === 0 ? (
             <Alert variant="destructive">
               <AlertDescription>
-                No hay tickets disponibles. Debe crear tickets primero en la pestaña &quot;Gestión de Tickets&quot;.
+                No hay tickets disponibles. Crea tickets primero en la pestaña "Gestión de Tickets".
               </AlertDescription>
             </Alert>
           ) : (
@@ -422,7 +446,6 @@ export default function CarRegistration() {
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="ticketAsociado">Ticket de Estacionamiento</Label>
                   <Select value={formData.ticketAsociado} onValueChange={handleTicketChange}>
@@ -439,7 +462,6 @@ export default function CarRegistration() {
                   </Select>
                   <p className="text-sm text-gray-500">Tickets disponibles: {availableTickets.length}</p>
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="marca">Marca</Label>
                   <Input
@@ -451,7 +473,6 @@ export default function CarRegistration() {
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="modelo">Modelo</Label>
                   <Input
@@ -463,7 +484,6 @@ export default function CarRegistration() {
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="color">Color</Label>
                   <Input
@@ -475,7 +495,6 @@ export default function CarRegistration() {
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="nombreDueño">Nombre del Dueño</Label>
                   <Input
@@ -487,7 +506,6 @@ export default function CarRegistration() {
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="telefono">Teléfono</Label>
                   <Input
@@ -500,7 +518,6 @@ export default function CarRegistration() {
                   />
                 </div>
               </div>
-
               <Button type="submit" className="w-full" disabled={!isFormValid() || isSubmitting}>
                 <Plus className="h-4 w-4 mr-2" />
                 {isSubmitting ? "Registrando..." : "Registrar Carro"}
@@ -509,8 +526,6 @@ export default function CarRegistration() {
           )}
         </CardContent>
       </Card>
-
-      {/* Lista de Carros Desktop */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Carros Estacionados Actualmente</CardTitle>
@@ -521,10 +536,10 @@ export default function CarRegistration() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {cars.filter((car) => car.estado === "estacionado").length === 0 ? (
+            {cars?.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <CarIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No hay carros estacionados actualmente</p>
+                <p>No hay carros estacionados actualmente.</p>
               </div>
             ) : (
               cars
@@ -577,3 +592,5 @@ export default function CarRegistration() {
     </div>
   )
 }
+
+export default memo(CarRegistration)

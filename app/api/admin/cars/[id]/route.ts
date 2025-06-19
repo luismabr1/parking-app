@@ -9,7 +9,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const { placa, marca, modelo, color } = await request.json()
 
     const client = await clientPromise
-    const db = client.db("parking_system")
+    const db = client.db("parking")
 
     const result = await db.collection("cars").updateOne(
       { _id: new ObjectId(params.id) },
