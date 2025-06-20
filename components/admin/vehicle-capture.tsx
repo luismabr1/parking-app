@@ -1,10 +1,9 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { useState, useRef, useCallback, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import type React from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Camera,
   RotateCcw,
@@ -19,125 +18,120 @@ import {
   CheckCircle2,
   FileText,
   Trash2,
-} from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+} from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 interface VehicleData {
-  placa: string
-  marca: string
-  modelo: string
-  color: string
-  plateImageUrl: string
-  vehicleImageUrl: string
-  plateConfidence: number
-  vehicleConfidence: number
+  placa: string;
+  marca: string;
+  modelo: string;
+  color: string;
+  plateImageUrl: string;
+  vehicleImageUrl: string;
+  plateConfidence: number;
+  vehicleConfidence: number;
 }
 
 interface VehicleCaptureProps {
-  onVehicleDetected: (vehicleData: VehicleData) => void
-  onCancel: () => void
+  onVehicleDetected: (vehicleData: VehicleData) => void;
+  onCancel: () => void;
 }
 
-type CaptureStep = "plate" | "vehicle" | "assign" | "completed"
+type CaptureStep = "plate" | "vehicle" | "assign" | "completed";
 
 export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleCaptureProps) {
-  const [currentStep, setCurrentStep] = useState<CaptureStep>("plate")
-  const [isCapturing, setIsCapturing] = useState(false)
+  const [currentStep, setCurrentStep] = useState<CaptureStep>("plate");
+  const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImages, setCapturedImages] = useState<{
-    plate?: string
-    vehicle?: string
-  }>({})
-  const [isUploading, setIsUploading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<string[]>([])
+    plate?: string;
+    vehicle?: string;
+  }>({});
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
   const [uploadedUrls, setUploadedUrls] = useState<{
-    plateUrl?: string
-    vehicleUrl?: string
-  }>({})
-  const [videoReady, setVideoReady] = useState(false)
-  const [streamActive, setStreamActive] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
-  const [useFileInput, setUseFileInput] = useState(false)
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
-  const [selectedCameraId, setSelectedCameraId] = useState<string>("")
-  const [copySuccess, setCopySuccess] = useState(false)
-  const [showLogs, setShowLogs] = useState(true)
+    plateUrl?: string;
+    vehicleUrl?: string;
+  }>({});
+  const [videoReady, setVideoReady] = useState(false);
+  const [streamActive, setStreamActive] = useState(false);
+  const [useFileInput, setUseFileInput] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [showLogs, setShowLogs] = useState(true);
 
-  const [availableTickets, setAvailableTickets] = useState<any[]>([])
-  const [selectedTicket, setSelectedTicket] = useState<string>("")
-  const [isCreatingRecord, setIsCreatingRecord] = useState(false)
+  const [availableTickets, setAvailableTickets] = useState<any[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<string>("");
+  const [isCreatingRecord, setIsCreatingRecord] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const mountedRef = useRef(true)
-  const logsEndRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(true);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logs to bottom
   useEffect(() => {
     if (logsEndRef.current && showLogs) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" })
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [debugInfo, showLogs])
+  }, [debugInfo, showLogs]);
 
   // Agregar debug info
   const addDebugInfo = useCallback((info: string) => {
-    const timestamp = new Date().toLocaleTimeString()
-    const logEntry = `${timestamp}: ${info}`
-    console.log("🔍 DEBUG:", logEntry)
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = `${timestamp}: ${info}`;
+    console.log("🔍 DEBUG:", logEntry);
     if (mountedRef.current) {
-      setDebugInfo((prev) => [...prev.slice(-50), logEntry])
+      setDebugInfo((prev) => [...prev.slice(-50), logEntry]);
     }
-  }, [])
+  }, []);
 
   // Limpiar logs manualmente
   const clearDebugInfo = useCallback(() => {
-    setDebugInfo([])
-    addDebugInfo("🧹 Logs limpiados manualmente")
-  }, [addDebugInfo])
+    setDebugInfo([]);
+    addDebugInfo("🧹 Logs limpiados manualmente");
+  }, [addDebugInfo]);
 
   // Función para copiar logs al portapapeles
   const copyLogsToClipboard = useCallback(() => {
-    const logText = debugInfo.join("\n")
+    const logText = debugInfo.join("\n");
     navigator.clipboard
       .writeText(logText)
       .then(() => {
-        setCopySuccess(true)
-        setTimeout(() => setCopySuccess(false), 2000)
-        addDebugInfo("📋 Logs copiados al portapapeles")
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+        addDebugInfo("📋 Logs copiados al portapapeles");
       })
       .catch((err) => {
-        addDebugInfo(`❌ Error copiando logs: ${err}`)
-      })
-  }, [debugInfo, addDebugInfo])
+        addDebugInfo(`❌ Error copiando logs: ${err}`);
+      });
+  }, [debugInfo, addDebugInfo]);
 
   // Cleanup al desmontar
   useEffect(() => {
-    mountedRef.current = true
-    addDebugInfo("🚀 Iniciando VehicleCapture simplificado")
+    mountedRef.current = true;
+    addDebugInfo("🚀 Iniciando VehicleCapture simplificado");
     return () => {
-      mountedRef.current = false
+      mountedRef.current = false;
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
-    }
-  }, [addDebugInfo])
+    };
+  }, [addDebugInfo]);
 
   // Detectar cámaras disponibles
   useEffect(() => {
     const detectCameras = async () => {
       try {
-        addDebugInfo("🔍 Detectando cámaras disponibles...")
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
-        tempStream.getTracks().forEach((track) => track.stop())
-
-        const devices = await navigator.mediaDevices.enumerateDevices()
-        const videoDevices = devices.filter((device) => device.kind === "videoinput")
-
-        setAvailableCameras(videoDevices)
-        addDebugInfo(`📹 ${videoDevices.length} cámaras detectadas`)
+        addDebugInfo("🔍 Detectando cámaras disponibles...");
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((device) => device.kind === "videoinput");
+        setAvailableCameras(videoDevices);
+        addDebugInfo(`📹 ${videoDevices.length} cámaras detectadas: ${videoDevices.map(d => d.label).join(", ")}`);
 
         // Seleccionar cámara trasera por defecto
         const backCamera = videoDevices.find(
@@ -145,289 +139,283 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             device.label.toLowerCase().includes("back") ||
             device.label.toLowerCase().includes("rear") ||
             device.label.toLowerCase().includes("environment"),
-        )
+        );
 
         if (backCamera) {
-          setSelectedCameraId(backCamera.deviceId)
-          addDebugInfo(`✅ Cámara trasera seleccionada: ${backCamera.label}`)
+          setSelectedCameraId(backCamera.deviceId);
+          addDebugInfo(`✅ Cámara trasera seleccionada: ${backCamera.label}`);
         } else if (videoDevices.length > 0) {
-          setSelectedCameraId(videoDevices[0].deviceId)
-          addDebugInfo(`✅ Primera cámara seleccionada: ${videoDevices[0].label}`)
+          setSelectedCameraId(videoDevices[0].deviceId);
+          addDebugInfo(`✅ Primera cámara seleccionada: ${videoDevices[0].label}`);
+        } else {
+          addDebugInfo("⚠️ No se detectaron cámaras, activando modo archivo");
+          setUseFileInput(true);
+          setError("No se detectó ninguna cámara. Use el botón de archivo.");
         }
       } catch (err) {
-        addDebugInfo(`❌ Error detectando cámaras: ${err}`)
-        setUseFileInput(true)
+        addDebugInfo(`❌ Error detectando cámaras: ${err}`);
+        setUseFileInput(true);
+        setError("Error detectando cámaras. Use el botón de archivo.");
       }
-    }
+    };
 
-    detectCameras()
-  }, [addDebugInfo])
+    detectCameras();
+  }, [addDebugInfo]);
 
   // Cargar tickets disponibles
   useEffect(() => {
     const fetchAvailableTickets = async () => {
       try {
-        const response = await fetch("/api/admin/available-tickets")
+        const response = await fetch("/api/admin/available-tickets");
         if (response.ok) {
-          const tickets = await response.json()
-          setAvailableTickets(tickets)
-          addDebugInfo(`📋 ${tickets.length} tickets disponibles cargados`)
+          const tickets = await response.json();
+          setAvailableTickets(tickets);
+          addDebugInfo(`📋 ${tickets.length} tickets disponibles cargados`);
         }
       } catch (err) {
-        addDebugInfo(`❌ Error cargando tickets: ${err}`)
+        addDebugInfo(`❌ Error cargando tickets: ${err}`);
       }
-    }
+    };
 
-    fetchAvailableTickets()
-  }, [addDebugInfo])
+    fetchAvailableTickets();
+  }, [addDebugInfo]);
 
   const startCamera = useCallback(async () => {
-    if (!mountedRef.current) return
+    if (!mountedRef.current) return;
 
     try {
-      setError(null)
-      setVideoReady(false)
-      setStreamActive(false)
-      addDebugInfo(`🎬 Iniciando cámara (intento ${retryCount + 1})`)
+      setError(null);
+      setVideoReady(false);
+      setStreamActive(false);
+      addDebugInfo(`🎬 Iniciando cámara`);
 
       // Limpiar stream anterior
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
-        streamRef.current = null
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
 
       const constraints = {
         video: selectedCameraId
           ? { deviceId: selectedCameraId, width: { ideal: 640 }, height: { ideal: 480 } }
           : { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
-      }
+      };
 
-      addDebugInfo(`📐 Usando constraint: ${JSON.stringify(constraints)}`)
+      addDebugInfo(`📐 Usando constraint: ${JSON.stringify(constraints)}`);
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      addDebugInfo("✅ Stream obtenido exitosamente")
-
-      setIsCapturing(true)
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      addDebugInfo("✅ Stream obtenido exitosamente");
 
       if (!videoRef.current || !mountedRef.current) {
-        stream.getTracks().forEach((track) => track.stop())
-        setError("Error: elemento de video no disponible")
-        return
+        stream.getTracks().forEach((track) => track.stop());
+        setError("Error: elemento de video no disponible");
+        return;
       }
 
-      const video = videoRef.current
-      video.srcObject = stream
-      streamRef.current = stream
+      const video = videoRef.current;
+      video.srcObject = stream;
+      streamRef.current = stream;
 
       video.onloadedmetadata = () => {
-        addDebugInfo("📹 Video metadata cargada")
-        setVideoReady(true)
-      }
+        addDebugInfo("📹 Video metadata cargada");
+        setVideoReady(true);
+      };
 
       video.oncanplay = () => {
-        addDebugInfo("📹 Video listo para reproducir")
-        setStreamActive(true)
-      }
+        addDebugInfo("📹 Video listo para reproducir");
+        setStreamActive(true);
+      };
 
       video.onerror = () => {
-        addDebugInfo("❌ Error en video element")
-        setError("Error en el elemento de video")
-      }
+        addDebugInfo("❌ Error en video element");
+        setError("Error en el elemento de video");
+      };
 
-      await video.play()
-      addDebugInfo("🎉 Cámara iniciada exitosamente")
-      setRetryCount(0)
+      await video.play();
+      addDebugInfo("🎉 Cámara iniciada exitosamente");
+      setIsCapturing(true);
     } catch (err) {
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return;
 
-      const errorMessage = err instanceof Error ? err.message : "Error desconocido"
-      addDebugInfo(`💥 Error: ${errorMessage}`)
+      const errorMessage = err instanceof Error ? err.message : "Error desconocido";
+      addDebugInfo(`💥 Error: ${errorMessage}`);
 
-      setRetryCount((prev) => prev + 1)
-
-      if (retryCount >= 2) {
-        addDebugInfo("🔄 Demasiados intentos, activando modo archivo")
-        setUseFileInput(true)
-        setError("No se pudo acceder a la cámara. Use el botón de archivo para subir una imagen.")
-      } else {
-        setError(`Error accediendo a la cámara: ${errorMessage}`)
-      }
-
-      setIsCapturing(false)
+      setError(`Error accediendo a la cámara: ${errorMessage}`);
+      setIsCapturing(false);
     }
-  }, [addDebugInfo, retryCount, selectedCameraId])
+  }, [addDebugInfo, selectedCameraId]);
 
   const stopCamera = useCallback(() => {
-    addDebugInfo("🛑 Deteniendo cámara")
+    addDebugInfo("🛑 Deteniendo cámara");
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
 
     if (videoRef.current) {
-      videoRef.current.srcObject = null
+      videoRef.current.srcObject = null;
     }
 
-    setIsCapturing(false)
-    setVideoReady(false)
-    setStreamActive(false)
-  }, [addDebugInfo])
+    setIsCapturing(false);
+    setVideoReady(false);
+    setStreamActive(false);
+  }, [addDebugInfo]);
 
   const switchCamera = useCallback(() => {
-    addDebugInfo("🔄 Cambiando cámara")
-    stopCamera()
+    addDebugInfo("🔄 Cambiando cámara");
+    stopCamera();
 
     if (availableCameras.length > 1) {
-      const currentIndex = availableCameras.findIndex((cam) => cam.deviceId === selectedCameraId)
-      const nextIndex = (currentIndex + 1) % availableCameras.length
-      setSelectedCameraId(availableCameras[nextIndex].deviceId)
-      addDebugInfo(`📹 Cambiando a: ${availableCameras[nextIndex].label}`)
+      const currentIndex = availableCameras.findIndex((cam) => cam.deviceId === selectedCameraId);
+      const nextIndex = (currentIndex + 1) % availableCameras.length;
+      setSelectedCameraId(availableCameras[nextIndex].deviceId);
+      addDebugInfo(`📹 Cambiando a: ${availableCameras[nextIndex].label}`);
     }
 
     setTimeout(() => {
-      startCamera()
-    }, 1000)
-  }, [stopCamera, startCamera, addDebugInfo, availableCameras, selectedCameraId])
+      startCamera();
+    }, 1000);
+  }, [stopCamera, startCamera, addDebugInfo, availableCameras, selectedCameraId]);
 
   const handleFileUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      if (!file) return
+      const file = event.target.files?.[0];
+      if (!file) return;
 
-      addDebugInfo(`📁 Archivo seleccionado: ${file.name} (${file.size} bytes)`)
+      addDebugInfo(`📁 Archivo seleccionado: ${file.name} (${file.size} bytes)`);
 
       if (!file.type.startsWith("image/")) {
-        setError("Por favor seleccione un archivo de imagen válido")
-        return
+        setError("Por favor seleccione un archivo de imagen válido");
+        return;
       }
 
-      const reader = new FileReader()
+      const reader = new FileReader();
       reader.onload = (e) => {
-        const imageUrl = e.target?.result as string
-        addDebugInfo("✅ Imagen cargada desde archivo")
+        const imageUrl = e.target?.result as string;
+        addDebugInfo("✅ Imagen cargada desde archivo");
         setCapturedImages((prev) => ({
           ...prev,
           [currentStep]: imageUrl,
-        }))
-      }
+        }));
+      };
       reader.onerror = () => {
-        addDebugInfo("❌ Error leyendo archivo")
-        setError("Error leyendo el archivo de imagen")
-      }
-      reader.readAsDataURL(file)
+        addDebugInfo("❌ Error leyendo archivo");
+        setError("Error leyendo el archivo de imagen");
+      };
+      reader.readAsDataURL(file);
     },
     [currentStep, addDebugInfo],
-  )
+  );
 
   const capturePhoto = useCallback(() => {
-    addDebugInfo("📸 Capturando foto")
+    addDebugInfo("📸 Capturando foto");
 
     if (!videoRef.current || !canvasRef.current) {
-      setError("Error: elementos de captura no disponibles")
-      return
+      setError("Error: elementos de captura no disponibles");
+      return;
     }
 
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    const context = canvas.getContext("2d")
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext("2d");
 
     if (!context) {
-      setError("Error: no se pudo obtener contexto de canvas")
-      return
+      setError("Error: no se pudo obtener contexto de canvas");
+      return;
     }
 
     if (!videoReady || !streamActive) {
-      setError("Error: video no está listo para captura")
-      return
+      setError("Error: video no está listo para captura");
+      return;
     }
 
     // Configurar canvas
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
     // Dibujar el video en el canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(
       (blob) => {
-        if (!mountedRef.current || !blob) return
+        if (!mountedRef.current || !blob) return;
 
-        const imageUrl = URL.createObjectURL(blob)
-        addDebugInfo(`✅ Foto capturada: ${blob.size} bytes`)
+        const imageUrl = URL.createObjectURL(blob);
+        addDebugInfo(`✅ Foto capturada: ${blob.size} bytes`);
 
         setCapturedImages((prev) => ({
           ...prev,
           [currentStep]: imageUrl,
-        }))
-        stopCamera()
+        }));
+        stopCamera();
       },
       "image/jpeg",
       0.9,
-    )
-  }, [currentStep, stopCamera, addDebugInfo, videoReady, streamActive])
+    );
+  }, [currentStep, stopCamera, addDebugInfo, videoReady, streamActive]);
 
   // Subir imagen a Cloudinary
   const uploadToCloudinary = useCallback(
     async (imageUrl: string, type: "plate" | "vehicle") => {
       try {
-        addDebugInfo(`📤 Subiendo imagen ${type} a Cloudinary...`)
+        addDebugInfo(`📤 Subiendo imagen ${type} a Cloudinary...`);
 
-        const response = await fetch(imageUrl)
-        const blob = await response.blob()
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
 
-        const formData = new FormData()
-        formData.append("image", blob)
-        formData.append("type", type)
+        const formData = new FormData();
+        formData.append("image", blob);
+        formData.append("type", type);
 
         const uploadResponse = await fetch("/api/admin/process-vehicle", {
           method: "POST",
           body: formData,
-        })
+        });
 
-        const result = await uploadResponse.json()
+        const result = await uploadResponse.json();
 
         if (result.success) {
-          addDebugInfo(`✅ Imagen ${type} subida: ${result.imageUrl}`)
-          return result.imageUrl
+          addDebugInfo(`✅ Imagen ${type} subida: ${result.imageUrl}`);
+          return result.imageUrl;
         } else {
-          throw new Error(result.message || "Error subiendo imagen")
+          throw new Error(result.message || "Error subiendo imagen");
         }
       } catch (err) {
-        addDebugInfo(`❌ Error subiendo ${type}: ${err}`)
-        throw err
+        addDebugInfo(`❌ Error subiendo ${type}: ${err}`);
+        throw err;
       }
     },
     [addDebugInfo],
-  )
+  );
 
   const processImage = useCallback(async () => {
-    if (!capturedImages[currentStep]) return
+    if (!capturedImages[currentStep]) return;
 
-    setIsUploading(true)
-    setError(null)
+    setIsUploading(true);
+    setError(null);
 
     try {
-      const imageUrl = await uploadToCloudinary(capturedImages[currentStep]!, currentStep)
+      const imageUrl = await uploadToCloudinary(capturedImages[currentStep]!, currentStep);
 
       setUploadedUrls((prev) => ({
         ...prev,
         [currentStep === "plate" ? "plateUrl" : "vehicleUrl"]: imageUrl,
-      }))
+      }));
 
       if (currentStep === "plate") {
-        setCurrentStep("vehicle")
-        addDebugInfo("✅ Placa procesada, continuando con vehículo")
+        setCurrentStep("vehicle");
+        addDebugInfo("✅ Placa procesada, continuando con vehículo");
       } else {
-        setCurrentStep("assign")
-        addDebugInfo("✅ Vehículo procesado, continuando con asignación")
+        setCurrentStep("assign");
+        addDebugInfo("✅ Vehículo procesado, continuando con asignación");
       }
     } catch (err) {
-      setError("Error subiendo imagen. Intente nuevamente.")
+      setError("Error subiendo imagen. Intente nuevamente.");
     } finally {
-      setIsUploading(false)
+      setIsUploading(false);
     }
-  }, [capturedImages, currentStep, uploadToCloudinary, addDebugInfo])
+  }, [capturedImages, currentStep, uploadToCloudinary, addDebugInfo]);
 
   const confirmAndRegister = useCallback(() => {
     const finalData = {
@@ -439,28 +427,28 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       vehicleImageUrl: uploadedUrls.vehicleUrl || "",
       plateConfidence: 0,
       vehicleConfidence: 0,
-    }
+    };
 
-    addDebugInfo("🎯 Proceso completado - volviendo al formulario principal")
-    onVehicleDetected(finalData)
-  }, [uploadedUrls, onVehicleDetected, addDebugInfo])
+    addDebugInfo("🎯 Proceso completado - volviendo al formulario principal");
+    onVehicleDetected(finalData);
+  }, [uploadedUrls, onVehicleDetected, addDebugInfo]);
 
   const retakePhoto = useCallback(() => {
-    addDebugInfo("🔄 Retomando foto")
-    setCapturedImages((prev) => ({ ...prev, [currentStep]: undefined }))
-    setError(null)
+    addDebugInfo("🔄 Retomando foto");
+    setCapturedImages((prev) => ({ ...prev, [currentStep]: undefined }));
+    setError(null);
     if (!useFileInput) {
-      startCamera()
+      startCamera();
     }
-  }, [currentStep, startCamera, addDebugInfo, useFileInput])
+  }, [currentStep, startCamera, addDebugInfo, useFileInput]);
 
   const goBackToPlate = useCallback(() => {
-    addDebugInfo("⬅️ Volviendo a captura de placa")
-    setCurrentStep("plate")
-    setCapturedImages({})
-    setUploadedUrls({})
-    setError(null)
-  }, [addDebugInfo])
+    addDebugInfo("⬅️ Volviendo a captura de placa");
+    setCurrentStep("plate");
+    setCapturedImages({});
+    setUploadedUrls({});
+    setError(null);
+  }, [addDebugInfo]);
 
   const getStepInfo = () => {
     switch (currentStep) {
@@ -471,7 +459,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           icon: <CreditCard className="h-5 w-5" />,
           frameClass: "w-32 h-16", // Más pequeño
           frameLabel: "Placa aquí",
-        }
+        };
       case "vehicle":
         return {
           title: "2. Capturar Vehículo",
@@ -479,7 +467,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           icon: <Car className="h-5 w-5" />,
           frameClass: "w-40 h-32", // Más pequeño
           frameLabel: "Vehículo aquí",
-        }
+        };
       case "assign":
         return {
           title: "3. Asignar Puesto",
@@ -487,7 +475,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           icon: <Car className="h-5 w-5" />,
           frameClass: "",
           frameLabel: "",
-        }
+        };
       case "completed":
         return {
           title: "4. Registro Completado",
@@ -495,23 +483,23 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           icon: <CheckCircle2 className="h-5 w-5" />,
           frameClass: "",
           frameLabel: "",
-        }
+        };
     }
-  }
+  };
 
-  const stepInfo = getStepInfo()
+  const stepInfo = getStepInfo();
 
   const createParkingRecord = useCallback(async () => {
     if (!uploadedUrls.plateUrl || !uploadedUrls.vehicleUrl || !selectedTicket) {
-      addDebugInfo("❌ Datos incompletos para crear registro")
-      return
+      addDebugInfo("❌ Datos incompletos para crear registro");
+      return;
     }
 
-    setIsCreatingRecord(true)
-    setError(null)
+    setIsCreatingRecord(true);
+    setError(null);
 
     try {
-      addDebugInfo("🚗 Creando registro de estacionamiento...")
+      addDebugInfo("🚗 Creando registro de estacionamiento...");
 
       const recordData = {
         placa: "PENDIENTE", // Placeholder para indicar que se llenará manualmente
@@ -529,29 +517,38 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           confianzaPlaca: 0,
           confianzaVehiculo: 0,
         },
-      }
+      };
 
       const response = await fetch("/api/admin/cars", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(recordData),
-      })
+      });
 
-      const result = await response.json()
+      const result = await response.json();
 
       if (response.ok) {
-        addDebugInfo("✅ Registro creado exitosamente")
-        setCurrentStep("completed")
+        addDebugInfo("✅ Registro creado exitosamente");
+        setCurrentStep("completed");
       } else {
-        throw new Error(result.message || "Error creando registro")
+        throw new Error(result.message || "Error creando registro");
       }
     } catch (err) {
-      addDebugInfo(`❌ Error creando registro: ${err}`)
-      setError("Error creando el registro. Intente nuevamente.")
+      addDebugInfo(`❌ Error creando registro: ${err}`);
+      setError("Error creando el registro. Intente nuevamente.");
     } finally {
-      setIsCreatingRecord(false)
+      setIsCreatingRecord(false);
     }
-  }, [uploadedUrls, selectedTicket, addDebugInfo])
+  }, [uploadedUrls, selectedTicket, addDebugInfo]);
+
+  // Iniciar cámara automáticamente cuando el videoRef esté listo
+  useEffect(() => {
+    addDebugInfo(`📣 useEffect chequeo: videoRef=${!!videoRef.current}, isCapturing=${isCapturing}, streamActive=${streamActive}`);
+    if (videoRef.current && !isCapturing && !streamActive && !useFileInput) {
+      addDebugInfo("🎬 Iniciando cámara automáticamente desde useEffect");
+      startCamera();
+    }
+  }, [videoRef, isCapturing, streamActive, startCamera, useFileInput]);
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
@@ -600,8 +597,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setError(null)
-                      startCamera()
+                      setError(null);
+                      startCamera();
                     }}
                   >
                     <RefreshCw className="h-3 w-3 mr-1" />
@@ -772,6 +769,15 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           {/* Pasos 1 y 2: Captura */}
           {currentStep !== "completed" && currentStep !== "assign" && (
             <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full rounded-lg bg-black ${isCapturing ? "" : "hidden"}`}
+                style={{ height: "250px", objectFit: "cover" }}
+                onLoadedData={() => addDebugInfo("🎥 Video element loaded into DOM")}
+              />
               {!isCapturing && !capturedImages[currentStep] && (
                 <div className="text-center space-y-4">
                   <Camera className="h-16 w-16 mx-auto text-gray-400" />
@@ -793,8 +799,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       </Button>
                       <Button
                         onClick={() => {
-                          setUseFileInput(false)
-                          setError(null)
+                          setUseFileInput(false);
+                          setError(null);
+                          startCamera();
                         }}
                         variant="outline"
                         className="w-full"
@@ -834,10 +841,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       playsInline
                       muted
                       className="w-full rounded-lg bg-black"
-                      style={{
-                        height: "250px", // Altura fija más pequeña
-                        objectFit: "cover",
-                      }}
+                      style={{ height: "250px", objectFit: "cover" }}
                     />
 
                     {/* Marco de guía más pequeño */}
@@ -992,5 +996,5 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         </Card>
       )}
     </div>
-  )
+  );
 }
