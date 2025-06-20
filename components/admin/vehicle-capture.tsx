@@ -792,6 +792,15 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           {/* Pasos 1 y 2: Captura */}
           {currentStep !== "completed" && currentStep !== "assign" && (
             <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-lg bg-black hidden"
+                style={{ height: "250px", objectFit: "cover" }}
+                onLoadedData={() => addDebugInfo("🎥 Video element loaded into DOM")}
+              />
               {!isCapturing && !capturedImages[currentStep] && (
                 <div className="text-center space-y-4">
                   <Camera className="h-16 w-16 mx-auto text-gray-400" />
