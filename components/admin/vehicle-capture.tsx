@@ -177,7 +177,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     fetchAvailableTickets();
   }, [addDebugInfo]);
 
-  // Stop camera function (defined first to avoid initialization issues)
+  // Stop camera function
   const stopCamera = useCallback(() => {
     addDebugInfo("🛑 Deteniendo cámara");
 
@@ -195,9 +195,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     setStreamActive(false);
   }, [addDebugInfo]);
 
-  // Start camera function (now after stopCamera)
+  // Start camera function
   const startCamera = useCallback(async () => {
-    if (!mountedRef.current || !videoRef.current) return;
+    if (!mountedRef.current || !videoRef.current) {
+      addDebugInfo("❌ No se puede iniciar: videoRef no disponible o componente desmontado");
+      return;
+    }
 
     try {
       setError(null);
@@ -267,7 +270,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         setError("No se pudo acceder a la cámara. Use el botón de archivo para subir una imagen.");
       } else {
         setError(`Error accediendo a la cámara: ${errorMessage}. Reintentando...`);
-        setTimeout(startCamera, 1000); // Retry after 1 second
+        setTimeout(startCamera, 1000);
       }
 
       setIsCapturing(false);
@@ -553,12 +556,14 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
   }, [uploadedUrls, selectedTicket, addDebugInfo]);
 
-  // Iniciar cámara cuando el videoRef está listo (moved after all useCallbacks)
+  // Iniciar cámara cuando el videoRef está listo
   useEffect(() => {
+    addDebugInfo(`📣 useEffect chequeo: videoRef=${!!videoRef.current}, isCapturing=${isCapturing}, streamActive=${streamActive}, retryCount=${retryCount}`);
     if (videoRef.current && !isCapturing && !streamActive && retryCount < 3) {
+      addDebugInfo("🎬 Iniciando cámara automáticamente desde useEffect");
       startCamera();
     }
-  }, [videoRef, isCapturing, streamActive, retryCount, startCamera, stopCamera]);
+  }, [videoRef, isCapturing, streamActive, retryCount, startCamera]);
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
@@ -814,7 +819,15 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Button onClick={startCamera} className="w-full" size="lg" disabled={isCapturing}>
+                      <Button
+                        onClick={() => {
+                          addDebugInfo("🎬 Botón Abrir Cámara clicado");
+                          startCamera();
+                        }}
+                        className="w-full"
+                        size="lg"
+                        disabled={isCapturing}
+                      >
                         <Camera className="h-4 w-4 mr-2" />
                         Abrir Cámara
                       </Button>
