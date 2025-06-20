@@ -72,7 +72,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
-  const hasInitialized = useRef(false); // To prevent multiple startCamera calls
+  const hasInitialized = useRef(false); // Prevent multiple initializations
 
   // Auto-scroll logs to bottom
   useEffect(() => {
@@ -134,7 +134,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         setAvailableCameras(videoDevices);
         addDebugInfo(`📹 ${videoDevices.length} cámaras detectadas: ${videoDevices.map(d => d.label).join(", ")}`);
 
-        // Seleccionar cámara trasera por defecto
         const backCamera = videoDevices.find(
           (device) =>
             device.label.toLowerCase().includes("back") ||
@@ -190,7 +189,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       setStreamActive(false);
       addDebugInfo(`🎬 Iniciando cámara`);
 
-      // Limpiar stream anterior
+      // Ensure previous stream is stopped
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -235,7 +234,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       await video.play();
       addDebugInfo("🎉 Cámara iniciada exitosamente");
       setIsCapturing(true);
-      hasInitialized.current = true; // Mark as initialized
+      hasInitialized.current = true;
     } catch (err) {
       if (!mountedRef.current) return;
 
@@ -262,7 +261,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     setIsCapturing(false);
     setVideoReady(false);
     setStreamActive(false);
-    hasInitialized.current = false; // Allow reinitialization
+    hasInitialized.current = false;
   }, [addDebugInfo]);
 
   const switchCamera = useCallback(() => {
@@ -315,6 +314,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     addDebugInfo("📸 Capturando foto");
 
     if (!videoRef.current || !canvasRef.current) {
+      addDebugInfo("❌ Error: elementos de captura no disponibles");
       setError("Error: elementos de captura no disponibles");
       return;
     }
@@ -324,29 +324,30 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     const context = canvas.getContext("2d");
 
     if (!context) {
+      addDebugInfo("❌ Error: no se pudo obtener contexto de canvas");
       setError("Error: no se pudo obtener contexto de canvas");
       return;
     }
 
     if (!videoReady || !streamActive) {
+      addDebugInfo("❌ Error: video no está listo para captura");
       setError("Error: video no está listo para captura");
       return;
     }
 
-    // Configurar canvas
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
-    // Dibujar el video en el canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(
       (blob) => {
-        if (!mountedRef.current || !blob) return;
+        if (!mountedRef.current || !blob) {
+          addDebugInfo("❌ Error: blob no disponible");
+          return;
+        }
 
         const imageUrl = URL.createObjectURL(blob);
         addDebugInfo(`✅ Foto capturada: ${blob.size} bytes`);
-
         setCapturedImages((prev) => ({
           ...prev,
           [currentStep]: imageUrl,
@@ -460,7 +461,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           title: "1. Capturar Placa",
           description: "Tome una foto de la placa del vehículo",
           icon: <CreditCard className="h-5 w-5" />,
-          frameClass: "", // Remove frame for plate
+          frameClass: "",
           frameLabel: "",
         };
       case "vehicle":
@@ -468,7 +469,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           title: "2. Capturar Vehículo",
           description: "Tome una foto completa del vehículo",
           icon: <Car className="h-5 w-5" />,
-          frameClass: "", // Remove frame for vehicle
+          frameClass: "",
           frameLabel: "",
         };
       case "assign":
