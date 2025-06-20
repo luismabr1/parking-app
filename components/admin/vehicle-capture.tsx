@@ -195,6 +195,10 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         streamRef.current = null;
       }
 
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
       const constraints = {
         video: selectedCameraId
           ? { deviceId: selectedCameraId, width: { ideal: 640 }, height: { ideal: 480 } }
@@ -552,7 +556,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       addDebugInfo("🎬 Iniciando cámara automáticamente desde useEffect");
       startCamera();
     }
-  }, [videoRef, isCapturing, streamActive, startCamera, useFileInput]);
+  }, [videoRef, isCapturing, streamActive, startCamera, useFileInput, hasInitialized]);
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
@@ -773,12 +777,13 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           {/* Pasos 1 y 2: Captura */}
           {currentStep !== "completed" && currentStep !== "assign" && (
             <>
+              {/* Single video element */}
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className={`w-full rounded-lg bg-black ${isCapturing ? "" : "hidden"}`}
+                className={`w-full rounded-lg bg-black ${!isCapturing ? "hidden" : ""}`}
                 style={{ height: "250px", objectFit: "cover" }}
                 onLoadedData={() => addDebugInfo("🎥 Video element loaded into DOM")}
               />
