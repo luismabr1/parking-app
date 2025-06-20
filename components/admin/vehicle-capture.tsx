@@ -565,6 +565,14 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
   }, [videoRef, isCapturing, streamActive, retryCount, startCamera]);
 
+  // Asegurar que la cámara se inicie una vez que el videoRef esté disponible
+  useEffect(() => {
+    if (videoRef.current && !isCapturing && !streamActive) {
+      addDebugInfo("🎥 videoRef disponible, intentando iniciar cámara");
+      startCamera();
+    }
+  }, [videoRef.current, isCapturing, streamActive, startCamera]);
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
       {/* Panel principal */}
