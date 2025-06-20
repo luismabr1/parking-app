@@ -73,7 +73,7 @@ function CarRegistration() {
   const [selectedCarImages, setSelectedCarImages] = useState<Car | null>(null);
   const isMobile = useMobileDetection();
   const cameraRetryCount = useRef(0);
-  const maxRetries = 2;
+  const maxRetries = 10;
 
   const [formData, setFormData] = useState<CarFormData>({
     placa: "",
