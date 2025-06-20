@@ -72,6 +72,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const hasInitialized = useRef(false); // To prevent multiple startCamera calls
 
   // Auto-scroll logs to bottom
   useEffect(() => {
@@ -181,7 +182,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   }, [addDebugInfo]);
 
   const startCamera = useCallback(async () => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || hasInitialized.current) return;
 
     try {
       setError(null);
@@ -234,6 +235,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       await video.play();
       addDebugInfo("🎉 Cámara iniciada exitosamente");
       setIsCapturing(true);
+      hasInitialized.current = true; // Mark as initialized
     } catch (err) {
       if (!mountedRef.current) return;
 
@@ -260,6 +262,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     setIsCapturing(false);
     setVideoReady(false);
     setStreamActive(false);
+    hasInitialized.current = false; // Allow reinitialization
   }, [addDebugInfo]);
 
   const switchCamera = useCallback(() => {
@@ -457,16 +460,16 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           title: "1. Capturar Placa",
           description: "Tome una foto de la placa del vehículo",
           icon: <CreditCard className="h-5 w-5" />,
-          frameClass: "w-32 h-16", // Más pequeño
-          frameLabel: "Placa aquí",
+          frameClass: "", // Remove frame for plate
+          frameLabel: "",
         };
       case "vehicle":
         return {
           title: "2. Capturar Vehículo",
           description: "Tome una foto completa del vehículo",
           icon: <Car className="h-5 w-5" />,
-          frameClass: "w-40 h-32", // Más pequeño
-          frameLabel: "Vehículo aquí",
+          frameClass: "", // Remove frame for vehicle
+          frameLabel: "",
         };
       case "assign":
         return {
@@ -502,7 +505,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       addDebugInfo("🚗 Creando registro de estacionamiento...");
 
       const recordData = {
-        placa: "PENDIENTE", // Placeholder para indicar que se llenará manualmente
+        placa: "PENDIENTE",
         marca: "Por definir",
         modelo: "Por definir",
         color: "Por definir",
@@ -510,8 +513,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         telefono: "Por definir",
         ticketAsociado: selectedTicket,
         imagenes: {
-          plateImageUrl: uploadedUrls.plateUrl, // Cambiar de placaUrl a plateImageUrl
-          vehicleImageUrl: uploadedUrls.vehicleUrl, // Cambiar de vehiculoUrl a vehicleImageUrl
+          plateImageUrl: uploadedUrls.plateUrl,
+          vehicleImageUrl: uploadedUrls.vehicleUrl,
           fechaCaptura: new Date(),
           capturaMetodo: "camara_movil",
           confianzaPlaca: 0,
@@ -544,7 +547,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
   // Iniciar cámara automáticamente cuando el videoRef esté listo
   useEffect(() => {
     addDebugInfo(`📣 useEffect chequeo: videoRef=${!!videoRef.current}, isCapturing=${isCapturing}, streamActive=${streamActive}`);
-    if (videoRef.current && !isCapturing && !streamActive && !useFileInput) {
+    if (videoRef.current && !isCapturing && !streamActive && !useFileInput && !hasInitialized.current) {
       addDebugInfo("🎬 Iniciando cámara automáticamente desde useEffect");
       startCamera();
     }
@@ -624,7 +627,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           {uploadedUrls.vehicleUrl && currentStep === "completed" && (
             <Alert>
               <AlertDescription>
-                ✅ <strong>Vehículo guardado exitosamente</strong>
+                ✅ <strong>Vehículo guardada exitosamente</strong>
               </AlertDescription>
             </Alert>
           )}
@@ -659,7 +662,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     <h4 className="font-medium">Imagen de Vehículo</h4>
                     <img
                       src={uploadedUrls.vehicleUrl || "/placeholder.svg"}
-                      alt="Vehículo guardado"
+                      alt="Vehículo guardada"
                       className="w-full h-32 object-cover rounded border"
                     />
                     <p className="text-xs text-gray-500 break-all">{uploadedUrls.vehicleUrl}</p>
@@ -844,19 +847,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       style={{ height: "250px", objectFit: "cover" }}
                     />
 
-                    {/* Marco de guía más pequeño */}
-                    {stepInfo.frameClass && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div
-                          className={`border-2 border-white border-dashed rounded-lg ${stepInfo.frameClass} flex items-center justify-center bg-black bg-opacity-20`}
-                        >
-                          <span className="text-white text-xs font-medium px-2 py-1 bg-black bg-opacity-50 rounded">
-                            {stepInfo.frameLabel}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Indicadores de estado */}
                     <div className="absolute top-2 left-2 space-y-1">
                       <Badge variant={videoReady ? "default" : "secondary"} className="text-xs">
@@ -894,7 +884,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                   <div className="text-center">
                     <p className="text-sm text-gray-600">
                       {videoReady && streamActive
-                        ? `Alinee ${currentStep === "plate" ? "la placa" : "el vehículo"} en el marco y presione capturar`
+                        ? `Alinee ${currentStep === "plate" ? "la placa" : "el vehículo"} y presione capturar`
                         : "Preparando cámara..."}
                     </p>
                   </div>
