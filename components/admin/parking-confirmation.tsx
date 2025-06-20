@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { CheckCircle, Car, RefreshCw, Clock } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { formatDateTime } from "@/lib/utils"
-import ImageWithFallback from "../image-with-fallback"
-import React from "react"
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, Car, RefreshCw, Clock } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatDateTime } from "@/lib/utils";
+import ImageWithFallback from "../image-with-fallback";
+import React from "react";
 
 // Deep comparison for arrays with verbose logging (unchanged)
 const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
@@ -18,14 +18,14 @@ const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
       arr1.length,
       "arr2.length=",
       arr2.length
-    )
+    );
   }
-  if (arr1.length !== arr2.length) return false
+  if (arr1.length !== arr2.length) return false;
   const result = arr1.every((item1, i) => {
-    const item2 = arr2[i]
+    const item2 = arr2[i];
     const keysMatch = Object.keys(item1).every(
       (key) => {
-        const match = item1[key as keyof T] === item2[key as keyof T]
+        const match = item1[key as keyof T] === item2[key as keyof T];
         if (process.env.NODE_ENV === "development" && !match) {
           console.log(
             "🔍 DEBUG areArraysEqual - Mismatch at index",
@@ -36,65 +36,65 @@ const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
             item1[key as keyof T],
             "item2.",
             item2[key as keyof T]
-          )
+          );
         }
-        return match
+        return match;
       }
-    )
-    return keysMatch
-  })
+    );
+    return keysMatch;
+  });
   if (process.env.NODE_ENV === "development") {
-    console.log("🔍 DEBUG areArraysEqual - Result:", result)
+    console.log("🔍 DEBUG areArraysEqual - Result:", result);
   }
-  return result
-}
+  return result;
+};
 
 interface PendingParking {
-  _id: string
-  codigoTicket: string
-  estado: string
-  horaOcupacion?: string
+  _id: string;
+  codigoTicket: string;
+  estado: string;
+  horaOcupacion?: string;
   carInfo?: {
-    placa: string
-    marca: string
-    modelo: string
-    color: string
-    nombreDueño: string
-    telefono: string
-    horaIngreso: string
-    fechaRegistro?: string
+    placa: string;
+    marca: string;
+    modelo: string;
+    color: string;
+    nombreDueño: string;
+    telefono: string;
+    horaIngreso: string;
+    fechaRegistro?: string;
     imagenes?: {
-      plateImageUrl?: string
-      vehicleImageUrl?: string
-      fechaCaptura?: string
-      capturaMetodo?: string
-    }
-  }
+      plateImageUrl?: string;
+      vehicleImageUrl?: string;
+      fechaCaptura?: string;
+      capturaMetodo?: string;
+    };
+  };
 }
 
 function ParkingConfirmation() {
-  const [pendingParkings, setPendingParkings] = useState<PendingParking[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const [message, setMessage] = useState("")
-  const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null)
-  const [isDataStable, setIsDataStable] = useState(false)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
-  const effectRunCount = useRef(0)
-  const renderCount = useRef(0)
+  const [pendingParkings, setPendingParkings] = useState<PendingParking[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
+  const [isDataStable, setIsDataStable] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const effectRunCount = useRef(0);
+  const renderCount = useRef(0);
 
   const fetchPendingParkings = useCallback(async () => {
     if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG fetchPendingParkings - Starting fetch")
+      console.log("🔍 DEBUG fetchPendingParkings - Starting fetch");
     }
     try {
-      setIsLoading(true)
+      setIsLoading(true);
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG fetchPendingParkings - Set isLoading to true")
+        console.log("🔍 DEBUG fetchPendingParkings - Set isLoading to true");
       }
-      const timestamp = new Date().getTime()
+      const timestamp = new Date().getTime();
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG fetchPendingParkings - Timestamp:", timestamp)
+        console.log("🔍 DEBUG fetchPendingParkings - Timestamp:", timestamp);
       }
       const response = await fetch(`/api/admin/pending-parkings?t=${timestamp}`, {
         method: "GET",
@@ -104,88 +104,100 @@ function ParkingConfirmation() {
           Expires: "0",
           "If-Modified-Since": lastFetchTime ? new Date(lastFetchTime).toUTCString() : "0",
         },
-      })
+      });
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG fetchPendingParkings - Response status:", response.status)
+        console.log("🔍 DEBUG fetchPendingParkings - Response status:", response.status);
       }
 
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json();
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG fetchPendingParkings - Received data:", data)
+          console.log("🔍 DEBUG fetchPendingParkings - Received data:", data);
           data.forEach((parking: PendingParking, index: number) => {
             if (parking.carInfo && parking.carInfo.imagenes) {
-              console.log(`🔍 DEBUG fetchPendingParkings - imagenes for ${parking.codigoTicket} at index ${index}:`, parking.carInfo.imagenes)
+              console.log(
+                `🔍 DEBUG fetchPendingParkings - imagenes for ${parking.codigoTicket} at index ${index}:`,
+                parking.carInfo.imagenes
+              );
             }
-          })
+            if (parking.carInfo) {
+              console.log(
+                `🔍 DEBUG fetchPendingParkings - carInfo for ${parking.codigoTicket} at index ${index}:`,
+                {
+                  fechaRegistro: parking.carInfo.fechaRegistro,
+                  horaIngreso: parking.carInfo.horaIngreso,
+                }
+              );
+            }
+          });
         }
         if (!areArraysEqual(pendingParkings, data)) {
-          setPendingParkings(data)
-          setIsDataStable(false)
+          setPendingParkings(data);
+          setIsDataStable(false);
           if (process.env.NODE_ENV === "development") {
             console.log(
               `🔍 DEBUG ParkingConfirmation - Updated parkings: ${data.length} items`,
               "New data:",
               data
-            )
+            );
           }
         } else {
-          setIsDataStable(true)
+          setIsDataStable(true);
           if (process.env.NODE_ENV === "development") {
             console.log(
               "🔍 DEBUG ParkingConfirmation - Data unchanged, skipping update",
               "Current parkings:",
               pendingParkings
-            )
+            );
           }
         }
-        setLastFetchTime(new Date())
+        setLastFetchTime(new Date());
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG fetchPendingParkings - Updated lastFetchTime:", lastFetchTime)
+          console.log("🔍 DEBUG fetchPendingParkings - Updated lastFetchTime:", lastFetchTime);
         }
       } else if (response.status === 304) {
-        setIsDataStable(true)
+        setIsDataStable(true);
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG ParkingConfirmation - Not Modified (304), data stable")
+          console.log("🔍 DEBUG ParkingConfirmation - Not Modified (304), data stable");
         }
       }
     } catch (error) {
-      console.error("🔍 DEBUG fetchPendingParkings - Error caught:", error)
-      setMessage("❌ Error fetching parking data")
-      setTimeout(() => setMessage(""), 5000)
+      console.error("🔍 DEBUG fetchPendingParkings - Error caught:", error);
+      setMessage("❌ Error fetching parking data");
+      setTimeout(() => setMessage(""), 5000);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG fetchPendingParkings - Set isLoading to false")
+        console.log("🔍 DEBUG fetchPendingParkings - Set isLoading to false");
       }
     }
-  }, [pendingParkings, lastFetchTime])
+  }, [pendingParkings, lastFetchTime]);
 
   useEffect(() => {
-    renderCount.current += 1
-    effectRunCount.current += 1
+    renderCount.current += 1;
+    effectRunCount.current += 1;
     if (process.env.NODE_ENV === "development") {
       console.log(
         `🔍 DEBUG useEffect - Entering effect for ParkingConfirmation, run count: ${effectRunCount.current}, render count: ${renderCount.current}`
-      )
+      );
     }
 
     if (effectRunCount.current === 1) {
-      fetchPendingParkings()
+      fetchPendingParkings();
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG useEffect - Completed initial fetch")
+        console.log("🔍 DEBUG useEffect - Completed initial fetch");
       }
     } else {
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG useEffect - Skipping initial fetch, not first run")
+        console.log("🔍 DEBUG useEffect - Skipping initial fetch, not first run");
       }
     }
 
     const startInterval = () => {
       if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current)
+        clearInterval(intervalRef.current);
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG useEffect - Cleared previous interval")
+          console.log("🔍 DEBUG useEffect - Cleared previous interval");
         }
       }
       const intervalId = setInterval(() => {
@@ -194,49 +206,49 @@ function ParkingConfirmation() {
             "🔍 DEBUG useEffect - Interval triggered, calling fetchPendingParkings",
             "isDataStable:",
             isDataStable
-          )
+          );
         }
-        fetchPendingParkings()
-      }, isDataStable ? 60000 : 30000)
-      intervalRef.current = intervalId
+        fetchPendingParkings();
+      }, isDataStable ? 60000 : 30000);
+      intervalRef.current = intervalId;
       if (process.env.NODE_ENV === "development") {
         console.log(
           `🔍 DEBUG useEffect - Set new interval: ${isDataStable ? 60000 : 30000}ms`,
           "isDataStable:",
           isDataStable
-        )
+        );
       }
-    }
+    };
 
-    startInterval()
+    startInterval();
 
     return () => {
       if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current)
+        clearInterval(intervalRef.current);
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG useEffect - Cleared interval on cleanup")
+          console.log("🔍 DEBUG useEffect - Cleared interval on cleanup");
         }
       }
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG useEffect - Exiting effect for ParkingConfirmation")
+        console.log("🔍 DEBUG useEffect - Exiting effect for ParkingConfirmation");
       }
-    }
-  }, [fetchPendingParkings])
+    };
+  }, [fetchPendingParkings]);
 
   const confirmParking = async (ticketCode: string) => {
     if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG confirmParking - Starting confirmation for ticket:", ticketCode)
+      console.log("🔍 DEBUG confirmParking - Starting confirmation for ticket:", ticketCode);
     }
     try {
-      setConfirmingId(ticketCode)
-      setMessage("")
+      setConfirmingId(ticketCode);
+      setMessage("");
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG confirmParking - Set confirmingId and cleared message")
+        console.log("🔍 DEBUG confirmParking - Set confirmingId and cleared message");
       }
 
-      const timestamp = new Date().getTime()
+      const timestamp = new Date().getTime();
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG confirmParking - Timestamp:", timestamp)
+        console.log("🔍 DEBUG confirmParking - Timestamp:", timestamp);
       }
       const response = await fetch(`/api/admin/confirm-parking?t=${timestamp}`, {
         method: "POST",
@@ -247,58 +259,58 @@ function ParkingConfirmation() {
           Expires: "0",
         },
         body: JSON.stringify({ ticketCode }),
-      })
+      });
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG confirmParking - Response status:", response.status)
+        console.log("🔍 DEBUG confirmParking - Response status:", response.status);
       }
 
-      const data = await response.json()
+      const data = await response.json();
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG confirmParking - Response data:", data)
+        console.log("🔍 DEBUG confirmParking - Response data:", data);
       }
 
       if (response.ok) {
-        setMessage(`✅ ${data.message}`)
-        await fetchPendingParkings()
+        setMessage(`✅ ${data.message}`);
+        await fetchPendingParkings();
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG confirmParking - Success, updated message and refetched")
+          console.log("🔍 DEBUG confirmParking - Success, updated message and refetched");
         }
       } else {
-        setMessage(`❌ ${data.message}`)
+        setMessage(`❌ ${data.message}`);
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG confirmParking - Failed, updated message")
+          console.log("🔍 DEBUG confirmParking - Failed, updated message");
         }
       }
 
-      setTimeout(() => setMessage(""), 5000)
+      setTimeout(() => setMessage(""), 5000);
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG confirmParking - Scheduled message clear after 5s")
+        console.log("🔍 DEBUG confirmParking - Scheduled message clear after 5s");
       }
     } catch (error) {
-      setMessage("❌ Error al confirmar el estacionamiento")
-      console.error("🔍 DEBUG confirmParking - Error:", error)
+      setMessage("❌ Error al confirmar el estacionamiento");
+      console.error("🔍 DEBUG confirmParking - Error:", error);
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG confirmParking - Set error message")
+        console.log("🔍 DEBUG confirmParking - Set error message");
       }
-      setTimeout(() => setMessage(""), 5000)
+      setTimeout(() => setMessage(""), 5000);
     } finally {
-      setConfirmingId(null)
+      setConfirmingId(null);
       if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG confirmParking - Cleared confirmingId")
+        console.log("🔍 DEBUG confirmParking - Cleared confirmingId");
       }
     }
-  }
+  };
 
   const formatDataWithFallback = (value: string | undefined) => {
     if (value === undefined || value === null) {
-      return "Dato no proporcionado"
+      return "Dato no proporcionado";
     }
-    return value || "Dato no proporcionado"
-  }
+    return value || "Dato no proporcionado";
+  };
 
   if (isLoading) {
     if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG render - Rendering loading state, render count:", renderCount.current)
+      console.log("🔍 DEBUG render - Rendering loading state, render count:", renderCount.current);
     }
     return (
       <Card>
@@ -311,11 +323,11 @@ function ParkingConfirmation() {
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (process.env.NODE_ENV === "development") {
-    console.log("🔍 DEBUG render - Rendering main content, pendingParkings:", pendingParkings, "render count:", renderCount.current)
+    console.log("🔍 DEBUG render - Rendering main content, pendingParkings:", pendingParkings, "render count:", renderCount.current);
   }
 
   return (
@@ -369,8 +381,8 @@ function ParkingConfirmation() {
                       {parking.carInfo?.fechaRegistro
                         ? formatDateTime(parking.carInfo.fechaRegistro)
                         : parking.carInfo?.horaIngreso
-                          ? formatDateTime(parking.carInfo.horaIngreso)
-                          : "Sin fecha"}
+                        ? formatDateTime(parking.carInfo.horaIngreso)
+                        : "Sin fecha"}
                     </p>
                   </div>
                 </div>
@@ -514,7 +526,7 @@ function ParkingConfirmation() {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
-export default React.memo(ParkingConfirmation)
+export default React.memo(ParkingConfirmation);

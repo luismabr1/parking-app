@@ -81,13 +81,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "El ticket no está disponible" }, { status: 400 });
     }
 
-    const existingCar = await db.collection("cars").findOne({
-      placa: placa.toUpperCase(),
-      estado: { $in: ["estacionado", "pagado"] },
-    });
+    // Solo validar placa si no es "PENDIENTE"
+    let existingCar = null;
+    if (placaFinal !== "PENDIENTE") {
+      existingCar = await db.collection("cars").findOne({
+        placa: placaFinal,
+        estado: { $in: ["estacionado", "pagado"] },
+      });
 
-    if (existingCar) {
-      return NextResponse.json({ message: "Ya existe un carro con esta placa estacionado" }, { status: 400 });
+      if (existingCar) {
+        return NextResponse.json({ message: "Ya existe un carro con esta placa estacionado" }, { status: 400 });
+      }
     }
 
     // Crear el registro del carro con logging detallado
