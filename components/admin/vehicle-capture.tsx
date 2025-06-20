@@ -209,6 +209,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
       setIsCapturing(true)
 
+      // Después de setIsCapturing(true) y antes de verificar videoRef.current
+      await new Promise((resolve) => setTimeout(resolve, 100)) // Pequeño delay para que el DOM se actualice
+
       if (!videoRef.current || !mountedRef.current) {
         stream.getTracks().forEach((track) => track.stop())
         setError("Error: elemento de video no disponible")
@@ -218,6 +221,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
       const video = videoRef.current
       video.srcObject = stream
       streamRef.current = stream
+
+      // Forzar la carga del video
+      video.load()
+
+      // Esperar a que el elemento esté completamente listo
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       video.onloadedmetadata = () => {
         addDebugInfo("📹 Video metadata cargada")
@@ -469,16 +478,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
           title: "1. Capturar Placa",
           description: "Tome una foto de la placa del vehículo",
           icon: <CreditCard className="h-5 w-5" />,
-          frameClass: "w-32 h-16", // Más pequeño
-          frameLabel: "Placa aquí",
         }
       case "vehicle":
         return {
           title: "2. Capturar Vehículo",
           description: "Tome una foto completa del vehículo",
           icon: <Car className="h-5 w-5" />,
-          frameClass: "w-40 h-32", // Más pequeño
-          frameLabel: "Vehículo aquí",
         }
       case "assign":
         return {
@@ -839,19 +844,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                         objectFit: "cover",
                       }}
                     />
-
-                    {/* Marco de guía más pequeño */}
-                    {stepInfo.frameClass && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div
-                          className={`border-2 border-white border-dashed rounded-lg ${stepInfo.frameClass} flex items-center justify-center bg-black bg-opacity-20`}
-                        >
-                          <span className="text-white text-xs font-medium px-2 py-1 bg-black bg-opacity-50 rounded">
-                            {stepInfo.frameLabel}
-                          </span>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Indicadores de estado */}
                     <div className="absolute top-2 left-2 space-y-1">
