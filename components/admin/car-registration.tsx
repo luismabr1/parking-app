@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { memo, useState, useEffect, useCallback } from "react";
+import { memo, useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import VehicleCapture from "./vehicle-capture";
 import MobileStats from "./mobile-stats";
 import MobileCarList from "./mobile-car-list";
 import CarImageViewer from "./car-image-viewer";
-import ImageWithFallback from "../image-with-fallback"; // Import the existing component
+import ImageWithFallback from "../image-with-fallback";
 
 interface AvailableTicket {
   _id: string;
@@ -35,8 +35,8 @@ interface Car {
   horaIngreso: string;
   estado: string;
   imagenes?: {
-    plateImageUrl?: string;  // Updated to match API
-    vehicleImageUrl?: string; // Updated to match API
+    plateImageUrl?: string;
+    vehicleImageUrl?: string;
     fechaCaptura?: string;
     capturaMetodo?: "manual" | "camara_movil" | "camara_desktop";
     confianzaPlaca?: number;
@@ -72,6 +72,8 @@ function CarRegistration() {
   const [showVehicleCapture, setShowVehicleCapture] = useState(false);
   const [selectedCarImages, setSelectedCarImages] = useState<Car | null>(null);
   const isMobile = useMobileDetection();
+  const cameraRetryCount = useRef(0);
+  const maxRetries = 2;
 
   const [formData, setFormData] = useState<CarFormData>({
     placa: "",
@@ -84,7 +86,7 @@ function CarRegistration() {
   });
 
   const [capturedImages, setCapturedImages] = useState<{
-    placaUrl?: string;  // Temporary mismatch here, will align below
+    placaUrl?: string;
     vehiculoUrl?: string;
     confianzaPlaca?: number;
     confianzaVehiculo?: number;
@@ -194,8 +196,8 @@ function CarRegistration() {
       marca: string;
       modelo: string;
       color: string;
-      plateImageUrl: string;  // Updated to match API
-      vehicleImageUrl: string; // Updated to match API
+      plateImageUrl: string;
+      vehicleImageUrl: string;
       plateConfidence: number;
       vehicleConfidence: number;
     }) => {
@@ -207,8 +209,8 @@ function CarRegistration() {
         color: vehicleData.color,
       }));
       setCapturedImages({
-        placaUrl: vehicleData.plateImageUrl,  // Updated to align with API
-        vehiculoUrl: vehicleData.vehicleImageUrl, // Updated to align with API
+        placaUrl: vehicleData.plateImageUrl,
+        vehiculoUrl: vehicleData.vehicleImageUrl,
         confianzaPlaca: vehicleData.plateConfidence,
         confianzaVehiculo: vehicleData.vehicleConfidence,
       });
@@ -231,8 +233,8 @@ function CarRegistration() {
           ...formData,
           imagenes: capturedImages
             ? {
-                plateImageUrl: capturedImages.placaUrl,  // Updated to match API
-                vehicleImageUrl: capturedImages.vehiculoUrl, // Updated to match API
+                plateImageUrl: capturedImages.placaUrl,
+                vehicleImageUrl: capturedImages.vehiculoUrl,
                 capturaMetodo: isMobile ? "camara_movil" : "camara_desktop",
                 confianzaPlaca: capturedImages.confianzaPlaca,
                 confianzaVehiculo: capturedImages.confianzaVehiculo,
@@ -291,6 +293,19 @@ function CarRegistration() {
     );
   }
 
+  const openCamera = useCallback(() => {
+    if (cameraRetryCount.current < maxRetries) {
+      setShowVehicleCapture(true);
+      cameraRetryCount.current += 1;
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🔍 DEBUG: Attempting to open camera, attempt #${cameraRetryCount.current}`);
+      }
+    } else {
+      setMessage("❌ Máximo de intentos de cámara alcanzado. Verifique permisos o hardware.");
+      setTimeout(() => setMessage(""), 5000);
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <Card>
@@ -341,7 +356,7 @@ function CarRegistration() {
             ) : (
               <>
                 <Button
-                  onClick={() => setShowVehicleCapture(true)}
+                  onClick={openCamera}
                   className="w-full py-8 text-lg bg-blue-600 hover:bg-blue-700"
                   size="lg"
                 >
@@ -571,13 +586,13 @@ function CarRegistration() {
                               <ImageWithFallback
                                 src={car.imagenes.plateImageUrl || "/placeholder.svg"}
                                 alt={`Placa de ${car.placa}`}
-                                className="w-32 h-24 object-cover rounded border mr-2" // Increased to 32x24px
+                                className="w-32 h-24 object-cover rounded border mr-2"
                                 fallback="/placeholder.svg"
                               />
                               <ImageWithFallback
                                 src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
                                 alt={`Vehículo de ${car.placa}`}
-                                className="w-32 h-24 object-cover rounded border mr-2" // Increased to 32x24px
+                                className="w-32 h-24 object-cover rounded border mr-2"
                                 fallback="/placeholder.svg"
                               />
                               <span className="text-xs text-blue-600">Con imágenes</span>
