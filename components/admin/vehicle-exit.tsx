@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,8 @@ import { LogOut, Car, RefreshCw, ImageIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatDateTime } from "@/lib/utils";
 import ExitTimeDisplay from "./exit-time-display";
-import ImageWithFallback from "../image-with-fallback"; // Import the component
+import ImageWithFallback from "../image-with-fallback";
+import React from "react";
 
 interface PaidTicket {
   _id: string;
@@ -39,30 +40,60 @@ interface PaidTicket {
   };
 }
 
-export default function VehicleExit() {
+const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
+  if (arr1.length !== arr2.length) return false;
+  return arr1.every((item1, i) => item1._id === arr2[i]._id);
+};
+
+const VehicleExit = React.memo(() => {
   const [paidTickets, setPaidTickets] = useState<PaidTicket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const isFetchingRef = useRef(false);
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchCounterRef = useRef(0);
+  const prevPaidTicketsRef = useRef<PaidTicket[]>([]);
 
-  // DEBUG: Log de todos los tickets
-  console.log("🔍 DEBUG VehicleExit - All tickets:", paidTickets);
-
-  useEffect(() => {
-    fetchPaidTickets();
-
-    // Actualizar cada 10 segundos para tiempo real
-    const interval = setInterval(() => {
-      fetchPaidTickets();
-    }, 10000);
-
-    return () => clearInterval(interval);
+  // Memoized urgency sorting function
+  const getUrgencyScore = useCallback((ticket: PaidTicket) => {
+    if (!ticket.fechaPago || !ticket.tiempoSalida) return 0;
+    const paymentTime = new Date(ticket.fechaPago);
+    const currentTime = new Date();
+    const minutesToAdd =
+      {
+        now: 0,
+        "5min": 5,
+        "10min": 10,
+        "15min": 15,
+        "20min": 20,
+        "30min": 30,
+        "45min": 45,
+        "60min": 60,
+      }[ticket.tiempoSalida] || 0;
+    const targetTime = new Date(paymentTime.getTime() + minutesToAdd * 60000);
+    const timeRemaining = Math.ceil((targetTime.getTime() - currentTime.getTime()) / 60000);
+    return timeRemaining <= 0 ? 4 : timeRemaining <= 2 ? 3 : timeRemaining <= 5 ? 2 : 1;
   }, []);
 
-  const fetchPaidTickets = async () => {
+  const fetchPaidTickets = useCallback(async (showLoading = true, source = "unknown") => {
+    fetchCounterRef.current += 1;
+    const fetchId = fetchCounterRef.current;
+    if (isFetchingRef.current) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🔍 DEBUG: Fetch #${fetchId} in progress (source: ${source}), skipping`);
+      }
+      return;
+    }
+
     try {
-      setIsLoading(true);
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🔍 DEBUG: Starting fetch #${fetchId} (source: ${source})`);
+      }
+      if (showLoading) setIsLoading(true);
+      isFetchingRef.current = true;
+
       const timestamp = new Date().getTime();
       const response = await fetch(`/api/admin/paid-tickets?t=${timestamp}`, {
         headers: {
@@ -73,54 +104,27 @@ export default function VehicleExit() {
       });
       if (response.ok) {
         const data = await response.json();
-        console.log("🔍 DEBUG: Raw paid tickets API response:", data);
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🔍 DEBUG: Raw paid tickets API response #${fetchId}:`, data);
+        }
 
-        // Ordenar por urgencia de salida
-        const sortedData = data.sort((a: PaidTicket, b: PaidTicket) => {
-          if (!a.tiempoSalida && !b.tiempoSalida) return 0;
-          if (!a.tiempoSalida) return 1;
-          if (!b.tiempoSalida) return -1;
-
-          // Calcular urgencia para ordenar
-          const getUrgencyScore = (ticket: PaidTicket) => {
-            if (!ticket.fechaPago || !ticket.tiempoSalida) return 0;
-
-            const paymentTime = new Date(ticket.fechaPago);
-            const currentTime = new Date();
-            const minutesToAdd =
-              {
-                now: 0,
-                "5min": 5,
-                "10min": 10,
-                "15min": 15,
-                "20min": 20,
-                "30min": 30,
-                "45min": 45,
-                "60min": 60,
-              }[ticket.tiempoSalida] || 0;
-
-            const targetTime = new Date(paymentTime.getTime() + minutesToAdd * 60000);
-            const timeRemaining = Math.ceil((targetTime.getTime() - currentTime.getTime()) / 60000);
-
-            if (timeRemaining <= 0) return 4; // Crítico
-            if (timeRemaining <= 2) return 3; // Urgente
-            if (timeRemaining <= 5) return 2; // Warning
-            return 1; // Normal
-          };
-
-          return getUrgencyScore(b) - getUrgencyScore(a);
-        });
-
-        setPaidTickets(sortedData);
+        const sortedData = [...data].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
+        if (!areArraysEqual(sortedData, prevPaidTicketsRef.current)) {
+          setPaidTickets(sortedData);
+          prevPaidTicketsRef.current = sortedData;
+        } else if (process.env.NODE_ENV === "development") {
+          console.log(`🔍 DEBUG: Skipping update, data unchanged (source: ${source})`);
+        }
       }
     } catch (error) {
-      console.error("Error fetching paid tickets:", error);
+      console.error(`🔍 DEBUG: Error fetching paid tickets #${fetchId}:`, error);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [getUrgencyScore]);
 
-  const handleVehicleExit = async (ticketCode: string) => {
+  const handleVehicleExit = useCallback(async (ticketCode: string) => {
     try {
       setIsProcessing(ticketCode);
       setMessage("");
@@ -138,14 +142,12 @@ export default function VehicleExit() {
       });
 
       const data = await response.json();
-
       if (response.ok) {
         setMessage(`✅ ${data.message}`);
-        await fetchPaidTickets();
+        await fetchPaidTickets(false, "exit-process");
       } else {
         setMessage(`❌ ${data.message}`);
       }
-
       setTimeout(() => setMessage(""), 5000);
     } catch (error) {
       setMessage("❌ Error al procesar la salida del vehículo");
@@ -153,22 +155,38 @@ export default function VehicleExit() {
     } finally {
       setIsProcessing(null);
     }
-  };
+  }, [fetchPaidTickets]);
 
-  // Función para formatear datos con fallback
-  const formatDataWithFallback = (value: string | undefined) => {
-    if (!value || value === "Por definir" || value === "PENDIENTE") {
-      return "Dato no proporcionado";
-    }
+  const formatDataWithFallback = useCallback((value: string | undefined) => {
+    if (!value || value === "Por definir" || value === "PENDIENTE") return "Dato no proporcionado";
     return value;
-  };
+  }, []);
 
-  const filteredTickets = paidTickets.filter(
-    (ticket) =>
-      ticket.codigoTicket.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.carInfo?.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.carInfo?.nombreDueño.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredTickets = useMemo(
+    () =>
+      paidTickets.filter(
+        (ticket) =>
+          ticket.codigoTicket.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ticket.carInfo?.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ticket.carInfo?.nombreDueño.toLowerCase().includes(searchTerm.toLowerCase()),
+      ),
+    [paidTickets, searchTerm],
   );
+
+  useEffect(() => {
+    fetchPaidTickets(true, "initial-mount");
+
+    intervalIdRef.current = setInterval(() => {
+      fetchPaidTickets(false, "interval");
+    }, 10000);
+
+    return () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
+    };
+  }, [fetchPaidTickets]);
 
   if (isLoading) {
     return (
@@ -189,19 +207,18 @@ export default function VehicleExit() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Salida de Vehículos - Liberar Espacios</CardTitle>
-        <Button onClick={fetchPaidTickets} variant="outline" size="sm">
+        <Button onClick={() => fetchPaidTickets(true, "manual-refresh")} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />
           Actualizar
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         {message && (
-          <Alert variant={message.includes("❌") ? "destructive" : "default"}>
+          <Alert variant={message.includes("❌") ? "destructive" : "default"} className="mb-4">
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
 
-        {/* DEBUG INFO - Solo en desarrollo */}
         {process.env.NODE_ENV === "development" && (
           <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
             <p className="font-bold">🔧 DEBUG INFO:</p>
@@ -213,7 +230,6 @@ export default function VehicleExit() {
           </div>
         )}
 
-        {/* Búsqueda */}
         <div className="flex gap-2">
           <div className="flex-1">
             <Label htmlFor="search">Buscar por ticket, placa o propietario</Label>
@@ -235,7 +251,6 @@ export default function VehicleExit() {
           </p>
         </div>
 
-        {/* Lista de Tickets Pagados */}
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {filteredTickets.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
@@ -245,12 +260,11 @@ export default function VehicleExit() {
             </div>
           ) : (
             filteredTickets.map((ticket) => (
-              <div key={ticket._id} className="border rounded-lg p-4 space-y-4">
-                {/* Header con código y monto */}
+              <div key={ticket._id} className="border rounded-lg p-4 space-y-4 bg-white shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <h3 className="font-semibold text-lg">Espacio: {ticket.codigoTicket}</h3>
-                    <Badge>Pagado</Badge>
+                    <Badge variant="outline">Pagado</Badge>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-500">Monto Pagado</p>
@@ -258,7 +272,6 @@ export default function VehicleExit() {
                   </div>
                 </div>
 
-                {/* Tiempo de salida programado */}
                 {ticket.fechaPago && (
                   <ExitTimeDisplay
                     tiempoSalida={ticket.tiempoSalida}
@@ -269,7 +282,6 @@ export default function VehicleExit() {
                   />
                 )}
 
-                {/* Información del vehículo con imágenes */}
                 {ticket.carInfo && (
                   <div className="bg-green-50 p-4 rounded-lg">
                     <div className="flex items-center space-x-2 mb-3">
@@ -278,7 +290,6 @@ export default function VehicleExit() {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      {/* Columna 1 y 2: Datos del vehículo */}
                       <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-2">
                           <div>
@@ -328,7 +339,6 @@ export default function VehicleExit() {
                         </div>
                       </div>
 
-                      {/* Columna 3: Imágenes */}
                       {(ticket.carInfo.imagenes?.plateImageUrl || ticket.carInfo.imagenes?.vehicleImageUrl) && (
                         <div className="lg:col-span-3 mt-4">
                           <h5 className="text-sm font-medium text-gray-700 flex items-center mb-2">
@@ -342,7 +352,7 @@ export default function VehicleExit() {
                                 <ImageWithFallback
                                   src={ticket.carInfo.imagenes.plateImageUrl}
                                   alt="Placa del vehículo"
-                                  className="w-32 h-24 object-cover rounded border"
+                                  className="w-64 h-48 object-cover rounded border"
                                   fallback="/placeholder.svg"
                                 />
                               </div>
@@ -353,7 +363,7 @@ export default function VehicleExit() {
                                 <ImageWithFallback
                                   src={ticket.carInfo.imagenes.vehicleImageUrl}
                                   alt="Vehículo"
-                                  className="w-40 h-24 object-cover rounded border"
+                                  className="w-64 h-48 object-cover rounded border"
                                   fallback="/placeholder.svg"
                                 />
                               </div>
@@ -375,7 +385,6 @@ export default function VehicleExit() {
                   </div>
                 )}
 
-                {/* Botón de salida */}
                 <Button
                   onClick={() => handleVehicleExit(ticket.codigoTicket)}
                   disabled={isProcessing === ticket.codigoTicket}
@@ -383,9 +392,7 @@ export default function VehicleExit() {
                   variant="default"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
-                  {isProcessing === ticket.codigoTicket
-                    ? "Procesando Salida..."
-                    : "Procesar Salida y Liberar Espacio"}
+                  {isProcessing === ticket.codigoTicket ? "Procesando Salida..." : "Procesar Salida y Liberar Espacio"}
                 </Button>
               </div>
             ))
@@ -394,4 +401,8 @@ export default function VehicleExit() {
       </CardContent>
     </Card>
   );
-}
+});
+
+VehicleExit.displayName = "VehicleExit";
+
+export default VehicleExit;
