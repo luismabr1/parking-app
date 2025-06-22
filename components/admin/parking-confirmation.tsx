@@ -104,6 +104,7 @@ function ParkingConfirmation() {
           Expires: "0",
           "If-Modified-Since": lastFetchTime ? new Date(lastFetchTime).toUTCString() : "0",
         },
+          next: { revalidate: 0 },
       });
       if (process.env.NODE_ENV === "development") {
         console.log("🔍 DEBUG fetchPendingParkings - Response status:", response.status);
