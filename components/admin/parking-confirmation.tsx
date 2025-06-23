@@ -104,7 +104,7 @@ function ParkingConfirmation() {
           Expires: "0",
           "If-Modified-Since": lastFetchTime ? new Date(lastFetchTime).toUTCString() : "0",
         },
-          next: { revalidate: 0 },
+        next: { revalidate: 0 },
       });
       if (process.env.NODE_ENV === "development") {
         console.log("🔍 DEBUG fetchPendingParkings - Response status:", response.status);
@@ -255,9 +255,9 @@ function ParkingConfirmation() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
         },
         next: { revalidate: 0 },
         body: JSON.stringify({ ticketCode }),
@@ -414,7 +414,7 @@ function ParkingConfirmation() {
                             <ImageWithFallback
                               src={parking.carInfo.imagenes?.plateImageUrl || "/placeholder.svg"}
                               alt="Placa del vehículo"
-                              className="w-full max-w-32 h-16 object-cover rounded border mx-auto"
+                              className="w-full h-16 object-cover rounded border mx-auto md:max-w-[8rem] lg:max-w-[10rem]"
                               fallback="/placeholder.svg"
                             />
                           </div>
@@ -430,7 +430,7 @@ function ParkingConfirmation() {
                             <ImageWithFallback
                               src={parking.carInfo.imagenes?.vehicleImageUrl || "/placeholder.svg"}
                               alt="Vehículo"
-                              className="w-full max-w-40 h-24 object-cover rounded border mx-auto"
+                              className="w-full h-24 object-cover rounded border mx-auto md:max-w-[10rem] lg:max-w-[12rem]"
                               fallback="/placeholder.svg"
                             />
                           </div>

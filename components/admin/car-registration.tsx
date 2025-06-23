@@ -421,7 +421,7 @@ function CarRegistration() {
                 </form>
                 <Alert>
                   <AlertDescription className="text-center">
-                    💡 <strong>Tip:</strong> Usa "Capturar Vehículo" para llenar datos automáticamente
+                    💡 <strong>Tip:</strong> Usa &quot;Capturar Vehículo&quot; para llenar datos automáticamente
                   </AlertDescription>
                 </Alert>
               </>
@@ -451,7 +451,7 @@ function CarRegistration() {
           {availableTickets.length === 0 ? (
             <Alert variant="destructive">
               <AlertDescription>
-                No hay tickets disponibles. Crea tickets primero en la pestaña "Gestión de Tickets".
+                No hay tickets disponibles. Crea tickets primero en la pestaña &quot;Gestión de Tickets&quot;.
               </AlertDescription>
             </Alert>
           ) : (
@@ -540,10 +540,12 @@ function CarRegistration() {
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={!isFormValid() || isSubmitting}>
-                <Plus className="h-4 w-4 mr-2" />
-                {isSubmitting ? "Registrando..." : "Registrar Carro"}
-              </Button>
+              <div className="space-y-2"> {/* Vertical button stack */}
+                <Button type="submit" className="w-full" disabled={!isFormValid() || isSubmitting}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {isSubmitting ? "Registrando..." : "Registrar Carro"}
+                </Button>
+              </div>
             </form>
           )}
         </CardContent>
