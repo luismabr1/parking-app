@@ -1,68 +1,68 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useParams } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, AlertCircle, Car, Clock, DollarSign, RefreshCw } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { formatCurrency, formatDateTime } from "@/lib/utils"
-import PaymentForm from "@/components/payment-form"
-import Link from "next/link"
-import type { Ticket } from "@/lib/types"
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, AlertCircle, Car, Clock, DollarSign, RefreshCw } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
+import PaymentForm from "@/components/payment-form";
+import Link from "next/link";
+import type { Ticket } from "@/lib/types";
 
-// Actualizar la interfaz Ticket para incluir los nuevos campos
+// Updated interface to include montoBs and tasaCambio
 interface TicketWithBs extends Ticket {
-  montoBs?: number
-  tasaCambio?: number
+  montoBs?: number;
+  tasaCambio?: number;
 }
 
 export default function TicketDetailsPage() {
-  const params = useParams()
-  const ticketCode = params.code as string
-  // Actualizar el estado para usar la nueva interfaz
-  const [ticket, setTicket] = useState<TicketWithBs | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const params = useParams();
+  const ticketCode = params.code as string;
+  // Use the updated interface
+  const [ticket, setTicket] = useState<TicketWithBs | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   useEffect(() => {
     if (ticketCode) {
-      fetchTicketDetails()
+      fetchTicketDetails();
     }
-  }, [ticketCode])
+  }, [ticketCode]);
 
   const fetchTicketDetails = async () => {
     try {
-      setIsLoading(true)
-      setError("")
+      setIsLoading(true);
+      setError("");
 
-      console.log(`🔍 Página: Cargando detalles para ticket ${ticketCode}`)
+      console.log(`🔍 Página: Cargando detalles para ticket ${ticketCode}`);
 
-      const response = await fetch(`/api/ticket/${ticketCode}`)
+      const response = await fetch(`/api/ticket/${ticketCode}`);
 
-      console.log(`📡 Respuesta del servidor: ${response.status} ${response.statusText}`)
+      console.log(`📡 Respuesta del servidor: ${response.status} ${response.statusText}`);
 
       if (response.ok) {
-        const ticketData = await response.json()
-        console.log(`✅ Página: Datos recibidos para ${ticketCode}:`, ticketData)
-        setTicket(ticketData)
+        const ticketData = await response.json();
+        console.log(`✅ Página: Datos recibidos para ${ticketCode}:`, ticketData);
+        setTicket(ticketData);
       } else {
-        const errorData = await response.json()
-        console.log(`❌ Página: Error para ${ticketCode}:`, errorData)
-        setError(errorData.message || "Error al cargar los detalles del ticket")
+        const errorData = await response.json();
+        console.log(`❌ Página: Error para ${ticketCode}:`, errorData);
+        setError(errorData.message || "Error al cargar los detalles del ticket");
       }
     } catch (err) {
-      console.error("❌ Página: Error de conexión:", err)
-      setError("Error de conexión. Por favor intenta nuevamente.")
+      console.error("❌ Página: Error de conexión:", err);
+      setError("Error de conexión. Por favor intenta nuevamente.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleRetry = () => {
-    fetchTicketDetails()
-  }
+    fetchTicketDetails();
+  };
 
   if (isLoading) {
     return (
@@ -74,7 +74,7 @@ export default function TicketDetailsPage() {
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -114,7 +114,7 @@ export default function TicketDetailsPage() {
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   if (!ticket) {
@@ -134,7 +134,7 @@ export default function TicketDetailsPage() {
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   if (showPaymentForm) {
@@ -150,7 +150,7 @@ export default function TicketDetailsPage() {
           <PaymentForm ticket={ticket} />
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -259,5 +259,5 @@ export default function TicketDetailsPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

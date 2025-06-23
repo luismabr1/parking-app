@@ -1,27 +1,33 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { AlertCircle, CheckCircle2, ArrowLeft, ArrowRight, RefreshCw, Clock } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { formatCurrency } from "@/lib/utils"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import type { Ticket, PaymentFormData, CompanySettings } from "@/lib/types"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { AlertCircle, CheckCircle2, ArrowLeft, ArrowRight, RefreshCw, Clock } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatCurrency } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import type { Ticket, PaymentFormData, CompanySettings } from "@/lib/types";
+
+// Updated interface to include montoBs and tasaCambio
+interface TicketWithBs extends Ticket {
+  montoBs?: number;
+  tasaCambio?: number;
+}
 
 interface Bank {
-  _id: string
-  code: string
-  name: string
+  _id: string;
+  code: string;
+  name: string;
 }
 
 interface PaymentFormProps {
-  ticket: Ticket
+  ticket: TicketWithBs; // Updated to use TicketWithBs
 }
 
 // Opciones de tiempo de salida
@@ -34,108 +40,110 @@ const exitTimeOptions = [
   { value: "30min", label: "En 30 minutos", minutes: 30 },
   { value: "45min", label: "En 45 minutos", minutes: 45 },
   { value: "60min", label: "En 1 hora", minutes: 60 },
-]
+];
 
 export default function PaymentForm({ ticket }: PaymentFormProps) {
-  const router = useRouter()
-  const [currentStep, setCurrentStep] = useState(1)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState(false)
-  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null)
-  const [loadingSettings, setLoadingSettings] = useState(true)
-  const [banks, setBanks] = useState<Bank[]>([])
-  const [loadingBanks, setLoadingBanks] = useState(true)
+  const router = useRouter();
+  const [currentStep, setCurrentStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [loadingBanks, setLoadingBanks] = useState(true);
 
+  // Calculate montoBs if not provided, default to ticket.montoCalculado * tasaCambio
+  const montoBs = ticket.montoBs || (ticket.montoCalculado * (ticket.tasaCambio || 1));
   const [formData, setFormData] = useState<PaymentFormData & { tiempoSalida?: string }>({
     referenciaTransferencia: "",
     banco: "",
     telefono: "",
     numeroIdentidad: "",
-    montoPagado: ticket.montoCalculado,
+    montoPagado: montoBs, // Initialize with Bs amount
     tiempoSalida: "now", // Valor por defecto
-  })
+  });
 
   useEffect(() => {
     Promise.all([fetchCompanySettings(), fetchBanks()])
       .then(() => {
-        setLoadingSettings(false)
-        setLoadingBanks(false)
+        setLoadingSettings(false);
+        setLoadingBanks(false);
       })
       .catch((error) => {
-        console.error("Error initializing:", error)
-        setLoadingSettings(false)
-        setLoadingBanks(false)
-      })
-  }, [])
+        console.error("Error initializing:", error);
+        setLoadingSettings(false);
+        setLoadingBanks(false);
+      });
+  }, []);
 
   const fetchCompanySettings = async () => {
     try {
-      const response = await fetch("/api/company-settings")
+      const response = await fetch("/api/company-settings");
       if (response.ok) {
-        const data = await response.json()
-        setCompanySettings(data)
+        const data = await response.json();
+        setCompanySettings(data);
       } else {
-        console.error("Error fetching company settings")
+        console.error("Error fetching company settings");
       }
     } catch (error) {
-      console.error("Error:", error)
+      console.error("Error:", error);
     }
-  }
+  };
 
   const fetchBanks = async () => {
     try {
-      const response = await fetch("/api/banks")
+      const response = await fetch("/api/banks");
       if (response.ok) {
-        const data = await response.json()
-        setBanks(data)
+        const data = await response.json();
+        setBanks(data);
       } else {
-        console.error("Error fetching banks")
+        console.error("Error fetching banks");
       }
     } catch (error) {
-      console.error("Error:", error)
+      console.error("Error:", error);
     }
-  }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: name === "montoPagado" ? Number.parseFloat(value) || 0 : value,
-    }))
-  }
+    }));
+  };
 
   const handleBankChange = (value: string) => {
     setFormData((prev) => ({
       ...prev,
       banco: value,
-    }))
-  }
+    }));
+  };
 
   const handleExitTimeChange = (value: string) => {
     setFormData((prev) => ({
       ...prev,
       tiempoSalida: value,
-    }))
-  }
+    }));
+  };
 
   const getExitTimeLabel = (value: string) => {
-    const option = exitTimeOptions.find((opt) => opt.value === value)
-    return option ? option.label : "Ahora"
-  }
+    const option = exitTimeOptions.find((opt) => opt.value === value);
+    return option ? option.label : "Ahora";
+  };
 
   const getExitDateTime = (value: string) => {
-    const option = exitTimeOptions.find((opt) => opt.value === value)
-    if (!option) return new Date()
+    const option = exitTimeOptions.find((opt) => opt.value === value);
+    if (!option) return new Date();
 
-    const exitTime = new Date()
-    exitTime.setMinutes(exitTime.getMinutes() + option.minutes)
-    return exitTime
-  }
+    const exitTime = new Date();
+    exitTime.setMinutes(exitTime.getMinutes() + option.minutes);
+    return exitTime;
+  };
 
   const handleSubmit = async () => {
-    setIsLoading(true)
-    setError("")
+    setIsLoading(true);
+    setError("");
 
     try {
       const response = await fetch("/api/process-payment", {
@@ -146,24 +154,26 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
         body: JSON.stringify({
           codigoTicket: ticket.codigoTicket,
           ...formData,
+          // Convert back to USD for API if needed (adjust based on API requirements)
+          montoPagado: formData.montoPagado / (ticket.tasaCambio || 1), // Convert Bs to USD
         }),
-      })
+      });
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Error al procesar el pago")
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al procesar el pago");
       }
 
-      setSuccess(true)
+      setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al procesar el pago")
+      setError(err instanceof Error ? err.message : "Error al procesar el pago");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const nextStep = () => setCurrentStep((prev) => prev + 1)
-  const prevStep = () => setCurrentStep((prev) => prev - 1)
+  const nextStep = () => setCurrentStep((prev) => prev + 1);
+  const prevStep = () => setCurrentStep((prev) => prev - 1);
 
   const isFormValid = () => {
     if (currentStep === 2) {
@@ -174,10 +184,10 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
         formData.numeroIdentidad.trim() !== "" &&
         formData.montoPagado > 0 &&
         formData.tiempoSalida
-      )
+      );
     }
-    return true
-  }
+    return true;
+  };
 
   if (success) {
     return (
@@ -210,10 +220,10 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
           </Button>
         </CardContent>
       </Card>
-    )
+    );
   }
 
-  const isLoaded = !loadingSettings && !loadingBanks
+  const isLoaded = !loadingSettings && !loadingBanks;
 
   return (
     <Card className="w-full">
@@ -239,6 +249,12 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                 <div>
                   <p className="text-sm text-gray-500">Monto a Pagar</p>
                   <p className="text-2xl font-bold text-primary">{formatCurrency(ticket.montoCalculado)}</p>
+                  {ticket.montoBs && (
+                    <p className="text-lg font-medium text-green-500">
+                      Bs.{" "}
+                      {ticket.montoBs.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -430,7 +446,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
 
               <div className="space-y-2">
                 <label htmlFor="montoPagado" className="text-sm font-medium">
-                  Monto Pagado
+                  Monto Pagado (Bs.)
                 </label>
                 <Input
                   id="montoPagado"
@@ -440,6 +456,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                   value={formData.montoPagado}
                   onChange={handleChange}
                   className="h-12 text-lg"
+                  placeholder="Ej. 36500000.00"
                   required
                 />
               </div>
@@ -468,7 +485,13 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-gray-500">Monto Pagado</p>
-                  <p className="text-lg font-medium">{formatCurrency(formData.montoPagado)}</p>
+                  <p className="text-lg font-medium">{formatCurrency(formData.montoPagado / (ticket.tasaCambio || 1))}</p>
+                  {ticket.montoBs && (
+                    <p className="text-lg font-medium text-green-500">
+                      Bs.{" "}
+                      {ticket.montoBs.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -531,5 +554,5 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
