@@ -192,10 +192,6 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
   };
 
   const validateStep = () => {
-    if (currentStep === 1 && !paymentType) {
-      return "Por favor, seleccione un método de pago.";
-    }
-
     if (currentStep === 3 && (paymentType === "pago_movil" || paymentType === "transferencia")) {
       if (!formData.referenciaTransferencia.trim()) {
         return "La referencia de la transferencia es requerida.";
@@ -449,9 +445,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                 {companySettings && (
                   <>
                     {/* Sección de Pago Móvil */}
-                    {(companySettings.pagoMovil.banco ||
-                      companySettings.pagoMovil.cedula ||
-                      companySettings.pagoMovil.telefono) && (
+                    {companySettings.pagoMovil?.banco && (
                       <div className="space-y-2">
                         <h4 className="font-medium text-sm text-gray-700">Pago Móvil</h4>
                         {companySettings.pagoMovil.banco && (
@@ -476,10 +470,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                     )}
 
                     {/* Sección de Transferencia */}
-                    {(companySettings.transferencia.banco ||
-                      companySettings.transferencia.cedula ||
-                      companySettings.transferencia.telefono ||
-                      companySettings.transferencia.numeroCuenta) && (
+                    {companySettings.transferencia?.banco && (
                       <div className="space-y-2">
                         <h4 className="font-medium text-sm text-gray-700">Transferencia Bancaria</h4>
                         {companySettings.transferencia.banco && (
