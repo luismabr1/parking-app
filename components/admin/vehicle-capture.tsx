@@ -1006,12 +1006,12 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       onClick={capturePhoto}
                       disabled={!videoReady || !streamActive}
                       className="w-full"
-                      size="lg"
+                      size="sm"
                     >
                       <Camera className="h-4 w-4 mr-2" />
                       {videoReady && streamActive ? "Capturar Foto" : "Esperando..."}
                     </Button>
-                    <Button onClick={() => setUseFileInput(true)} variant="outline" size="lg" className="w-full">
+                    <Button onClick={() => setUseFileInput(true)} variant="outline" size="sm" className="w-full">
                       <Smartphone className="h-4 w-4" />
                     </Button>
                   </div>
