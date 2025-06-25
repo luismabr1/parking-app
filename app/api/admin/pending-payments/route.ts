@@ -58,6 +58,7 @@ export async function GET() {
             fechaPago: 1,
             estado: 1,
             estadoValidacion: 1,
+            tipoPago: 1, // Add this line to include tipoPago
             // Merge carInfo from pagos with full data from cars, using ticketInfo.carInfo as fallback
             carInfo: {
               $mergeObjects: [
@@ -72,7 +73,7 @@ export async function GET() {
                 "$carInfoFull", // This will include imagenes from cars
               ],
             },
-            // AGREGAR: Campos de tiempo de salida (primero del pago, luego del ticket como fallback)
+            // Campos de tiempo de salida
             tiempoSalida: { $ifNull: ["$tiempoSalida", "$ticketInfo.tiempoSalida"] },
             tiempoSalidaEstimado: { $ifNull: ["$tiempoSalidaEstimado", "$ticketInfo.tiempoSalidaEstimado"] },
             // Información del ticket

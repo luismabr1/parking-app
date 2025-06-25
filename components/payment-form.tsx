@@ -27,7 +27,7 @@ interface Bank {
 }
 
 interface PaymentFormProps {
-  ticket: TicketWithBs; // Updated to use TicketWithBs
+  ticket: TicketWithBs;
 }
 
 // Opciones de tiempo de salida
@@ -45,6 +45,7 @@ const exitTimeOptions = [
 export default function PaymentForm({ ticket }: PaymentFormProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
+  const [paymentType, setPaymentType] = useState<"pago_movil" | "transferencia" | "efectivo_bs" | "efectivo_usd" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -53,15 +54,16 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [loadingBanks, setLoadingBanks] = useState(true);
 
-  // Calculate montoBs if not provided, default to ticket.montoCalculado * tasaCambio
-  const montoBs = ticket.montoBs || (ticket.montoCalculado * (ticket.tasaCambio || 1));
+  // Calculate montoBs using ticket.tasaCambio, fallback to companySettings if unavailable
+  const tasaCambio = ticket.tasaCambio || (companySettings?.tarifas?.tasaCambio || 1);
+  const montoBs = ticket.montoBs || (ticket.montoCalculado * tasaCambio);
   const [formData, setFormData] = useState<PaymentFormData & { tiempoSalida?: string }>({
     referenciaTransferencia: "",
     banco: "",
     telefono: "",
     numeroIdentidad: "",
-    montoPagado: montoBs, // Initialize with Bs amount
-    tiempoSalida: "now", // Valor por defecto
+    montoPagado: montoBs,
+    tiempoSalida: "now",
   });
 
   useEffect(() => {
@@ -141,42 +143,43 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
     return exitTime;
   };
 
-  const handleSubmit = async () => {
-    setIsLoading(true);
-    setError("");
+const handleSubmit = async () => {
+  setIsLoading(true);
+  setError("");
 
-    try {
-      const response = await fetch("/api/process-payment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          codigoTicket: ticket.codigoTicket,
-          ...formData,
-          // Convert back to USD for API if needed (adjust based on API requirements)
-          montoPagado: formData.montoPagado / (ticket.tasaCambio || 1), // Convert Bs to USD
-        }),
-      });
+  try {
+    const response = await fetch("/api/process-payment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        codigoTicket: ticket.codigoTicket,
+        tipoPago: paymentType,
+        ...formData,
+        // Remove division by tasaCambio, send raw montoPagado
+        montoPagado: formData.montoPagado,
+      }),
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error al procesar el pago");
-      }
-
-      setSuccess(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al procesar el pago");
-    } finally {
-      setIsLoading(false);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Error al procesar el pago");
     }
-  };
+
+    setSuccess(true);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Error al procesar el pago");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const nextStep = () => setCurrentStep((prev) => prev + 1);
   const prevStep = () => setCurrentStep((prev) => prev - 1);
 
   const isFormValid = () => {
-    if (currentStep === 2) {
+    if (currentStep === 3 && (paymentType === "pago_movil" || paymentType === "transferencia")) {
       return (
         formData.referenciaTransferencia.trim() !== "" &&
         formData.banco.trim() !== "" &&
@@ -196,15 +199,15 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
           <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
           <h2 className="text-2xl font-bold mb-2">¡Pago Registrado!</h2>
           <p className="text-lg text-gray-600 mb-4">
-            El pago ha sido registrado y está Pendiente de Validación por el personal del estacionamiento.
+            {paymentType?.startsWith("efectivo")
+              ? "Su solicitud de pago en efectivo ha sido registrada. Diríjase a la taquilla para completar el pago."
+              : "El pago ha sido registrado y está Pendiente de Validación por el personal del estacionamiento."}
           </p>
           {formData.tiempoSalida && formData.tiempoSalida !== "now" && (
             <div className="bg-blue-50 p-4 rounded-lg mb-4">
               <div className="flex items-center justify-center space-x-2 text-blue-800">
                 <Clock className="h-5 w-5" />
-                <span className="font-medium">
-                  Tiempo de salida programado: {getExitTimeLabel(formData.tiempoSalida)}
-                </span>
+                <span className="font-medium">Tiempo de salida programado: {getExitTimeLabel(formData.tiempoSalida)}</span>
               </div>
               <p className="text-sm text-blue-600 mt-1">
                 Salida estimada:{" "}
@@ -232,12 +235,130 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
           <div className="flex justify-between mb-2">
             <div className={`h-2 flex-1 rounded-l-full ${currentStep >= 1 ? "bg-primary" : "bg-gray-200"}`}></div>
             <div className={`h-2 flex-1 ${currentStep >= 2 ? "bg-primary" : "bg-gray-200"}`}></div>
-            <div className={`h-2 flex-1 rounded-r-full ${currentStep >= 3 ? "bg-primary" : "bg-gray-200"}`}></div>
+            <div className={`h-2 flex-1 ${currentStep >= 3 ? "bg-primary" : "bg-gray-200"}`}></div>
+            <div className={`h-2 flex-1 rounded-r-full ${currentStep >= 4 ? "bg-primary" : "bg-gray-200"}`}></div>
           </div>
-          <p className="text-center text-sm text-gray-500">Paso {currentStep} de 3</p>
+          <p className="text-center text-sm text-gray-500">Paso {currentStep} de 4</p>
         </div>
 
         {currentStep === 1 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-xl font-bold mb-4">Seleccione Método de Pago</h2>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-500">Código de Ticket</p>
+                  <p className="text-lg font-medium">{ticket.codigoTicket}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Monto a Pagar</p>
+                  <p className="text-2xl font-bold text-primary">{formatCurrency(ticket.montoCalculado)}</p>
+                  {ticket.montoBs && (
+                    <p className="text-lg text-gray-600">
+                      {formatCurrency(ticket.montoBs, "VES")}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="font-semibold text-center mb-4">Métodos de Pago Disponibles</h3>
+
+              {/* Pago Móvil */}
+              {companySettings?.pagoMovil?.banco && (
+                <Button
+                  onClick={() => {
+                    setPaymentType("pago_movil");
+                    nextStep();
+                  }}
+                  variant={paymentType === "pago_movil" ? "default" : "outline"}
+                  className="w-full h-16 text-left justify-between"
+                >
+                  <div>
+                    <div className="font-medium">Pago Móvil</div>
+                    <div className="text-sm opacity-75">Transferencia instantánea</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold">
+                      {ticket.montoBs ? formatCurrency(ticket.montoBs, "VES") : formatCurrency(ticket.montoCalculado * tasaCambio, "VES")}
+                    </div>
+                  </div>
+                </Button>
+              )}
+
+              {/* Transferencia Bancaria */}
+              {companySettings?.transferencia?.banco && (
+                <Button
+                  onClick={() => {
+                    setPaymentType("transferencia");
+                    nextStep();
+                  }}
+                  variant={paymentType === "transferencia" ? "default" : "outline"}
+                  className="w-full h-16 text-left justify-between"
+                >
+                  <div>
+                    <div className="font-medium">Transferencia Bancaria</div>
+                    <div className="text-sm opacity-75">Transferencia tradicional</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold">
+                      {ticket.montoBs ? formatCurrency(ticket.montoBs, "VES") : formatCurrency(ticket.montoCalculado * tasaCambio, "VES")}
+                    </div>
+                  </div>
+                </Button>
+              )}
+
+              {/* Efectivo Bolívares */}
+              <Button
+                onClick={() => {
+                  setPaymentType("efectivo_bs");
+                  setFormData((prev) => ({ ...prev, montoPagado: ticket.montoBs || (ticket.montoCalculado * tasaCambio) }));
+                  setCurrentStep(4);
+                }}
+                variant={paymentType === "efectivo_bs" ? "default" : "outline"}
+                className="w-full h-16 text-left justify-between"
+              >
+                <div>
+                  <div className="font-medium">Efectivo (Bolívares)</div>
+                  <div className="text-sm opacity-75">Pago en taquilla</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold">
+                    {ticket.montoBs ? formatCurrency(ticket.montoBs, "VES") : formatCurrency(ticket.montoCalculado * tasaCambio, "VES")}
+                  </div>
+                  <div className="text-sm opacity-75">{formatCurrency(ticket.montoCalculado)}</div>
+                </div>
+              </Button>
+
+              {/* Efectivo USD */}
+              {companySettings?.tarifas?.tasaCambio && (
+                <Button
+                  onClick={() => {
+                    setPaymentType("efectivo_usd");
+                    setFormData((prev) => ({ ...prev, montoPagado: ticket.montoBs || (ticket.montoCalculado * tasaCambio) }));
+                    setCurrentStep(4);
+                  }}
+                  variant={paymentType === "efectivo_usd" ? "default" : "outline"}
+                  className="w-full h-16 text-left justify-between"
+                >
+                  <div>
+                    <div className="font-medium">Efectivo (USD)</div>
+                    <div className="text-sm opacity-75">Pago en taquilla</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold">{formatCurrency(ticket.montoCalculado)}</div>
+                    {ticket.montoBs && (
+                      <div className="text-sm opacity-75">{formatCurrency(ticket.montoBs, "VES")}</div>
+                    )}
+                  </div>
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {currentStep === 2 && (
           <div className="space-y-6">
             <div className="text-center">
               <h2 className="text-xl font-bold mb-4">Confirmación de Datos</h2>
@@ -248,13 +369,14 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Monto a Pagar</p>
-                  <p className="text-2xl font-bold text-primary">{formatCurrency(ticket.montoCalculado)}</p>
-                  {ticket.montoBs && (
-                    <p className="text-lg font-medium text-green-500">
-                      Bs.{" "}
-                      {ticket.montoBs.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  )}
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(ticket.montoCalculado)}</p>
+                    {ticket.montoBs && (
+                      <p className="text-lg font-medium text-green-500">
+                        {formatCurrency(ticket.montoBs, "VES")}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -353,7 +475,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
           </div>
         )}
 
-        {currentStep === 2 && (
+        {currentStep === 3 && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold mb-4 text-center">Detalles de Transferencia</h2>
 
@@ -379,6 +501,18 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                 <p className="text-xs text-gray-500">
                   Esta información ayudará al personal a gestionar mejor los espacios
                 </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500">Monto a Pagar</p>
+                <div className="text-center p-4 bg-green-50 rounded-lg mb-4">
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(ticket.montoCalculado)}</p>
+                  {ticket.montoBs && (
+                    <p className="text-lg font-medium text-green-500">
+                      {formatCurrency(ticket.montoBs, "VES")}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -473,83 +607,37 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
           </div>
         )}
 
-        {currentStep === 3 && (
+        {currentStep === 4 && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold mb-4 text-center">Confirmación Final</h2>
-
-            <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-500">Código de Ticket</p>
-                  <p className="text-lg font-medium">{ticket.codigoTicket}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-500">Monto Pagado</p>
-                  <p className="text-lg font-medium">{formatCurrency(formData.montoPagado / (ticket.tasaCambio || 1))}</p>
-                  {ticket.montoBs && (
-                    <p className="text-lg font-medium text-green-500">
-                      Bs.{" "}
-                      {ticket.montoBs.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Mostrar tiempo de salida programado */}
-              {formData.tiempoSalida && (
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <div className="flex items-center space-x-2 text-blue-800">
-                    <Clock className="h-4 w-4" />
-                    <span className="font-medium">Tiempo de salida: {getExitTimeLabel(formData.tiempoSalida)}</span>
+            <h2 className="text-xl font-bold mb-4 text-center">Pago en Efectivo</h2>
+            <div className="bg-blue-50 p-6 rounded-lg text-center">
+              <div className="text-6xl mb-4">💰</div>
+              <h3 className="text-lg font-semibold mb-2">Acérquese a la Taquilla</h3>
+              <p className="text-gray-600 mb-4">
+                Para completar su pago en efectivo, diríjase a la taquilla del estacionamiento.
+              </p>
+              <div className="bg-white p-4 rounded-lg">
+                <p className="text-sm text-gray-500 mb-1">Código de Ticket</p>
+                <p className="text-xl font-bold mb-3">{ticket.codigoTicket}</p>
+                <p className="text-sm text-gray-500 mb-1">Monto a Pagar</p>
+                {paymentType === "efectivo_bs" ? (
+                  <div>
+                    <p className="text-2xl font-bold text-primary">{formatCurrency(formData.montoPagado, "VES")}</p>
+                    <p className="text-lg text-gray-600">{formatCurrency(ticket.montoCalculado)}</p>
                   </div>
-                  {formData.tiempoSalida !== "now" && (
-                    <p className="text-sm text-blue-600 mt-1">
-                      Salida estimada:{" "}
-                      {getExitDateTime(formData.tiempoSalida).toLocaleTimeString("es-VE", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <p className="text-sm text-gray-500">Referencia de Transferencia</p>
-                <p className="text-lg font-medium">{formData.referenciaTransferencia}</p>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-sm text-gray-500">Banco</p>
-                <p className="text-lg font-medium">{formData.banco}</p>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-sm text-gray-500">Teléfono</p>
-                <p className="text-lg font-medium">{formData.telefono}</p>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-sm text-gray-500">Número de Identidad</p>
-                <p className="text-lg font-medium">{formData.numeroIdentidad}</p>
+                ) : (
+                  <div>
+                    <p className="text-2xl font-bold text-primary">{formatCurrency(ticket.montoCalculado)}</p>
+                    {ticket.montoBs && (
+                      <p className="text-lg text-gray-600">{formatCurrency(ticket.montoBs, "VES")}</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex gap-4">
-              <Button onClick={prevStep} variant="outline" className="flex-1 h-12 text-lg" disabled={isLoading}>
-                <ArrowLeft className="mr-2 h-5 w-5" /> Anterior
-              </Button>
-              <Button onClick={handleSubmit} className="flex-1 h-12 text-lg" disabled={isLoading}>
-                {isLoading ? "Procesando..." : "Confirmar Pago"}
-              </Button>
-            </div>
+            <Button onClick={handleSubmit} className="w-full h-12 text-lg" disabled={isLoading}>
+              {isLoading ? "Registrando..." : "Registrar Solicitud de Pago"}
+            </Button>
           </div>
         )}
       </CardContent>

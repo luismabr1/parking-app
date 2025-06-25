@@ -25,6 +25,7 @@ export interface PendingPayment {
   estado: string;
   tiempoSalida?: string;
   tiempoSalidaEstimado?: string;
+  tipoPago?: string;
   carInfo: {
     placa: string;
     marca: string;
@@ -41,6 +42,8 @@ export interface PendingPayment {
       capturaMetodo?: string;
     };
   };
+  montoPagadoUsd?: number;
+  tasaCambioUsada?: number;
 }
 
 interface PendingPaymentsProps {
@@ -60,8 +63,28 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
   onReject,
   isProcessing,
 }) => {
+  const [companySettings, setCompanySettings] = useState<{ tarifas: { precioHora: number; tasaCambio: number } } | null>(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
+  useEffect(() => {
+    const fetchCompanySettings = async () => {
+      try {
+        const response = await fetch("/api/company-settings");
+        if (response.ok) {
+          const data = await response.json();
+          setCompanySettings(data);
+        }
+      } catch (error) {
+        console.error("Error fetching company settings:", error);
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+    fetchCompanySettings();
+  }, []);
+
   if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizando PendingPaymentCard para ticket ${payment.codigoTicket}`);
+    console.log(`🔍 DEBUG: Renderizando PendingPaymentCard para ticket ${payment.codigoTicket}`, payment);
   }
 
   const formatDataWithFallback = (value: string | undefined) => {
@@ -71,23 +94,41 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
     return value;
   };
 
+  const tasaCambio = companySettings?.tarifas.tasaCambio || payment.tasaCambioUsada || 35.0;
+  const precioHora = companySettings?.tarifas.precioHora || 3.0;
+
+  const isUsdPayment = payment.tipoPago === "efectivo_usd";
+  const montoToDisplay = isUsdPayment
+    ? formatCurrency(payment.montoCalculado, "USD")
+    : formatCurrency(payment.montoCalculado * tasaCambio, "VES");
+
+  const hours = payment.montoCalculado / precioHora;
+  const formattedHours = hours % 1 === 0 ? hours.toFixed(0) : hours.toFixed(1);
+
   return (
     <div className="border rounded-lg p-4 space-y-4 bg-white shadow-sm">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <h3 className="font-semibold text-lg">Ticket: {payment.codigoTicket}</h3>
-          <Badge variant="outline">Pendiente</Badge>
         </div>
         <div className="text-right">
           <p className="text-sm text-gray-500">Fecha de Pago</p>
-          <p className="font-medium">{formatDateTime(payment.fechaPago)}</p>
+          <p className="font-medium">{formatDateTime(payment.fechaPago || payment.fechaCreacion)}</p>
         </div>
       </div>
+
+      {payment.tipoPago && (
+        <div className="bg-blue-100 p-3 rounded-lg text-center">
+          <h4 className="text-2xl font-bold text-blue-800">
+            {payment.tipoPago === "efectivo_bs" ? "EFECTIVO BS" : payment.tipoPago === "efectivo_usd" ? "EFECTIVO USD" : payment.tipoPago.toUpperCase()}
+          </h4>
+        </div>
+      )}
 
       <ExitTimeDisplay
         tiempoSalida={payment.tiempoSalida}
         tiempoSalidaEstimado={payment.tiempoSalidaEstimado}
-        fechaPago={payment.fechaPago}
+        fechaPago={payment.fechaPago || payment.fechaCreacion}
         codigoTicket={payment.codigoTicket}
         variant="full"
       />
@@ -98,7 +139,6 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
             <Car className="h-4 w-4 text-blue-600" />
             <h4 className="font-medium text-blue-800">Vehículo a Retirar</h4>
           </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -117,7 +157,6 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
                   <span className="font-medium ml-2">{formatDataWithFallback(payment.carInfo.color)}</span>
                 </div>
               </div>
-
               <div className="space-y-2">
                 <div>
                   <span className="text-gray-600 text-sm">Propietario:</span>
@@ -139,7 +178,6 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
                 )}
               </div>
             </div>
-
             {(payment.carInfo.imagenes?.plateImageUrl || payment.carInfo.imagenes?.vehicleImageUrl) && (
               <div className="lg:col-span-3 mt-4">
                 <h5 className="text-sm font-medium text-gray-700 flex items-center mb-2">
@@ -186,26 +224,28 @@ const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="space-y-2">
         <div>
-          <p className="text-sm text-gray-500">Monto Calculado</p>
-          <p className="font-semibold text-lg">{formatCurrency(payment.montoCalculado)}</p>
+          <p className="text-sm text-gray-500">Monto a Pagar</p>
+          <p className="text-2xl font-bold">{montoToDisplay}</p>
         </div>
-        <div>
-          <p className="text-sm text-gray-500">Monto Pagado</p>
-          <p className="font-semibold text-lg">{formatCurrency(payment.montoPagado)}</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">Diferencia</p>
-          <p
-            className={`font-semibold text-lg ${
-              payment.montoPagado >= payment.montoCalculado ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {formatCurrency(payment.montoPagado - payment.montoCalculado)}
-          </p>
+        <div className="text-sm text-gray-600">
+          <p>Detalles del Cálculo:</p>
+          <p>{formattedHours} horas * {formatCurrency(precioHora, "USD")} por hora = {formatCurrency(payment.montoCalculado, "USD")}</p>
+          <p>Tasa de Cambio Usada: 1 USD = {formatCurrency(tasaCambio, "VES")}</p>
         </div>
       </div>
+
+      {payment.tipoPago?.startsWith("efectivo") && (
+        <div className="bg-yellow-50 p-3 rounded-lg mt-3">
+          <p className="text-sm text-yellow-800 font-medium flex items-center">
+            <span className="mr-2">💰</span> Pago en Efectivo - Cliente debe dirigirse a taquilla
+          </p>
+          <p className="text-xs text-yellow-600 mt-1">
+            El cliente está en camino para completar el pago en efectivo.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -263,7 +303,6 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
   const prevOnStatsUpdateRef = useRef(onStatsUpdate);
   const prevPaymentsRef = useRef<PendingPayment[]>(payments);
 
-  // Log para cambios de estado
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       console.log(
@@ -272,7 +311,6 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
     }
   }, [payments, isLoading, error]);
 
-  // Log para renderizados
   renderCountRef.current += 1;
   if (process.env.NODE_ENV === "development") {
     console.log(`🔍 DEBUG: Renderizado de PendingPayments #${renderCountRef.current}`);
@@ -282,7 +320,6 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
     }
   }
 
-  // Log para montaje/desmontaje
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       console.log("🔍 DEBUG: Montando PendingPayments");
@@ -300,7 +337,7 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
 
   const arePaymentsEqual = (newPayments: PendingPayment[], oldPayments: PendingPayment[]) => {
     if (newPayments.length !== oldPayments.length) return false;
-    if (newPayments.length === 0) return true; // Ambos vacíos
+    if (newPayments.length === 0) return true;
     return newPayments.every((newPayment, index) => newPayment._id === oldPayments[index]._id);
   };
 
@@ -344,7 +381,6 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
         console.log(`🔍 DEBUG: Respuesta de solicitud #${fetchId} (fuente: ${source})`, data);
       }
 
-      // Evitar actualizar si los datos no han cambiado
       if (!arePaymentsEqual(data as PendingPayment[], prevPaymentsRef.current)) {
         setPayments(data as PendingPayment[]);
         prevPaymentsRef.current = data as PendingPayment[];
@@ -370,6 +406,11 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
         setProcessingId(paymentId);
         setError("");
 
+        const settingsResponse = await fetch("/api/company-settings");
+        const companySettings = await settingsResponse.json();
+        const currentPrecioHora = companySettings.tarifas.precioHora || 3.0;
+        const currentTasaCambio = companySettings.tarifas.tasaCambio || 35.0;
+
         const timestamp = new Date().getTime();
         const response = await fetch(`/api/admin/${action}-payment?t=${timestamp}`, {
           method: "PUT",
@@ -379,7 +420,7 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
             Pragma: "no-cache",
             Expires: "0",
           },
-          body: JSON.stringify({ paymentId }),
+          body: JSON.stringify({ paymentId, currentPrecioHora, currentTasaCambio }),
         });
 
         if (!response.ok) {

@@ -231,7 +231,7 @@ export default function TicketDetailsPage() {
               <div className="flex items-center justify-center space-x-2 mb-2">
                 <DollarSign className="h-8 w-8 text-green-600" />
                 <div>
-                  <p className="text-sm text-gray-600">Monto a Pagar</p>
+                  <p className="text-sm text-gray-600">Monto a Pagar(GROK 1)</p>
                   <p className="text-3xl font-bold text-green-600">{formatCurrency(ticket.montoCalculado)}</p>
                   {ticket.montoBs && (
                     <p className="text-lg font-medium text-green-500">
