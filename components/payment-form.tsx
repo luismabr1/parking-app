@@ -580,7 +580,7 @@ const handleSubmit = async () => {
 
               <div className="space-y-2">
                 <label htmlFor="montoPagado" className="text-sm font-medium">
-                  Monto Pagado (Bs.)
+                  Monto a Pagar (Bs.)
                 </label>
                 <Input
                   id="montoPagado"
