@@ -1005,7 +1005,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     <Button
                       onClick={capturePhoto}
                       disabled={!videoReady || !streamActive}
-                      className="flex-1"
+                      className="w-full"
                       size="lg"
                     >
                       <Camera className="h-4 w-4 mr-2" />
