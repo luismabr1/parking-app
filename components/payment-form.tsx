@@ -442,10 +442,10 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
               <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-center">Información de Pago</h3>
 
-                {companySettings && (
+                {companySettings && paymentType && (
                   <>
                     {/* Sección de Pago Móvil */}
-                    {companySettings.pagoMovil?.banco && (
+                    {paymentType === "pago_movil" && companySettings.pagoMovil?.banco && (
                       <div className="space-y-2">
                         <h4 className="font-medium text-sm text-gray-700">Pago Móvil</h4>
                         {companySettings.pagoMovil.banco && (
@@ -470,7 +470,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
                     )}
 
                     {/* Sección de Transferencia */}
-                    {companySettings.transferencia?.banco && (
+                    {paymentType === "transferencia" && companySettings.transferencia?.banco && (
                       <div className="space-y-2">
                         <h4 className="font-medium text-sm text-gray-700">Transferencia Bancaria</h4>
                         {companySettings.transferencia.banco && (
