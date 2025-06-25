@@ -18,21 +18,25 @@ export async function POST(request: Request) {
       banco,
       telefono,
       numeroIdentidad,
-      montoPagado, // Raw amount from form (Bs for efectivo_bs, USD for efectivo_usd)
+      montoPagado, // Raw amount from form (Bs for efectivo_bs/pago_movil/transferencia, USD for efectivo_usd)
       tiempoSalida,
     } = await request.json();
 
     // Validar que todos los campos requeridos estén presentes
-    if (!codigoTicket || !tipoPago || montoPagado === undefined) {
-      return NextResponse.json({ message: "Código de ticket, tipo de pago y monto son requeridos" }, { status: 400 });
+    if (!codigoTicket || !tipoPago || montoPagado === undefined || montoPagado <= 0) {
+      return NextResponse.json({ message: "Código de ticket, tipo de pago y monto válido son requeridos" }, { status: 400 });
     }
 
-    // Para pagos electrónicos, validar campos adicionales
-    if (
-      (tipoPago === "pago_movil" || tipoPago === "transferencia") &&
-      (!referenciaTransferencia || !banco || !telefono || !numeroIdentidad)
-    ) {
-      return NextResponse.json({ message: "Todos los campos son requeridos para pagos electrónicos" }, { status: 400 });
+    // Para pagos electrónicos, validar campos adicionales con contenido
+    if ((tipoPago === "pago_movil" || tipoPago === "transferencia")) {
+      if (
+        !referenciaTransferencia?.trim() ||
+        !banco?.trim() ||
+        !telefono?.trim() ||
+        !numeroIdentidad?.trim()
+      ) {
+        return NextResponse.json({ message: "Todos los campos son requeridos y no pueden estar vacíos para pagos electrónicos" }, { status: 400 });
+      }
     }
 
     // Buscar el ticket
@@ -70,11 +74,21 @@ export async function POST(request: Request) {
         break;
       case "pago_movil":
       case "transferencia":
-        montoEnBs = Number(montoPagado); // Assume Bs for electronic payments
+        montoEnBs = Number(montoPagado); // Use raw montoPagado as Bs (from frontend)
         montoEnUsd = Number((montoEnBs / tasaCambio).toFixed(6)); // Convert to USD
         break;
       default:
         return NextResponse.json({ message: "Tipo de pago no válido" }, { status: 400 });
+    }
+
+    // Validar que el monto pagado sea aproximadamente igual al monto calculado
+    const montoCalculadoBs = ticket.montoCalculado * tasaCambio;
+    const tolerance = 0.01; // 1% tolerance for floating-point issues
+    if (
+      Math.abs(montoEnBs - montoCalculadoBs) > tolerance &&
+      !(tipoPago.startsWith("efectivo") && montoEnBs >= montoCalculadoBs) // Allow overpayment for efectivo
+    ) {
+      return NextResponse.json({ message: "El monto pagado no coincide con el monto calculado" }, { status: 400 });
     }
 
     // Buscar información del carro asociado
@@ -136,7 +150,7 @@ export async function POST(request: Request) {
     console.log("Pago registrado:", pagoData); // Log the full data for debugging
 
     // Actualizar el estado del ticket
-    const nuevoEstadoTicket = "pagado_pendiente";
+    const nuevoEstadoTicket = tipoPago.startsWith("efectivo") ? "pagado_pendiente_taquilla" : "pagado_pendiente_validacion";
 
     await db.collection("tickets").updateOne(
       { codigoTicket },
@@ -155,7 +169,7 @@ export async function POST(request: Request) {
     if (car) {
       await db.collection("cars").updateOne(
         { _id: car._id },
-        { $set: { estado: "pago_pendiente" } }
+        { $set: { estado: tipoPago.startsWith("efectivo") ? "pago_pendiente_taquilla" : "pago_pendiente_validacion" } }
       );
     }
 
@@ -166,6 +180,7 @@ export async function POST(request: Request) {
       tipoPago,
       montoEnBs,
       montoEnUsd,
+      requiresValidation: !tipoPago.startsWith("efectivo"), // Indicate if manual validation is needed
     });
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     response.headers.set("Pragma", "no-cache");

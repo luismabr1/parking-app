@@ -47,7 +47,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [paymentType, setPaymentType] = useState<"pago_movil" | "transferencia" | "efectivo_bs" | "efectivo_usd" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -113,6 +113,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
       ...prev,
       [name]: name === "montoPagado" ? Number.parseFloat(value) || 0 : value,
     }));
+    setError(null); // Clear error when user edits
   };
 
   const handleBankChange = (value: string) => {
@@ -120,6 +121,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
       ...prev,
       banco: value,
     }));
+    setError(null); // Clear error when user edits
   };
 
   const handleExitTimeChange = (value: string) => {
@@ -127,6 +129,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
       ...prev,
       tiempoSalida: value,
     }));
+    setError(null); // Clear error when user edits
   };
 
   const getExitTimeLabel = (value: string) => {
@@ -143,53 +146,101 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
     return exitTime;
   };
 
-const handleSubmit = async () => {
-  setIsLoading(true);
-  setError("");
+  const handleSubmit = async () => {
+    setIsLoading(true);
+    setError(null);
 
-  try {
-    const response = await fetch("/api/process-payment", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        codigoTicket: ticket.codigoTicket,
-        tipoPago: paymentType,
-        ...formData,
-        // Remove division by tasaCambio, send raw montoPagado
-        montoPagado: formData.montoPagado,
-      }),
-    });
+    try {
+      const response = await fetch("/api/process-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          codigoTicket: ticket.codigoTicket,
+          tipoPago: paymentType,
+          ...formData,
+          montoPagado: formData.montoPagado,
+        }),
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || "Error al procesar el pago");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al procesar el pago");
+      }
+
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al procesar el pago");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const nextStep = () => {
+    const validationError = validateStep();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setCurrentStep((prev) => prev + 1);
+  };
+
+  const prevStep = () => {
+    setError(null);
+    setCurrentStep((prev) => prev - 1);
+  };
+
+  const validateStep = () => {
+    if (currentStep === 1 && !paymentType) {
+      return "Por favor, seleccione un método de pago.";
     }
 
-    setSuccess(true);
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Error al procesar el pago");
-  } finally {
-    setIsLoading(false);
-  }
-};
+    if (currentStep === 3 && (paymentType === "pago_movil" || paymentType === "transferencia")) {
+      if (!formData.referenciaTransferencia.trim()) {
+        return "La referencia de la transferencia es requerida.";
+      }
+      if (!formData.banco.trim()) {
+        return "Seleccione un banco.";
+      }
+      if (!formData.telefono.trim()) {
+        return "El teléfono es requerido.";
+      }
+      if (!formData.numeroIdentidad.trim()) {
+        return "El número de identidad es requerido.";
+      }
+      if (formData.montoPagado <= 0) {
+        return "El monto pagado debe ser mayor que cero.";
+      }
+      if (!formData.tiempoSalida) {
+        return "Seleccione un tiempo de salida.";
+      }
+      // Validate montoPagado against ticket.montoCalculado (with tolerance)
+      const expectedMontoBs = ticket.montoCalculado * tasaCambio;
+      const tolerance = 0.01; // 1% tolerance
+      if (Math.abs(formData.montoPagado - expectedMontoBs) > tolerance) {
+        return "El monto pagado no coincide con el monto calculado.";
+      }
+    }
 
-  const nextStep = () => setCurrentStep((prev) => prev + 1);
-  const prevStep = () => setCurrentStep((prev) => prev - 1);
+    if (currentStep === 4) {
+      if (paymentType?.startsWith("efectivo")) {
+        if (formData.montoPagado <= 0) {
+          return "El monto pagado debe ser mayor que cero.";
+        }
+        // Allow overpayment for efectivo with a reasonable limit (e.g., 10% more)
+        const expectedMontoBs = ticket.montoCalculado * tasaCambio;
+        if (formData.montoPagado < expectedMontoBs || formData.montoPagado > expectedMontoBs * 1.1) {
+          return "El monto pagado debe estar entre el monto calculado y un 10% más.";
+        }
+      }
+    }
+
+    return null;
+  };
 
   const isFormValid = () => {
-    if (currentStep === 3 && (paymentType === "pago_movil" || paymentType === "transferencia")) {
-      return (
-        formData.referenciaTransferencia.trim() !== "" &&
-        formData.banco.trim() !== "" &&
-        formData.telefono.trim() !== "" &&
-        formData.numeroIdentidad.trim() !== "" &&
-        formData.montoPagado > 0 &&
-        formData.tiempoSalida
-      );
-    }
-    return true;
+    return !validateStep();
   };
 
   if (success) {
@@ -231,6 +282,12 @@ const handleSubmit = async () => {
   return (
     <Card className="w-full">
       <CardContent className="pt-6">
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
         <div className="mb-6">
           <div className="flex justify-between mb-2">
             <div className={`h-2 flex-1 rounded-l-full ${currentStep >= 1 ? "bg-primary" : "bg-gray-200"}`}></div>
@@ -314,7 +371,7 @@ const handleSubmit = async () => {
                 onClick={() => {
                   setPaymentType("efectivo_bs");
                   setFormData((prev) => ({ ...prev, montoPagado: ticket.montoBs || (ticket.montoCalculado * tasaCambio) }));
-                  setCurrentStep(4);
+                  nextStep();
                 }}
                 variant={paymentType === "efectivo_bs" ? "default" : "outline"}
                 className="w-full h-16 text-left justify-between"
@@ -336,8 +393,8 @@ const handleSubmit = async () => {
                 <Button
                   onClick={() => {
                     setPaymentType("efectivo_usd");
-                    setFormData((prev) => ({ ...prev, montoPagado: ticket.montoBs || (ticket.montoCalculado * tasaCambio) }));
-                    setCurrentStep(4);
+                    setFormData((prev) => ({ ...prev, montoPagado: ticket.montoCalculado }));
+                    nextStep();
                   }}
                   variant={paymentType === "efectivo_usd" ? "default" : "outline"}
                   className="w-full h-16 text-left justify-between"
@@ -608,37 +665,94 @@ const handleSubmit = async () => {
         )}
 
         {currentStep === 4 && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-bold mb-4 text-center">Pago en Efectivo</h2>
-            <div className="bg-blue-50 p-6 rounded-lg text-center">
-              <div className="text-6xl mb-4">💰</div>
-              <h3 className="text-lg font-semibold mb-2">Acérquese a la Taquilla</h3>
-              <p className="text-gray-600 mb-4">
-                Para completar su pago en efectivo, diríjase a la taquilla del estacionamiento.
-              </p>
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-sm text-gray-500 mb-1">Código de Ticket</p>
-                <p className="text-xl font-bold mb-3">{ticket.codigoTicket}</p>
-                <p className="text-sm text-gray-500 mb-1">Monto a Pagar</p>
-                {paymentType === "efectivo_bs" ? (
-                  <div>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(formData.montoPagado, "VES")}</p>
-                    <p className="text-lg text-gray-600">{formatCurrency(ticket.montoCalculado)}</p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(ticket.montoCalculado)}</p>
-                    {ticket.montoBs && (
-                      <p className="text-lg text-gray-600">{formatCurrency(ticket.montoBs, "VES")}</p>
+          <>
+            {paymentType?.startsWith("efectivo") ? (
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold mb-4 text-center">Pago en Efectivo</h2>
+                <div className="bg-blue-50 p-6 rounded-lg text-center">
+                  <div className="text-6xl mb-4">💰</div>
+                  <h3 className="text-lg font-semibold mb-2">Acérquese a la Taquilla</h3>
+                  <p className="text-gray-600 mb-4">
+                    Para completar su pago en efectivo, diríjase a la taquilla del estacionamiento.
+                  </p>
+                  <div className="bg-white p-4 rounded-lg">
+                    <p className="text-sm text-gray-500 mb-1">Código de Ticket</p>
+                    <p className="text-xl font-bold mb-3">{ticket.codigoTicket}</p>
+                    <p className="text-sm text-gray-500 mb-1">Monto a Pagar</p>
+                    {paymentType === "efectivo_bs" ? (
+                      <div>
+                        <p className="text-2xl font-bold text-primary">{formatCurrency(formData.montoPagado, "VES")}</p>
+                        <p className="text-lg text-gray-600">{formatCurrency(ticket.montoCalculado)}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-2xl font-bold text-primary">{formatCurrency(ticket.montoCalculado)}</p>
+                        {ticket.montoBs && (
+                          <p className="text-lg text-gray-600">{formatCurrency(ticket.montoBs, "VES")}</p>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
+                </div>
+                <Button onClick={handleSubmit} className="w-full h-12 text-lg" disabled={isLoading || !isFormValid()}>
+                  {isLoading ? "Registrando..." : "Registrar Solicitud de Pago"}
+                </Button>
               </div>
-            </div>
-            <Button onClick={handleSubmit} className="w-full h-12 text-lg" disabled={isLoading}>
-              {isLoading ? "Registrando..." : "Registrar Solicitud de Pago"}
-            </Button>
-          </div>
+            ) : (
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold mb-4 text-center">Verificación de Pago</h2>
+                <div className="bg-green-50 p-6 rounded-lg text-center">
+                  <div className="text-6xl mb-4">✅</div>
+                  <h3 className="text-lg font-semibold mb-2">Revise los Detalles de su Pago</h3>
+                  <p className="text-gray-600 mb-4">
+                    Por favor, verifique que la información ingresada sea correcta antes de proceder con el registro de
+                    la solicitud de pago.
+                  </p>
+                  <div className="bg-white p-4 rounded-lg space-y-4">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Código de Ticket</span>
+                      <span className="text-sm font-medium">{ticket.codigoTicket}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Método de Pago</span>
+                      <span className="text-sm font-medium">
+                        {paymentType === "pago_movil" ? "Pago Móvil" : "Transferencia Bancaria"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Referencia</span>
+                      <span className="text-sm font-medium">{formData.referenciaTransferencia}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Banco</span>
+                      <span className="text-sm font-medium">{formData.banco}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Teléfono</span>
+                      <span className="text-sm font-medium">{formData.telefono}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Número de Identidad</span>
+                      <span className="text-sm font-medium">{formData.numeroIdentidad}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Monto Pagado (Bs.)</span>
+                      <span className="text-sm font-medium">{formatCurrency(formData.montoPagado, "VES")}</span>
+                    </div>
+                    {formData.tiempoSalida && formData.tiempoSalida !== "now" && (
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Tiempo de Salida</span>
+                        <span className="text-sm font-medium">{getExitTimeLabel(formData.tiempoSalida)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Button onClick={handleSubmit} className="w-full h-12 text-lg" disabled={isLoading || !isFormValid()}>
+                  {isLoading ? "Registrando..." : "Proceder con el Pago"}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

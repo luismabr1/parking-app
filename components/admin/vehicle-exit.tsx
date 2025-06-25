@@ -256,7 +256,7 @@ const VehicleExit = React.memo(() => {
             <div className="text-center py-8 text-gray-500">
               <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No hay vehículos pagados pendientes de salida</p>
-              {searchTerm && <p className="text-sm">No se encontraron resultados para "{searchTerm}"</p>}
+              {searchTerm && <p className="text-sm">No se encontraron resultados para &quot;{searchTerm}&quot;</p>}
             </div>
           ) : (
             filteredTickets.map((ticket) => (

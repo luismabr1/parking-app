@@ -428,7 +428,7 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
             <ImageIcon className="h-12 w-12 mx-auto mb-4 text-gray-400" />
             <p className="text-gray-500 mb-4">No hay imágenes disponibles para este vehículo</p>
             <p className="text-sm text-gray-400">
-              Las imágenes se capturan automáticamente cuando se usa la función "Capturar Vehículo"
+              Las imágenes se capturan automáticamente cuando se usa la función &quot;Capturar Vehículo&quot;
             </p>
           </CardContent>
         </Card>
