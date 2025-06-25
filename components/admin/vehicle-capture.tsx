@@ -1039,8 +1039,8 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     />
                   </div>
 
-                  <div className="flex space-y-2">
-                    <Button onClick={processImage} disabled={isUploading} className="flex-1" size="lg">
+                  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                    <Button onClick={processImage} disabled={isUploading} className="w-full" size="lg">
                       {isUploading ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
