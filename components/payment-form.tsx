@@ -440,85 +440,95 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
               </div>
             ) : (
               <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-center">Información de Pago</h3>
-
-                {companySettings && paymentType && (
+                {paymentType?.startsWith("efectivo") ? (
+                  <div className="text-center">
+                    <p className="text-lg text-gray-700 mb-4">
+                      Acérquese a la taquilla para completar su pago en efectivo.
+                    </p>
+                  </div>
+                ) : (
                   <>
-                    {/* Sección de Pago Móvil */}
-                    {paymentType === "pago_movil" && companySettings.pagoMovil?.banco && (
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-gray-700">Pago Móvil</h4>
-                        {companySettings.pagoMovil.banco && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Banco:</span>
-                            <span className="text-sm font-medium">{companySettings.pagoMovil.banco}</span>
+                    <h3 className="font-semibold text-center">Información de Pago</h3>
+
+                    {companySettings && paymentType && (
+                      <>
+                        {/* Sección de Pago Móvil */}
+                        {paymentType === "pago_movil" && companySettings.pagoMovil?.banco && (
+                          <div className="space-y-2">
+                            <h4 className="font-medium text-sm text-gray-700">Pago Móvil</h4>
+                            {companySettings.pagoMovil.banco && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">Banco:</span>
+                                <span className="text-sm font-medium">{companySettings.pagoMovil.banco}</span>
+                              </div>
+                            )}
+                            {companySettings.pagoMovil.cedula && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">Cédula/RIF:</span>
+                                <span className="text-sm font-medium">{companySettings.pagoMovil.cedula}</span>
+                              </div>
+                            )}
+                            {companySettings.pagoMovil.telefono && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">Teléfono:</span>
+                                <span className="text-sm font-medium">{companySettings.pagoMovil.telefono}</span>
+                              </div>
+                            )}
                           </div>
                         )}
-                        {companySettings.pagoMovil.cedula && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Cédula/RIF:</span>
-                            <span className="text-sm font-medium">{companySettings.pagoMovil.cedula}</span>
+
+                        {/* Sección de Transferencia */}
+                        {paymentType === "transferencia" && companySettings.transferencia?.banco && (
+                          <div className="space-y-2">
+                            <h4 className="font-medium text-sm text-gray-700">Transferencia Bancaria</h4>
+                            {companySettings.transferencia.banco && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">Banco:</span>
+                                <span className="text-sm font-medium">{companySettings.transferencia.banco}</span>
+                              </div>
+                            )}
+                            {companySettings.transferencia.cedula && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">Cédula/RIF:</span>
+                                <span className="text-sm font-medium">{companySettings.transferencia.cedula}</span>
+                              </div>
+                            )}
+                            {companySettings.transferencia.numeroCuenta && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">Número de Cuenta:</span>
+                                <span className="text-sm font-medium">{companySettings.transferencia.numeroCuenta}</span>
+                              </div>
+                            )}
+                            {companySettings.transferencia.telefono && (
+                              <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">Teléfono:</span>
+                                <span className="text-sm font-medium">{companySettings.transferencia.telefono}</span>
+                              </div>
+                            )}
                           </div>
                         )}
-                        {companySettings.pagoMovil.telefono && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Teléfono:</span>
-                            <span className="text-sm font-medium">{companySettings.pagoMovil.telefono}</span>
+
+                        {!companySettings.pagoMovil.banco && !companySettings.transferencia.banco && (
+                          <div className="text-center text-gray-500 py-2">
+                            <p>No hay información de pago configurada</p>
                           </div>
                         )}
-                      </div>
+                      </>
                     )}
 
-                    {/* Sección de Transferencia */}
-                    {paymentType === "transferencia" && companySettings.transferencia?.banco && (
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-gray-700">Transferencia Bancaria</h4>
-                        {companySettings.transferencia.banco && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Banco:</span>
-                            <span className="text-sm font-medium">{companySettings.transferencia.banco}</span>
-                          </div>
-                        )}
-                        {companySettings.transferencia.cedula && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Cédula/RIF:</span>
-                            <span className="text-sm font-medium">{companySettings.transferencia.cedula}</span>
-                          </div>
-                        )}
-                        {companySettings.transferencia.numeroCuenta && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Número de Cuenta:</span>
-                            <span className="text-sm font-medium">{companySettings.transferencia.numeroCuenta}</span>
-                          </div>
-                        )}
-                        {companySettings.transferencia.telefono && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Teléfono:</span>
-                            <span className="text-sm font-medium">{companySettings.transferencia.telefono}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {!companySettings.pagoMovil.banco && !companySettings.transferencia.banco && (
-                      <div className="text-center text-gray-500 py-2">
-                        <p>No hay información de pago configurada</p>
-                      </div>
-                    )}
+                    <div className="text-sm text-gray-500 text-center pt-2">
+                      <p>
+                        Realice su pago utilizando los datos bancarios proporcionados y luego registre los detalles de su
+                        transferencia.
+                      </p>
+                    </div>
                   </>
                 )}
-
-                <div className="text-sm text-gray-500 text-center pt-2">
-                  <p>
-                    Realice su pago utilizando los datos bancarios proporcionados y luego registre los detalles de su
-                    transferencia.
-                  </p>
-                </div>
               </div>
             )}
 
             <Button onClick={nextStep} className="w-full h-12 text-lg">
-              Continuar al Pago <ArrowRight className="ml-2 h-5 w-5" />
+              {paymentType?.startsWith("efectivo") ? "Registrar Pago" : "Continuar al Pago"} <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </div>
         )}
