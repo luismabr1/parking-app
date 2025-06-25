@@ -126,23 +126,6 @@ export default function TicketSearch() {
             </Button>
           </div>
         </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-500 mb-2">Códigos de ejemplo para pruebas:</p>
-          <div className="flex flex-wrap gap-2 justify-center">
-            {["TEST001", "TEST002", "ABC123", "XYZ789", "PARK001"].map((code) => (
-              <button
-                key={code}
-                onClick={() => setTicketCode(code)}
-                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded font-mono"
-                disabled={isLoading}
-              >
-                {code}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 mt-2">PARK001 ahora tiene un carro asignado y debería funcionar</p>
-        </div>
       </CardContent>
     </Card>
   )
