@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       nombreDueño,
       telefono,
       ticketAsociado,
-      imagenes, // Campo para imágenes
+      imagenes,
     } = body;
 
     console.log("🚗 CREATING CAR:", {
@@ -50,15 +50,12 @@ export async function POST(request: Request) {
       imagenesKeys: imagenes ? Object.keys(imagenes) : [],
     });
 
-    // Validar campos requeridos - solo ticket es obligatorio
     if (!ticketAsociado) {
       return NextResponse.json({ message: "Ticket es requerido" }, { status: 400 });
     }
 
-    // Si no hay placa, usar placeholder
     const placaFinal = placa && placa.trim() ? placa.toUpperCase() : "PENDIENTE";
 
-    // Log específico para imágenes
     if (imagenes) {
       console.log("📸 IMAGES DATA:", {
         hasPlateImage: !!imagenes.plateImageUrl,
@@ -70,7 +67,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // Resto del código de validación...
     const ticket = await db.collection("tickets").findOne({ codigoTicket: ticketAsociado });
 
     if (!ticket) {
@@ -81,7 +77,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "El ticket no está disponible" }, { status: 400 });
     }
 
-    // Solo validar placa si no es "PENDIENTE"
     let existingCar = null;
     if (placaFinal !== "PENDIENTE") {
       existingCar = await db.collection("cars").findOne({
@@ -94,7 +89,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Crear el registro del carro con logging detallado
     const carData = {
       placa: placaFinal,
       marca: marca || "Por definir",
@@ -122,7 +116,6 @@ export async function POST(request: Request) {
 
     const result = await db.collection("cars").insertOne(carData);
 
-    // Verificar que se guardó correctamente
     const savedCar = await db.collection("cars").findOne({ _id: result.insertedId });
     console.log("✅ CAR SAVED:", {
       id: result.insertedId,
@@ -130,7 +123,6 @@ export async function POST(request: Request) {
       imagenesKeys: savedCar?.imagenes ? Object.keys(savedCar.imagenes) : [],
     });
 
-    // Actualizar el ticket con toda la información del carro, incluyendo imágenes
     await db.collection("tickets").updateOne(
       { codigoTicket: ticketAsociado },
       {
@@ -155,6 +147,33 @@ export async function POST(request: Request) {
       },
     );
 
+    // Create initial car_history record with enhanced logging and error handling
+    const carId = savedCar._id.toString(); // Ensure carId is a string to match confirmation logic
+    const initialHistory = {
+      carId,
+      placa: savedCar.placa,
+      marca: savedCar.marca,
+      modelo: savedCar.modelo,
+      color: savedCar.color,
+      nombreDueño: savedCar.nombreDueño,
+      telefono: savedCar.telefono,
+      ticketAsociado: ticketAsociado,
+      horaIngreso: savedCar.horaIngreso,
+      estado: "registro_inicial",
+      fechaRegistro: savedCar.fechaRegistro,
+      imagenes: savedCar.imagenes,
+      ticketId: ticket._id.toString(),
+      pagoId: null,
+      fecha_registro_inicial: new Date(),
+    };
+    console.log("💾 CREATING INITIAL CAR HISTORY:", initialHistory);
+    const historyInsertResult = await db.collection("car_history").insertOne(initialHistory);
+    console.log(`✅ CAR HISTORY CREATED with _id: ${historyInsertResult.insertedId} for carId: ${carId}`);
+    if (!historyInsertResult.insertedId) {
+      console.error("❌ CAR HISTORY INSERTION FAILED");
+      return NextResponse.json({ message: "Error al crear el historial del carro" }, { status: 500 });
+    }
+
     const response = NextResponse.json({
       message: "Carro registrado exitosamente",
       carId: result.insertedId,
@@ -165,7 +184,6 @@ export async function POST(request: Request) {
       },
     });
 
-    // Headers anti-cache
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     response.headers.set("Pragma", "no-cache");
     response.headers.set("Expires", "0");

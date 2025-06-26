@@ -57,12 +57,14 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
   // Calculate montoBs using ticket.tasaCambio, fallback to companySettings if unavailable
   const tasaCambio = ticket.tasaCambio || (companySettings?.tarifas?.tasaCambio || 1);
   const montoBs = ticket.montoBs || (ticket.montoCalculado * tasaCambio);
+
+  // Initialize formData with a neutral value, updated by paymentType selection
   const [formData, setFormData] = useState<PaymentFormData & { tiempoSalida?: string }>({
     referenciaTransferencia: "",
     banco: "",
     telefono: "",
     numeroIdentidad: "",
-    montoPagado: montoBs,
+    montoPagado: ticket.montoCalculado, // Default to USD value
     tiempoSalida: "now",
   });
 
@@ -111,7 +113,7 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "montoPagado" ? Number.parseFloat(value) || 0 : value,
+      [name]: value,
     }));
   };
 
@@ -143,37 +145,36 @@ export default function PaymentForm({ ticket }: PaymentFormProps) {
     return exitTime;
   };
 
-const handleSubmit = async () => {
-  setIsLoading(true);
-  setError("");
+  const handleSubmit = async () => {
+    setIsLoading(true);
+    setError("");
 
-  try {
-    const response = await fetch("/api/process-payment", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        codigoTicket: ticket.codigoTicket,
-        tipoPago: paymentType,
-        ...formData,
-        // Remove division by tasaCambio, send raw montoPagado
-        montoPagado: formData.montoPagado,
-      }),
-    });
+    try {
+      const response = await fetch("/api/process-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          codigoTicket: ticket.codigoTicket,
+          tipoPago: paymentType,
+          ...formData,
+          montoPagado: formData.montoPagado, // Ensure this reflects the latest value
+        }),
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || "Error al procesar el pago");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al procesar el pago");
+      }
+
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al procesar el pago");
+    } finally {
+      setIsLoading(false);
     }
-
-    setSuccess(true);
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Error al procesar el pago");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   const nextStep = () => setCurrentStep((prev) => prev + 1);
   const prevStep = () => setCurrentStep((prev) => prev - 1);
@@ -313,7 +314,7 @@ const handleSubmit = async () => {
               <Button
                 onClick={() => {
                   setPaymentType("efectivo_bs");
-                  setFormData((prev) => ({ ...prev, montoPagado: ticket.montoBs || (ticket.montoCalculado * tasaCambio) }));
+                  setFormData((prev) => ({ ...prev, montoPagado: montoBs }));
                   setCurrentStep(4);
                 }}
                 variant={paymentType === "efectivo_bs" ? "default" : "outline"}
@@ -325,7 +326,7 @@ const handleSubmit = async () => {
                 </div>
                 <div className="text-right">
                   <div className="font-bold">
-                    {ticket.montoBs ? formatCurrency(ticket.montoBs, "VES") : formatCurrency(ticket.montoCalculado * tasaCambio, "VES")}
+                    {formatCurrency(montoBs, "VES")}
                   </div>
                   <div className="text-sm opacity-75">{formatCurrency(ticket.montoCalculado)}</div>
                 </div>
@@ -336,7 +337,7 @@ const handleSubmit = async () => {
                 <Button
                   onClick={() => {
                     setPaymentType("efectivo_usd");
-                    setFormData((prev) => ({ ...prev, montoPagado: ticket.montoBs || (ticket.montoCalculado * tasaCambio) }));
+                    setFormData((prev) => ({ ...prev, montoPagado: ticket.montoCalculado })); // Set to 1.5 USD
                     setCurrentStep(4);
                   }}
                   variant={paymentType === "efectivo_usd" ? "default" : "outline"}
@@ -582,7 +583,7 @@ const handleSubmit = async () => {
 
               <div className="space-y-2">
                 <label htmlFor="montoPagado" className="text-sm font-medium">
-                  Monto a Pagar (Bs.)
+                  Monto a Pagar {paymentType === "efectivo_usd" ? "(USD)" : "(Bs.)"}
                 </label>
                 <Input
                   id="montoPagado"
@@ -590,11 +591,12 @@ const handleSubmit = async () => {
                   type="number"
                   step="0.01"
                   value={formData.montoPagado}
-                  onChange={handleChange}
-                  className="h-12 text-lg"
-                  placeholder="Ej. 36500000.00"
-                  required
+                  onChange={() => {}} // Keep read-only
+                  className="h-12 text-lg bg-gray-100 cursor-not-allowed"
+                  placeholder={paymentType === "efectivo_usd" ? "Ej. 1.50" : "Ej. 52.50"}
+                  readOnly
                 />
+                <p className="text-xs text-gray-500">El monto está calculado automáticamente y no puede ser modificado.</p>
               </div>
             </div>
 
@@ -629,10 +631,8 @@ const handleSubmit = async () => {
                   </div>
                 ) : (
                   <div>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(ticket.montoCalculado)}</p>
-                    {ticket.montoBs && (
-                      <p className="text-lg text-gray-600">{formatCurrency(ticket.montoBs, "VES")}</p>
-                    )}
+                    <p className="text-2xl font-bold text-primary">{formatCurrency(formData.montoPagado)}</p>
+                    <p className="text-lg text-gray-600">{formatCurrency(montoBs, "VES")}</p>
                   </div>
                 )}
               </div>

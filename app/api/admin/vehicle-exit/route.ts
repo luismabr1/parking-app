@@ -18,14 +18,12 @@ export async function POST(request: Request) {
 
     console.log(`🚗 Procesando salida para ticket: ${ticketCode}`);
 
-    // Buscar el ticket
     const ticket = await db.collection("tickets").findOne({ codigoTicket: ticketCode });
 
     if (!ticket) {
       return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
     }
 
-    // Verificar que el ticket esté pagado y validado
     if (ticket.estado !== "pagado_validado") {
       return NextResponse.json(
         { message: "El ticket debe estar pagado y validado antes de procesar la salida" },
@@ -33,7 +31,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Buscar el carro asociado
     const car = await db.collection("cars").findOne({
       ticketAsociado: ticketCode,
       estado: { $in: ["estacionado", "pagado"] },
@@ -45,18 +42,19 @@ export async function POST(request: Request) {
 
     console.log(`✅ Carro encontrado: ${car.placa} - ${car.marca} ${car.modelo}`);
 
-    // Preparar datos para car_history con toda la información del carro
-    const carHistoryData = {
-      ...car,
-      estado: "finalizado",
-      horaSalida: new Date(),
-      // Mantener montoTotal y pagoId si existen desde pagos, pero no sobrescribir
-      montoTotal: ticket.montoCalculado || car.montoTotal || 0,
-      pagoId: ticket.ultimoPagoId || car.pagoId || null,
-    };
-
-    // Insertar el historial completo
-    await db.collection("car_history").insertOne(carHistoryData);
+    // Update car_history with exit data and full audit trail
+    await db.collection("car_history").updateOne(
+      { carId: car._id.toString() },
+      {
+        $set: {
+          estado: "finalizado",
+          fecha_salida: new Date(),
+          ticketData: ticket,
+          pagoData: await db.collection("pagos").findOne({ codigoTicket: ticketCode }),
+          carData: car,
+        },
+      }
+    );
 
     // Eliminar el registro del carro de la colección cars
     await db.collection("cars").deleteOne({ _id: car._id });
@@ -76,7 +74,6 @@ export async function POST(request: Request) {
 
     console.log(`✅ Ticket ${ticketCode} liberado y disponible para nuevo uso`);
 
-    // Agregar headers anti-cache a la respuesta
     const response = NextResponse.json({
       message: `Salida procesada exitosamente. El espacio ${ticketCode} está ahora disponible.`,
       ticketCode,

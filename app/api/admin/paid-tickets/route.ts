@@ -47,6 +47,19 @@ export async function GET() {
           },
         },
         {
+          $group: {
+            _id: "$_id", // Group by ticket _id to deduplicate
+            codigoTicket: { $first: "$codigoTicket" },
+            estado: { $first: "$estado" },
+            horaOcupacion: { $first: "$horaOcupacion" },
+            montoCalculado: { $first: "$montoCalculado" },
+            carInfoFull: { $first: "$carInfoFull" },
+            paymentInfo: {
+              $push: "$paymentInfo", // Collect all payments, then filter for the latest
+            },
+          },
+        },
+        {
           $project: {
             _id: 1,
             codigoTicket: 1,
@@ -67,10 +80,25 @@ export async function GET() {
                 },
               ],
             },
-            // Campos de tiempo de salida y fecha de pago
-            fechaPago: { $ifNull: ["$paymentInfo.fechaPago", "$fechaCreacion"] },
-            tiempoSalida: { $ifNull: ["$tiempoSalida", "$paymentInfo.tiempoSalida"] },
-            tiempoSalidaEstimado: { $ifNull: ["$tiempoSalidaEstimado", "$paymentInfo.tiempoSalidaEstimado"] },
+            // Use the latest payment data
+            fechaPago: {
+              $ifNull: [
+                { $max: "$paymentInfo.fechaPago" }, // Take the most recent payment date
+                "$fechaCreacion",
+              ],
+            },
+            tiempoSalida: {
+              $ifNull: [
+                { $arrayElemAt: ["$paymentInfo.tiempoSalida", -1] }, // Take the last tiempoSalida
+                "$tiempoSalida",
+              ],
+            },
+            tiempoSalidaEstimado: {
+              $ifNull: [
+                { $arrayElemAt: ["$paymentInfo.tiempoSalidaEstimado", -1] }, // Take the last tiempoSalidaEstimado
+                "$tiempoSalidaEstimado",
+              ],
+            },
           },
         },
         {
@@ -82,6 +110,7 @@ export async function GET() {
     // Debugging log
     if (process.env.NODE_ENV === "development") {
       console.log("🔍 DEBUG: Paid Tickets Response", paidTickets);
+      console.log("🔍 DEBUG: Number of unique tickets by codigoTicket:", new Set(paidTickets.map(t => t.codigoTicket)).size);
     }
 
     // Agregar headers anti-cache

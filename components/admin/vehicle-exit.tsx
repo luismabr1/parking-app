@@ -110,6 +110,9 @@ const VehicleExit = React.memo(() => {
 
         const sortedData = [...data].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
         if (!areArraysEqual(sortedData, prevPaidTicketsRef.current)) {
+          if (process.env.NODE_ENV === "development") {
+            console.log(`🔍 DEBUG: Updated paidTickets #${fetchId} (source: ${source}):`, sortedData);
+          }
           setPaidTickets(sortedData);
           prevPaidTicketsRef.current = sortedData;
         } else if (process.env.NODE_ENV === "development") {
@@ -172,6 +175,16 @@ const VehicleExit = React.memo(() => {
       ),
     [paidTickets, searchTerm],
   );
+
+  // Log the filteredTickets after memoization
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.log(`🔍 DEBUG: Filtered tickets after memoization:`, filteredTickets);
+      console.log(`🔍 DEBUG: Search term: "${searchTerm}"`);
+      console.log(`🔍 DEBUG: Number of unique tickets by codigoTicket:`, 
+        new Set(filteredTickets.map(t => t.codigoTicket)).size);
+    }
+  }, [filteredTickets, searchTerm]);
 
   useEffect(() => {
     fetchPaidTickets(true, "initial-mount");
@@ -256,7 +269,7 @@ const VehicleExit = React.memo(() => {
             <div className="text-center py-8 text-gray-500">
               <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No hay vehículos pagados pendientes de salida</p>
-              {searchTerm && <p className="text-sm">No se encontraron resultados para &quot;{searchTerm}&quot;</p>}
+              {searchTerm && <p className="text-sm">No se encontraron resultados para "{searchTerm}"</p>}
             </div>
           ) : (
             filteredTickets.map((ticket) => (

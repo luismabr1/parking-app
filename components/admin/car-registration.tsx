@@ -132,10 +132,13 @@ function CarRegistration() {
       const timestamp = new Date().getTime();
       const response = await fetch(`/api/admin/available-tickets?t=${timestamp}`, {
         headers: {
+          "Content-Type": "application/json",
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
           Expires: "0",
         },
+        next: { revalidate: 0 },
+
       });
       if (response.ok) {
         const data = await response.json();

@@ -18,7 +18,6 @@ export async function PUT(request: Request) {
       return NextResponse.json({ message: "ID de pago requerido" }, { status: 400 });
     }
 
-    // Buscar el pago
     const payment = await db
       .collection("pagos")
       .findOne({ _id: new ObjectId(paymentId) });
@@ -31,7 +30,6 @@ export async function PUT(request: Request) {
       return NextResponse.json({ message: "Este pago ya ha sido validado" }, { status: 400 });
     }
 
-    // Actualizar el estado del pago con información adicional
     const updateResult = await db.collection("pagos").updateOne(
       { _id: new ObjectId(paymentId) },
       {
@@ -39,8 +37,8 @@ export async function PUT(request: Request) {
           estado: "validado",
           estadoValidacion: "validado",
           fechaValidacion: new Date(),
-          precioHoraValidacion: currentPrecioHora, // Guardar tasa por hora actual
-          tasaCambioValidacion: currentTasaCambio, // Guardar tasa de cambio actual
+          precioHoraValidacion: currentPrecioHora,
+          tasaCambioValidacion: currentTasaCambio,
         },
       }
     );
@@ -49,7 +47,6 @@ export async function PUT(request: Request) {
       return NextResponse.json({ message: "No se pudo actualizar el pago" }, { status: 500 });
     }
 
-    // Actualizar el estado del ticket
     await db
       .collection("tickets")
       .updateOne(
@@ -57,40 +54,30 @@ export async function PUT(request: Request) {
         { $set: { estado: "pagado_validado" } }
       );
 
-    // Buscar y actualizar el carro asociado si existe
     const car = await db.collection("cars").findOne({
       ticketAsociado: payment.codigoTicket,
-      estado: { $in: ["estacionado", "pago_pendiente"] },
+      estado: { $in: ["estacionado", "pago_pendiente", "pago_pendiente_taquilla"] },
     });
 
     if (car) {
-      // Actualizar estado del carro
       await db.collection("cars").updateOne(
         { _id: car._id },
         { $set: { estado: "pagado" } }
       );
-
-      // Crear registro completo del pago para car_history, excluyendo _id
-      const { _id, ...paymentDataWithoutId } = payment; // Desestructurar para excluir _id
-      const fullPaymentRecord = {
-        ...paymentDataWithoutId,
-        estado: "pagado",
-        horaSalida: new Date(),
-        precioHoraValidacion: currentPrecioHora,
-        tasaCambioValidacion: currentTasaCambio,
-        fechaValidacion: new Date(),
-        carId: car._id.toString(), // Asegurar que carId sea el identificador único
-      };
-
-      // Guardar el registro completo del pago en car_history usando carId o pagoId
-      await db.collection("car_history").updateOne(
-        { carId: car._id.toString() }, // Usar carId como clave única
-        { $set: fullPaymentRecord },
-        { upsert: true }
-      );
     }
 
-    // Set cache control headers
+    // Update car_history with validated payment data
+    await db.collection("car_history").updateOne(
+      { carId: car?._id.toString() },
+      {
+        $set: {
+          estado: "validado_correctamente",
+          pagoData: payment, // Full validated payment data
+          fecha_validacion: new Date(),
+        },
+      }
+    );
+
     const response = NextResponse.json({ message: "Pago validado exitosamente" });
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     response.headers.set("Pragma", "no-cache");

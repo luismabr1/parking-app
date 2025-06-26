@@ -18,16 +18,14 @@ export async function POST(request: Request) {
       banco,
       telefono,
       numeroIdentidad,
-      montoPagado, // Raw amount from form (Bs for efectivo_bs/pago_movil/transferencia, USD for efectivo_usd)
+      montoPagado,
       tiempoSalida,
     } = await request.json();
 
-    // Validar que todos los campos requeridos estén presentes
     if (!codigoTicket || !tipoPago || montoPagado === undefined || montoPagado <= 0) {
       return NextResponse.json({ message: "Código de ticket, tipo de pago y monto válido son requeridos" }, { status: 400 });
     }
 
-    // Para pagos electrónicos, validar campos adicionales con contenido
     if ((tipoPago === "pago_movil" || tipoPago === "transferencia")) {
       if (
         !referenciaTransferencia?.trim() ||
@@ -39,14 +37,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Buscar el ticket
     const ticket = await db.collection("tickets").findOne({ codigoTicket });
 
     if (!ticket) {
       return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
     }
 
-    // Verificar que el ticket esté en estado válido para pago
     if (ticket.estado === "pagado_validado" || ticket.estado === "salido") {
       return NextResponse.json({ message: "Este ticket ya ha sido pagado" }, { status: 400 });
     }
@@ -55,49 +51,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Este ticket no tiene un vehículo asignado" }, { status: 400 });
     }
 
-    // Obtener configuración de la empresa para cálculos
     const companySettings = await db.collection("company_settings").findOne({});
     const tasaCambio = companySettings?.tarifas?.tasaCambio || 35.0;
 
-    // Calcular montos según el tipo de pago using raw montoPagado
     let montoEnBs = 0;
     let montoEnUsd = 0;
 
-    switch (tipoPago) {
-      case "efectivo_bs":
-        montoEnBs = Number(montoPagado); // Use raw montoPagado as Bs
-        montoEnUsd = Number((montoEnBs / tasaCambio).toFixed(6)); // Convert to USD
-        break;
-      case "efectivo_usd":
-        montoEnUsd = Number(montoPagado); // Use raw montoPagado as USD
-        montoEnBs = Number((montoEnUsd * tasaCambio).toFixed(2)); // Convert to Bs
-        break;
-      case "pago_movil":
-      case "transferencia":
-        montoEnBs = Number(montoPagado); // Use raw montoPagado as Bs (from frontend)
-        montoEnUsd = Number((montoEnBs / tasaCambio).toFixed(6)); // Convert to USD
-        break;
-      default:
-        return NextResponse.json({ message: "Tipo de pago no válido" }, { status: 400 });
+    // Interpret montoPagado based on payment type
+    if (tipoPago === "efectivo_usd") {
+      montoEnUsd = Number(montoPagado); // montoPagado is in USD
+      montoEnBs = Number((montoEnUsd * tasaCambio).toFixed(2)); // Convert to Bs
+    } else if (tipoPago === "efectivo_bs") {
+      montoEnBs = Number(montoPagado); // montoPagado is in Bs
+      montoEnUsd = Number((montoEnBs / tasaCambio).toFixed(6)); // Convert to USD
+    } else if (tipoPago === "pago_movil" || tipoPago === "transferencia") {
+      montoEnBs = Number(montoPagado); // Assume Bs for electronic payments
+      montoEnUsd = Number((montoEnBs / tasaCambio).toFixed(6));
+    } else {
+      return NextResponse.json({ message: "Tipo de pago no válido" }, { status: 400 });
     }
 
-    // Validar que el monto pagado sea aproximadamente igual al monto calculado
-    const montoCalculadoBs = ticket.montoCalculado * tasaCambio;
-    const tolerance = 0.01; // 1% tolerance for floating-point issues
+    // Validate payment amount against calculated amount
+    const montoCalculadoBs = (ticket.montoCalculado || 0) * tasaCambio;
+    const tolerance = 0.1; // 10% tolerance for cash payments
     if (
       Math.abs(montoEnBs - montoCalculadoBs) > tolerance &&
-      !(tipoPago.startsWith("efectivo") && montoEnBs >= montoCalculadoBs) // Allow overpayment for efectivo
+      !(tipoPago.startsWith("efectivo") && montoEnBs >= montoCalculadoBs - tolerance)
     ) {
-      return NextResponse.json({ message: "El monto pagado no coincide con el monto calculado" }, { status: 400 });
+      return NextResponse.json(
+        { message: `El monto pagado (${formatCurrency(montoEnBs, "VES")} Bs) no coincide con el monto calculado (${formatCurrency(montoCalculadoBs, "VES")} Bs). Por favor, verifique el monto e intente de nuevo.` },
+        { status: 400 }
+      );
     }
 
-    // Buscar información del carro asociado
+    // Buscar carro con estados actualizados
     const car = await db.collection("cars").findOne({
       ticketAsociado: codigoTicket,
-      estado: "estacionado",
+      estado: { $in: ["estacionado", "estacionado_confirmado", "pago_pendiente", "pago_pendiente_taquilla", "pago_pendiente_validacion"] },
     });
 
-    // Calcular tiempo de salida estimado
     let tiempoSalidaEstimado = null;
     if (tiempoSalida && tiempoSalida !== "now") {
       const minutesToAdd =
@@ -116,7 +108,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Crear el registro de pago
     const pagoData = {
       ticketId: ticket._id.toString(),
       codigoTicket,
@@ -125,8 +116,8 @@ export async function POST(request: Request) {
       banco: banco || null,
       telefono: telefono || null,
       numeroIdentidad: numeroIdentidad || null,
-      montoPagado: montoEnBs, // Store in Bs
-      montoPagadoUsd: montoEnUsd, // Store in USD
+      montoPagado: montoEnBs,
+      montoPagadoUsd: montoEnUsd,
       montoCalculado: ticket.montoCalculado || 0,
       tasaCambioUsada: tasaCambio,
       fechaPago: new Date(),
@@ -147,9 +138,8 @@ export async function POST(request: Request) {
     };
 
     const pagoResult = await db.collection("pagos").insertOne(pagoData);
-    console.log("Pago registrado:", pagoData); // Log the full data for debugging
+    console.log("Pago registrado:", pagoData);
 
-    // Actualizar el estado del ticket
     const nuevoEstadoTicket = tipoPago.startsWith("efectivo") ? "pagado_pendiente_taquilla" : "pagado_pendiente_validacion";
 
     await db.collection("tickets").updateOne(
@@ -161,11 +151,11 @@ export async function POST(request: Request) {
           tipoPago,
           tiempoSalida: tiempoSalida || "now",
           tiempoSalidaEstimado,
+          horaSalida: tiempoSalida === "now" ? new Date() : undefined,
         },
       }
     );
 
-    // Si hay un carro asociado, actualizar su estado
     if (car) {
       await db.collection("cars").updateOne(
         { _id: car._id },
@@ -173,14 +163,51 @@ export async function POST(request: Request) {
       );
     }
 
-    // Set cache control headers
+    // Update car_history with initial payment data, handling potential missing car
+    const carId = car?._id.toString();
+    if (carId) {
+      const existingHistory = await db.collection("car_history").findOne({ carId });
+      if (!existingHistory) {
+        console.error(`❌ No car_history record found for carId: ${carId}`);
+        return NextResponse.json({ message: "Error: Car history record not found" }, { status: 500 });
+      }
+      await db.collection("car_history").updateOne(
+        { carId },
+        {
+          $set: {
+            estado: "pagado_pendiente_verificacion",
+            pagoData: pagoData,
+            ticketData: ticket,
+            fecha_pago: new Date(),
+            horaSalida: tiempoSalida === "now" ? new Date() : undefined,
+          },
+          $setOnInsert: {
+            carId,
+            placa: car.placa,
+            marca: car.marca,
+            modelo: car.modelo,
+            color: car.color,
+            nombreDueño: car.nombreDueño,
+            telefono: car.telefono,
+            ticketAsociado: codigoTicket,
+            horaIngreso: car.horaIngreso,
+            fechaRegistro: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+      console.log(`✅ Car history updated for payment on carId: ${carId}`);
+    } else {
+      console.warn(`⚠️ No car found for ticket ${codigoTicket}, skipping car_history update`);
+    }
+
     const response = NextResponse.json({
       message: "Pago registrado exitosamente",
       pagoId: pagoResult.insertedId,
       tipoPago,
       montoEnBs,
       montoEnUsd,
-      requiresValidation: !tipoPago.startsWith("efectivo"), // Indicate if manual validation is needed
+      requiresValidation: !tipoPago.startsWith("efectivo"),
     });
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     response.headers.set("Pragma", "no-cache");

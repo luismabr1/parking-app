@@ -10,7 +10,6 @@ export async function GET() {
   try {
     const client = await clientPromise;
     const db = client.db("parking");
-
     const pendingParkings = await db
       .collection("tickets")
       .aggregate([
