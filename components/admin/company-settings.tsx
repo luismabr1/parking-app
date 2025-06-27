@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Save } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Save } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Bank {
-  _id: string
-  code: string
-  name: string
+  _id: string;
+  code: string;
+  name: string;
 }
 
 export default function AdminCompanySettings() {
@@ -35,167 +35,191 @@ export default function AdminCompanySettings() {
       precioHora: 3.0,
       tasaCambio: 35.0,
     },
-  })
+  });
 
   // Estados para los valores de display (como texto)
   const [displayValues, setDisplayValues] = useState({
     precioHora: "3,00",
     tasaCambio: "35,00",
-  })
+  });
 
-  const [banks, setBanks] = useState<Bank[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [message, setMessage] = useState("")
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [alertVariant, setAlertVariant] = useState<"default" | "destructive" | "warning">("default");
 
   useEffect(() => {
+    console.log("🔍 DEBUG: Starting initialization in useEffect");
     Promise.all([fetchSettings(), fetchBanks()])
-      .then(() => setIsLoading(false))
-      .catch((error) => {
-        console.error("Error initializing:", error)
-        setIsLoading(false)
+      .then(() => {
+        console.log("🔍 DEBUG: Initialization promises resolved");
+        setIsLoading(false);
       })
-  }, [])
+      .catch((error) => {
+        console.error("🔍 DEBUG: Error initializing:", error);
+        setIsLoading(false);
+      });
+  }, []);
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch("/api/admin/company-settings")
+      console.log("🔍 DEBUG: Fetching settings from /api/admin/company-settings");
+      const response = await fetch("/api/admin/company-settings");
+      console.log("🔍 DEBUG: Fetch response status:", response.status, response.statusText);
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json();
+        console.log("🔍 DEBUG: Fetched settings data:", data);
         // Remove _id if it exists to avoid sending it back
-        const { _id, ...settingsWithoutId } = data
-        setSettings(settingsWithoutId)
+        const { _id, ...settingsWithoutId } = data;
+        setSettings(settingsWithoutId);
 
         // Actualizar los valores de display
         setDisplayValues({
           precioHora: formatNumberForDisplay(settingsWithoutId.tarifas.precioHora),
           tasaCambio: formatNumberForDisplay(settingsWithoutId.tarifas.tasaCambio),
-        })
+        });
+      } else {
+        console.log("🔍 DEBUG: Non-ok response:", await response.text());
+        throw new Error(`Failed to fetch settings: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      console.error("Error fetching settings:", err)
+      console.error("🔍 DEBUG: Error fetching settings:", err);
+      setMessage("Error al cargar la configuración");
+      setAlertVariant("destructive");
     }
-  }
+  };
 
   const fetchBanks = async () => {
     try {
-      const response = await fetch("/api/banks")
+      console.log("🔍 DEBUG: Fetching banks from /api/banks");
+      const response = await fetch("/api/banks");
+      console.log("🔍 DEBUG: Banks fetch response status:", response.status, response.statusText);
       if (response.ok) {
-        const data = await response.json()
-        setBanks(data)
+        const data = await response.json();
+        console.log("🔍 DEBUG: Fetched banks data:", data);
+        setBanks(data);
+      } else {
+        console.log("🔍 DEBUG: Non-ok banks response:", await response.text());
+        throw new Error(`Failed to fetch banks: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      console.error("Error fetching banks:", err)
+      console.error("🔍 DEBUG: Error fetching banks:", err);
     }
-  }
+  };
 
   // Función para formatear número para mostrar (con coma decimal)
   const formatNumberForDisplay = (num: number): string => {
-    return num.toFixed(2).replace(".", ",")
-  }
+    return num.toFixed(2).replace(".", ",");
+  };
 
   // Función para convertir texto a número (acepta punto y coma)
   const parseNumberFromText = (text: string): number => {
     // Reemplazar coma por punto para el parsing
-    const normalizedText = text.replace(",", ".")
-    const parsed = Number.parseFloat(normalizedText)
-    return isNaN(parsed) ? 0 : Number.parseFloat(parsed.toFixed(2))
-  }
+    const normalizedText = text.replace(",", ".");
+    const parsed = Number.parseFloat(normalizedText);
+    return isNaN(parsed) ? 0 : Number.parseFloat(parsed.toFixed(2));
+  };
 
   // Función para validar entrada de texto numérico
   const isValidNumberInput = (text: string): boolean => {
     // Permitir números, punto, coma y un solo separador decimal
-    const regex = /^[0-9]*[,.]?[0-9]*$/
-    return regex.test(text) && (text.match(/[,.]/g) || []).length <= 1
-  }
+    const regex = /^[0-9]*[,.]?[0-9]*$/;
+    return regex.test(text) && (text.match(/[,.]/g) || []).length <= 1;
+  };
 
   // Agregar función para actualizar las tarifas con manejo de texto
   const updateTarifas = (field: string, value: string) => {
     // Validar que la entrada sea válida
     if (!isValidNumberInput(value)) {
-      return // No actualizar si la entrada no es válida
+      return; // No actualizar si la entrada no es válida
     }
 
     // Actualizar el valor de display
     setDisplayValues((prev) => ({
       ...prev,
       [field]: value,
-    }))
+    }));
 
     // Convertir a número y actualizar el estado
-    const numValue = parseNumberFromText(value)
+    const numValue = parseNumberFromText(value);
     setSettings((prev) => ({
       ...prev,
       tarifas: { ...prev.tarifas, [field]: numValue },
-    }))
-  }
+    }));
+  };
 
   // Función para manejar cuando el input pierde el foco (blur)
   const handleTarifaBlur = (field: string, value: string) => {
-    const numValue = parseNumberFromText(value)
-    const formattedValue = formatNumberForDisplay(numValue)
+    const numValue = parseNumberFromText(value);
+    const formattedValue = formatNumberForDisplay(numValue);
 
     // Actualizar el valor de display formateado
     setDisplayValues((prev) => ({
       ...prev,
       [field]: formattedValue,
-    }))
+    }));
 
     // Asegurar que el estado numérico esté actualizado
     setSettings((prev) => ({
       ...prev,
       tarifas: { ...prev.tarifas, [field]: numValue },
-    }))
-  }
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSaving(true)
-    setMessage("")
+    e.preventDefault();
+    setIsSaving(true);
+    setMessage("");
 
     try {
+      console.log("🔍 DEBUG: Submitting settings:", settings);
       // Make sure we don't send _id field
-      // Actualizar el objeto settingsToSend en handleSubmit
       const settingsToSend = {
         pagoMovil: { ...settings.pagoMovil },
         transferencia: { ...settings.transferencia },
         tarifas: { ...settings.tarifas },
-      }
+      };
 
       const response = await fetch("/api/admin/company-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settingsToSend),
-      })
+      });
+      console.log("🔍 DEBUG: Submit response status:", response.status, response.statusText);
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Error al guardar la configuración")
+      if (response.ok) {
+        const result = await response.json();
+        console.log("🔍 DEBUG: Submit response data:", result);
+        setMessage(result.message || "Configuración guardada exitosamente");
+        setAlertVariant("default"); // Green for success
+      } else {
+        const errorData = await response.json();
+        console.log("🔍 DEBUG: Submit error response:", errorData);
+        throw new Error(errorData.message || `Error: ${response.status} ${response.statusText}`);
       }
-
-      const result = await response.json()
-      setMessage(result.message || "Configuración guardada exitosamente")
-      setTimeout(() => setMessage(""), 3000)
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Error al guardar la configuración")
+      console.error("🔍 DEBUG: Error submitting settings:", err);
+      setMessage(err instanceof Error ? err.message : "Error al guardar la configuración");
+      setAlertVariant("destructive"); // Red for error
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   const updatePagoMovil = (field: string, value: string) => {
     setSettings((prev) => ({
       ...prev,
       pagoMovil: { ...prev.pagoMovil, [field]: value },
-    }))
-  }
+    }));
+  };
 
   const updateTransferencia = (field: string, value: string) => {
     setSettings((prev) => ({
       ...prev,
       transferencia: { ...prev.transferencia, [field]: value },
-    }))
-  }
+    }));
+  };
 
   if (isLoading) {
     return (
@@ -207,7 +231,7 @@ export default function AdminCompanySettings() {
           <div className="text-center py-8">Cargando configuración...</div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -218,7 +242,7 @@ export default function AdminCompanySettings() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-8">
           {message && (
-            <Alert variant={message.includes("Error") ? "destructive" : "default"}>
+            <Alert variant={alertVariant}>
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
@@ -269,10 +293,7 @@ export default function AdminCompanySettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="transferenciaBanco">Banco (Transferencia)</Label>
-                <Select
-                  value={settings.transferencia.banco}
-                  onValueChange={(value) => updateTransferencia("banco", value)}
-                >
+                <Select value={settings.transferencia.banco} onValueChange={(value) => updateTransferencia("banco", value)}>
                   <SelectTrigger id="transferenciaBanco">
                     <SelectValue placeholder="Seleccione un banco" />
                   </SelectTrigger>
@@ -372,5 +393,5 @@ export default function AdminCompanySettings() {
         </form>
       </CardContent>
     </Card>
-  )
+  );
 }

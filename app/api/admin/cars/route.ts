@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     if (placaFinal !== "PENDIENTE") {
       existingCar = await db.collection("cars").findOne({
         placa: placaFinal,
-        estado: { $in: ["estacionado", "pagado"] },
+        estado: { $in: ["estacionado_confirmado", "pagado", "estacionado"] },
       });
 
       if (existingCar) {
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       telefono: telefono || "Por definir",
       ticketAsociado,
       horaIngreso: new Date(),
-      estado: "estacionado",
+      estado: "estacionado_confirmado",
       fechaRegistro: new Date(),
       imagenes: imagenes
         ? {

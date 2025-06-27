@@ -7,10 +7,10 @@ import { ChevronDown, ChevronUp, BarChart3 } from "lucide-react"
 
 interface Stats {
   totalTickets: number
-  ticketsDisponibles: number
+  availableTickets: number
   ticketsOcupados: number
-  confirmacionesPendientes: number
-  pagosPendientes: number
+  pendingConfirmations: number
+  pendingPayments: number
   pagosValidados: number
   vehiculosListosSalida: number
   ingresosTotales: number
@@ -39,9 +39,9 @@ export default function MobileStats() {
   if (!stats) return null
 
   const criticalStats = [
-    { label: "Disponibles", value: stats.ticketsDisponibles, color: "text-green-600" },
-    { label: "Pendientes", value: stats.confirmacionesPendientes, color: "text-orange-600" },
-    { label: "Pagos", value: stats.pagosPendientes, color: "text-blue-600" },
+    { label: "Disponibles", value: stats.availableTickets, color: "text-green-600" },
+    { label: "Pendientes", value: stats.pendingConfirmations, color: "text-orange-600" },
+    { label: "Pagos", value: stats.pendingPayments, color: "text-blue-600" },
   ]
 
   return (
@@ -74,15 +74,15 @@ export default function MobileStats() {
           <div className="mt-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="text-center p-2 bg-green-50 rounded">
-                <div className="text-lg font-bold text-green-600">{stats.ticketsDisponibles}</div>
+                <div className="text-lg font-bold text-green-600">{stats.availableTickets}</div>
                 <div className="text-xs text-gray-600">Espacios Libres</div>
               </div>
               <div className="text-center p-2 bg-orange-50 rounded">
-                <div className="text-lg font-bold text-orange-600">{stats.confirmacionesPendientes}</div>
+                <div className="text-lg font-bold text-orange-600">{stats.pendingConfirmations}</div>
                 <div className="text-xs text-gray-600">Por Confirmar</div>
               </div>
               <div className="text-center p-2 bg-blue-50 rounded">
-                <div className="text-lg font-bold text-blue-600">{stats.pagosPendientes}</div>
+                <div className="text-lg font-bold text-blue-600">{stats.pendingPayments}</div>
                 <div className="text-xs text-gray-600">Pagos Pendientes</div>
               </div>
               <div className="text-center p-2 bg-purple-50 rounded">

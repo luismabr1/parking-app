@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   try {
+    console.log("🔍 DEBUG: Handling GET request for /api/admin/car-history");
     const { searchParams } = new URL(request.url)
     const page = Number.parseInt(searchParams.get("page") || "1")
     const limit = Number.parseInt(searchParams.get("limit") || "20")

@@ -91,7 +91,7 @@ export interface Car {
   telefono: string
   ticketAsociado: string
   horaIngreso: string
-  estado: "estacionado" | "pagado" | "salido"
+  estado: "estacionado_confirmado" | "pagado" | "salido"
   fechaRegistro: string
   // Nuevos campos para imágenes
   imagenes?: {

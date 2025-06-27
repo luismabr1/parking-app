@@ -56,7 +56,7 @@ export async function PUT(request: Request) {
 
     const car = await db.collection("cars").findOne({
       ticketAsociado: payment.codigoTicket,
-      estado: { $in: ["estacionado", "pago_pendiente", "pago_pendiente_taquilla"] },
+      estado: { $in: ["estacionado_confirmado", "pago_pendiente", "pago_pendiente_taquilla"] },
     });
 
     if (car) {

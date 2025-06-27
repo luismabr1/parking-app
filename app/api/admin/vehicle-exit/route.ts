@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
     const car = await db.collection("cars").findOne({
       ticketAsociado: ticketCode,
-      estado: { $in: ["estacionado", "pagado"] },
+      estado: { $in: ["estacionado_confirmado", "pagado"] },
     });
 
     if (!car) {

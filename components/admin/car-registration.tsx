@@ -101,24 +101,17 @@ function CarRegistration() {
           Pragma: "no-cache",
           Expires: "0",
         },
+        next: { revalidate: 0 },
       });
       if (response.ok) {
         const data = await response.json();
         if (process.env.NODE_ENV === "development") {
           console.log("🔍 DEBUG: FetchCars response:", data);
           data.forEach((car: Car, index: number) => {
-            console.log(`🔍 DEBUG: Car ${index} - imagenes:`, car.imagenes);
+            console.log(`🔍 DEBUG: Car ${index} - placa: ${car.placa}, horaIngreso: ${car.horaIngreso}`);
           });
         }
-        setCars((prev) => {
-          if (!areArraysEqual(prev, data)) {
-            if (process.env.NODE_ENV === "development") {
-              console.log(`🔍 DEBUG: Actualizando cars: ${data.length} vehículos`);
-            }
-            return data;
-          }
-          return prev;
-        });
+        setCars(data); // Force update even if arrays are "equal" for debugging
       } else {
         console.error("🔍 DEBUG: FetchCars response not ok:", response.status);
       }
@@ -138,7 +131,6 @@ function CarRegistration() {
           Expires: "0",
         },
         next: { revalidate: 0 },
-
       });
       if (response.ok) {
         const data = await response.json();
@@ -484,123 +476,126 @@ function CarRegistration() {
                         </SelectItem>
                       ))}
                     </SelectContent>
-                  </Select>
-                  <p className="text-sm text-gray-500">Tickets disponibles: {availableTickets.length}</p>
+                    </Select>
+                    <p className="text-sm text-gray-500">Tickets disponibles: {availableTickets.length}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="marca">Marca</Label>
+                    <Input
+                      id="marca"
+                      name="marca"
+                      value={formData.marca}
+                      onChange={handleInputChange}
+                      placeholder="Ej. Toyota"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="modelo">Modelo</Label>
+                    <Input
+                      id="modelo"
+                      name="modelo"
+                      value={formData.modelo}
+                      onChange={handleInputChange}
+                      placeholder="Ej. Corolla"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="color">Color</Label>
+                    <Input
+                      id="color"
+                      name="color"
+                      value={formData.color}
+                      onChange={handleInputChange}
+                      placeholder="Ej. Blanco"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nombreDueño">Nombre del Dueño</Label>
+                    <Input
+                      id="nombreDueño"
+                      name="nombreDueño"
+                      value={formData.nombreDueño}
+                      onChange={handleInputChange}
+                      placeholder="Ej. Juan Pérez"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telefono">Teléfono</Label>
+                    <Input
+                      id="telefono"
+                      name="telefono"
+                      value={formData.telefono}
+                      onChange={handleInputChange}
+                      placeholder="Ej. 0414-1234567"
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="marca">Marca</Label>
-                  <Input
-                    id="marca"
-                    name="marca"
-                    value={formData.marca}
-                    onChange={handleInputChange}
-                    placeholder="Ej. Toyota"
-                    required
-                  />
+                  <Button type="submit" className="w-full" disabled={!isFormValid() || isSubmitting}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    {isSubmitting ? "Registrando..." : "Registrar Carro"}
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="modelo">Modelo</Label>
-                  <Input
-                    id="modelo"
-                    name="modelo"
-                    value={formData.modelo}
-                    onChange={handleInputChange}
-                    placeholder="Ej. Corolla"
-                    required
-                  />
+              </form>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Carros Estacionados Actualmente</CardTitle>
+            <Button onClick={fetchCars} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Actualizar
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {cars?.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <CarIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No hay carros estacionados actualmente.</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="color">Color</Label>
-                  <Input
-                    id="color"
-                    name="color"
-                    value={formData.color}
-                    onChange={handleInputChange}
-                    placeholder="Ej. Blanco"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="nombreDueño">Nombre del Dueño</Label>
-                  <Input
-                    id="nombreDueño"
-                    name="nombreDueño"
-                    value={formData.nombreDueño}
-                    onChange={handleInputChange}
-                    placeholder="Ej. Juan Pérez"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="telefono">Teléfono</Label>
-                  <Input
-                    id="telefono"
-                    name="telefono"
-                    value={formData.telefono}
-                    onChange={handleInputChange}
-                    placeholder="Ej. 0414-1234567"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-2"> {/* Vertical button stack */}
-                <Button type="submit" className="w-full" disabled={!isFormValid() || isSubmitting}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  {isSubmitting ? "Registrando..." : "Registrar Carro"}
-                </Button>
-              </div>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Carros Estacionados Actualmente</CardTitle>
-          <Button onClick={fetchCars} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Actualizar
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {cars?.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <CarIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No hay carros estacionados actualmente.</p>
-              </div>
-            ) : (
-              cars
-                .filter((car) => car.estado === "estacionado")
-                .map((car) => (
-                  <div
-                    key={car._id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center space-x-4">
-                        <div className="space-y-1">
-                          <p className="font-medium text-lg">{car.placa}</p>
-                          <p className="text-sm text-gray-600">
-                            {car.marca} {car.modelo} - {car.color}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Dueño: {car.nombreDueño} | Tel: {car.telefono}
-                          </p>
-                          {car.imagenes && (
+              ) : (
+                cars
+                  .filter((car) => car.estado === "estacionado" || car.estado === "estacionado_confirmado")
+                  .map((car) => (
+                    <div
+                      key={car._id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center space-x-4">
+                          <div className="space-y-1">
+                            <p className="font-medium text-lg">{car.placa}</p>
+                            <p className="text-sm text-gray-600">
+                              {car.marca} {car.modelo} - {car.color}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Dueño: {car.nombreDueño} | Tel: {car.telefono}
+                            </p>
                             <div className="flex items-center space-x-2 mt-1 flex-wrap">
-                              <ImageWithFallback
-                                src={car.imagenes.plateImageUrl || "/placeholder.svg"}
-                                alt={`Placa de ${car.placa}`}
-                                className="w-32 h-24 object-cover rounded border mr-2"
-                                fallback="/placeholder.svg"
-                              />
-                              <ImageWithFallback
-                                src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
-                                alt={`Vehículo de ${car.placa}`}
-                                className="w-32 h-24 object-cover rounded border mr-2"
-                                fallback="/placeholder.svg"
-                              />
-                              <span className="text-xs text-blue-600">Con imágenes</span>
+                              {car.imagenes && (
+                                <>
+                                  <ImageWithFallback
+                                    src={car.imagenes.plateImageUrl || "/placeholder.svg"}
+                                    alt={`Placa de ${car.placa}`}
+                                    className="w-32 h-24 object-cover rounded border mr-2"
+                                    fallback="/placeholder.svg"
+                                  />
+                                  <ImageWithFallback
+                                    src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                                    alt={`Vehículo de ${car.placa}`}
+                                    className="w-32 h-24 object-cover rounded border mr-2"
+                                    fallback="/placeholder.svg"
+                                  />
+                                  <span className="text-xs text-blue-600">Con imágenes</span>
+                                </>
+                              )}
                               <Button
                                 onClick={() => setSelectedCarImages(car)}
                                 variant="ghost"
@@ -611,24 +606,23 @@ function CarRegistration() {
                                 Ver/Editar
                               </Button>
                             </div>
-                          )}
+                          </div>
                         </div>
                       </div>
+                      <div className="text-right space-y-1">
+                        <p className="font-medium">Ticket: {car.ticketAsociado}</p>
+                        <p className="text-sm text-gray-500">
+                          Ingreso: {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right space-y-1">
-                      <p className="font-medium">Ticket: {car.ticketAsociado}</p>
-                      <p className="text-sm text-gray-500">
-                        Ingreso: {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
-                      </p>
-                    </div>
-                  </div>
-                ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+                  ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
 export default memo(CarRegistration);

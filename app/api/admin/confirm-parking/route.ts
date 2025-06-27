@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     const car = await db.collection("cars").findOne({
       ticketAsociado: ticketCode,
-      estado: "estacionado",
+      estado: "estacionado_confirmado",
     });
     console.log(`Car found: ${JSON.stringify(car)}`);
 
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       { carId },
       {
         $set: {
-          estado: "estacionado",
+          estado: "estacionado_confirmado",
           fecha_parking_confirmado: new Date(),
           ticketData: ticket,
         },

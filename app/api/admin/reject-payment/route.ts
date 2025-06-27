@@ -50,7 +50,7 @@ export async function PUT(request: Request) {
 
     if (car) {
       // Volver el carro a estado estacionado para permitir nuevo intento
-      await db.collection("cars").updateOne({ _id: car._id }, { $set: { estado: "estacionado" } })
+      await db.collection("cars").updateOne({ _id: car._id }, { $set: { estado: "estacionado_confirmado" } })
     }
 
     // Set cache control headers

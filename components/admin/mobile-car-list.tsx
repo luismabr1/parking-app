@@ -35,11 +35,12 @@ interface MobileCarListProps {
 }
 
 function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
-  const activeCars = cars.filter((car) => car.estado === "estacionado");
-  const recentCars = activeCars.slice(-3); // Show only the last 3 cars
+  const activeCars = cars.filter((car) => car.estado === "estacionado" || car.estado === "estacionado_confirmado");
+  const recentCars = [...activeCars].sort((a, b) => new Date(b.horaIngreso).getTime() - new Date(a.horaIngreso).getTime()).slice(0, 3); // Sort by horaIngreso and take top 3
 
   if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizando MobileCarList con ${activeCars.length} carros, mostrando ${recentCars.length} recientes`);
+    console.log(`🔍 DEBUG: Renderizando MobileCarList - Total activeCars: ${activeCars.length}, recentCars: ${recentCars.length}, cars: ${cars.length}`);
+    recentCars.forEach((car, index) => console.log(`🔍 DEBUG: recentCar ${index} - placa: ${car.placa}, horaIngreso: ${car.horaIngreso}`));
   }
 
   return (
@@ -86,13 +87,13 @@ function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
                           <ImageWithFallback
                             src={car.imagenes.plateImageUrl || "/placeholder.svg"}
                             alt={`Placa de ${car.placa}`}
-                            className="w-20 h-12 object-cover rounded border" // Optimized for mobile: 20x12px
+                            className="w-20 h-12 object-cover rounded border"
                             fallback="/placeholder.svg"
                           />
                           <ImageWithFallback
                             src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
                             alt={`Vehículo de ${car.placa}`}
-                            className="w-20 h-12 object-cover rounded border" // Optimized for mobile: 20x12px
+                            className="w-20 h-12 object-cover rounded border"
                             fallback="/placeholder.svg"
                           />
                           <span className="text-xs text-blue-600">Con imágenes</span>

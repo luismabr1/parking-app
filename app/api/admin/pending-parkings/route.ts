@@ -31,7 +31,7 @@ export async function GET() {
           },
         },
         {
-          $match: { "carInfoFull.estado": "estacionado" }, // Only include active cars
+          $match: { "carInfoFull.estado": "estacionado_confirmado" }, // Only include active cars
         },
         {
           $project: {
