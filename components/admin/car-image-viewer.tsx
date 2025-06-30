@@ -1,61 +1,49 @@
-"use client";
+"use client"
 
-import type React from "react";
-import { useState, useCallback, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  ArrowLeft,
-  Edit,
-  Save,
-  X,
-  Camera,
-  ImageIcon,
-  Eye,
-  EyeOff,
-  Info,
-  RefreshCw,
-  Smartphone,
-} from "lucide-react";
-import { formatDateTime } from "@/lib/utils";
-import ImageWithFallback from "../image-with-fallback";
+import type React from "react"
+import { useState, useCallback, useRef } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowLeft, Edit, Save, X, ImageIcon, Eye, EyeOff, Info, RefreshCw, Upload, Check } from "lucide-react"
+import { formatDateTime } from "@/lib/utils"
+import ImageWithFallback from "../image-with-fallback"
 
 interface Car {
-  _id: string;
-  placa: string;
-  marca: string;
-  modelo: string;
-  color: string;
-  nombreDueño: string;
-  telefono: string;
-  ticketAsociado: string;
-  horaIngreso: string;
-  estado: string;
+  _id: string
+  placa: string
+  marca: string
+  modelo: string
+  color: string
+  nombreDueño: string
+  telefono: string
+  ticketAsociado: string
+  horaIngreso: string
+  estado: string
   imagenes?: {
-    plateImageUrl?: string;
-    vehicleImageUrl?: string;
-    fechaCaptura?: string;
-    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop";
-    confianzaPlaca?: number;
-    confianzaVehiculo?: number;
-  };
+    plateImageUrl?: string
+    vehicleImageUrl?: string
+    fechaCaptura?: string
+    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
+    confianzaPlaca?: number
+    confianzaVehiculo?: number
+  }
 }
 
 interface CarImageViewerProps {
-  car: Car;
-  onClose: () => void;
-  onUpdate: () => void;
+  car: Car
+  onClose: () => void
+  onUpdate: () => void
 }
 
 export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewerProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [showDetails, setShowDetails] = useState(false);
+  const [isEditing, setIsEditing] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [message, setMessage] = useState("")
+  const [showDetails, setShowDetails] = useState(false)
   const [editData, setEditData] = useState({
     placa: car.placa,
     marca: car.marca,
@@ -63,253 +51,158 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
     color: car.color,
     nombreDueño: car.nombreDueño,
     telefono: car.telefono,
-  });
-  const [currentStep, setCurrentStep] = useState<"plate" | "vehicle" | "done">("plate");
-  const [capturedImages, setCapturedImages] = useState<{
-    plate?: string;
-    vehicle?: string;
-  }>({});
+  })
+
+  // Estados para manejo de imágenes
+  const [isUploadingPlate, setIsUploadingPlate] = useState(false)
+  const [isUploadingVehicle, setIsUploadingVehicle] = useState(false)
+  const [newPlateImage, setNewPlateImage] = useState<string | null>(null)
+  const [newVehicleImage, setNewVehicleImage] = useState<string | null>(null)
   const [uploadedUrls, setUploadedUrls] = useState<{
-    plateUrl?: string;
-    vehicleUrl?: string;
-  }>({});
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [videoReady, setVideoReady] = useState(false);
-  const [streamActive, setStreamActive] = useState(false);
-  const [useFileInput, setUseFileInput] = useState(false);
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
-  const [retryCount, setRetryCount] = useState(0);
-  const [isMobile, setIsMobile] = useState(false);
+    plateUrl?: string
+    vehicleUrl?: string
+  }>({})
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const mountedRef = useRef(true);
-
-  // Detect device type
-  useEffect(() => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    const isMobileDevice = /iphone|ipad|ipod|android|blackberry|windows phone|mobile/i.test(userAgent) || window.innerWidth <= 768;
-    setIsMobile(isMobileDevice);
-    setUseFileInput(!isMobileDevice); // Force file input on desktop
-  }, []);
+  const plateFileInputRef = useRef<HTMLInputElement>(null)
+  const vehicleFileInputRef = useRef<HTMLInputElement>(null)
 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setEditData((prev) => ({ ...prev, [name]: value }));
-  };
+    const { name, value } = e.target
+    setEditData((prev) => ({ ...prev, [name]: value }))
+  }
 
-  // Start camera (only for mobile)
-  const startCamera = useCallback(async () => {
-    if (!isMobile || !mountedRef.current) return;
+  // Handle file upload for plate
+  const handlePlateFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !file.type.startsWith("image/")) {
+      setMessage("Por favor seleccione un archivo de imagen válido.")
+      return
+    }
+
+    setIsUploadingPlate(true)
+    setMessage("Subiendo imagen de placa...")
 
     try {
-      setMessage("");
-      setVideoReady(false);
-      setStreamActive(false);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+      const formData = new FormData()
+      formData.append("image", file)
+      formData.append("type", "plate")
+      formData.append("method", "auto")
 
-      const constraints = {
-        video: selectedCameraId
-          ? { deviceId: selectedCameraId, width: { ideal: 640 }, height: { ideal: 480 } }
-          : { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      setIsCapturing(true);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        videoRef.current.play();
-        setVideoReady(true);
-        setStreamActive(true);
-      }
-    } catch (err) {
-      setMessage("Error accediendo a la cámara. Intente usar un archivo.");
-      setRetryCount((prev) => prev + 1);
-      if (retryCount >= 2) setUseFileInput(true);
-      setIsCapturing(false);
-    }
-  }, [isMobile, retryCount, selectedCameraId]);
-
-  // Stop camera
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setIsCapturing(false);
-    setVideoReady(false);
-    setStreamActive(false);
-  }, []);
-
-  // Handle file upload
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (e) => setCapturedImages((prev) => ({ ...prev, [currentStep]: e.target?.result as string }));
-      reader.readAsDataURL(file);
-    } else {
-      setMessage("Por favor seleccione un archivo de imagen válido.");
-    }
-  }, [currentStep]);
-
-  // Capture photo
-  const capturePhoto = useCallback(() => {
-    if (!isMobile || !videoRef.current || !canvasRef.current) {
-      setMessage("Error: captura solo disponible en móviles");
-      return;
-    }
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
-
-    if (!context || !videoReady || !streamActive) {
-      setMessage("Error: video no está listo para captura");
-      return;
-    }
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const imageUrl = URL.createObjectURL(blob);
-        setCapturedImages((prev) => ({ ...prev, [currentStep]: imageUrl }));
-        stopCamera();
-      }
-    }, "image/jpeg", 0.9);
-  }, [isMobile, currentStep, stopCamera, videoReady, streamActive]);
-
-  // Upload to Cloudinary
-  const uploadToCloudinary = useCallback(async (imageUrl: string, type: "plate" | "vehicle") => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const formData = new FormData();
-      formData.append("image", blob);
-      formData.append("type", type);
-
-      const uploadResponse = await fetch("/api/admin/process-vehicle", {
+      const response = await fetch("/api/admin/process-vehicle", {
         method: "POST",
         body: formData,
-      });
+      })
 
-      const result = await uploadResponse.json();
-      if (result.success) {
-        return result.imageUrl;
+      const result = await response.json()
+
+      if (result.success && result.imageUrl) {
+        setUploadedUrls((prev) => ({ ...prev, plateUrl: result.imageUrl }))
+        setNewPlateImage(result.imageUrl)
+        setMessage("✅ Imagen de placa subida correctamente")
+        setTimeout(() => setMessage(""), 3000)
       } else {
-        throw new Error(result.message || "Error subiendo imagen");
+        throw new Error(result.message || "Error subiendo imagen")
       }
-    } catch (err) {
-      setMessage(`Error subiendo ${type}: ${err}`);
-      return null;
+    } catch (error) {
+      console.error("Error uploading plate image:", error)
+      setMessage("❌ Error subiendo imagen de placa")
+      setTimeout(() => setMessage(""), 5000)
     } finally {
-      setIsLoading(false);
+      setIsUploadingPlate(false)
     }
-  }, []);
+  }, [])
 
-  // Process image
-  const processImage = useCallback(async () => {
-    if (!capturedImages[currentStep]) return;
+  // Handle file upload for vehicle
+  const handleVehicleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !file.type.startsWith("image/")) {
+      setMessage("Por favor seleccione un archivo de imagen válido.")
+      return
+    }
 
-    const imageUrl = await uploadToCloudinary(capturedImages[currentStep], currentStep);
-    if (imageUrl) {
-      setUploadedUrls((prev) => ({
-        ...prev,
-        [currentStep === "plate" ? "plateUrl" : "vehicleUrl"]: imageUrl,
-      }));
-      if (currentStep === "plate") setCurrentStep("vehicle");
-      else {
-        setCurrentStep("done");
-        setIsEditing(false);
+    setIsUploadingVehicle(true)
+    setMessage("Subiendo imagen de vehículo...")
+
+    try {
+      const formData = new FormData()
+      formData.append("image", file)
+      formData.append("type", "vehicle")
+      formData.append("method", "auto")
+
+      const response = await fetch("/api/admin/process-vehicle", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (result.success && result.imageUrl) {
+        setUploadedUrls((prev) => ({ ...prev, vehicleUrl: result.imageUrl }))
+        setNewVehicleImage(result.imageUrl)
+        setMessage("✅ Imagen de vehículo subida correctamente")
+        setTimeout(() => setMessage(""), 3000)
+      } else {
+        throw new Error(result.message || "Error subiendo imagen")
       }
+    } catch (error) {
+      console.error("Error uploading vehicle image:", error)
+      setMessage("❌ Error subiendo imagen de vehículo")
+      setTimeout(() => setMessage(""), 5000)
+    } finally {
+      setIsUploadingVehicle(false)
     }
-  }, [capturedImages, currentStep, uploadToCloudinary]);
-
-  // Retake photo
-  const retakePhoto = useCallback(() => {
-    setCapturedImages((prev) => ({ ...prev, [currentStep]: undefined }));
-    if (isMobile && !useFileInput) startCamera();
-  }, [currentStep, isMobile, startCamera, useFileInput]);
-
-  // Detect cameras (only for mobile)
-  useEffect(() => {
-    if (isMobile) {
-      const detectCameras = async () => {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoDevices = devices.filter((device) => device.kind === "videoinput");
-          setAvailableCameras(videoDevices);
-          const backCamera = videoDevices.find((d) => d.label.toLowerCase().includes("back"));
-          setSelectedCameraId(backCamera?.deviceId || videoDevices[0]?.deviceId || "");
-        } catch (err) {
-          setUseFileInput(true);
-        }
-      };
-      detectCameras();
-    }
-  }, [isMobile]);
-
-  // Cleanup
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      stopCamera();
-    };
-  }, [stopCamera]);
+  }, [])
 
   // Handle save
   const handleSave = async () => {
-    setIsLoading(true);
-    setMessage("");
-
-    const formData = new FormData();
-    formData.append("carId", car._id);
-    formData.append("placa", editData.placa);
-    formData.append("marca", editData.marca);
-    formData.append("modelo", editData.modelo);
-    formData.append("color", editData.color);
-    formData.append("nombreDueño", editData.nombreDueño);
-    formData.append("telefono", editData.telefono);
-    if (uploadedUrls.plateUrl) formData.append("plateImageUrl", uploadedUrls.plateUrl);
-    if (uploadedUrls.vehicleUrl) formData.append("vehicleImageUrl", uploadedUrls.vehicleUrl);
+    setIsLoading(true)
+    setMessage("Guardando cambios...")
 
     try {
+      const updateData = {
+        placa: editData.placa,
+        marca: editData.marca,
+        modelo: editData.modelo,
+        color: editData.color,
+        nombreDueño: editData.nombreDueño,
+        telefono: editData.telefono,
+        ...(uploadedUrls.plateUrl && { plateImageUrl: uploadedUrls.plateUrl }),
+        ...(uploadedUrls.vehicleUrl && { vehicleImageUrl: uploadedUrls.vehicleUrl }),
+      }
+
+      console.log("🔄 Enviando datos de actualización:", updateData)
+
       const response = await fetch(`/api/admin/cars/${car._id}`, {
         method: "PUT",
-        body: formData,
-      });
-      const data = await response.json();
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updateData),
+      })
+
+      const data = await response.json()
+
       if (response.ok) {
-        setMessage("✅ Información y/o imágenes actualizadas correctamente");
-        setUploadedUrls({});
-        onUpdate();
-        setTimeout(() => setMessage(""), 3000);
+        setMessage("✅ Información actualizada correctamente")
+        setUploadedUrls({})
+        setNewPlateImage(null)
+        setNewVehicleImage(null)
+        setIsEditing(false)
+        onUpdate()
+        setTimeout(() => setMessage(""), 3000)
       } else {
-        setMessage(`❌ ${data.message || "Error al actualizar"}`);
-        setTimeout(() => setMessage(""), 5000);
+        setMessage(`❌ ${data.error || data.message || "Error al actualizar"}`)
+        setTimeout(() => setMessage(""), 5000)
       }
     } catch (error) {
-      setMessage("❌ Error de conexión");
-      setTimeout(() => setMessage(""), 5000);
+      console.error("Error saving changes:", error)
+      setMessage("❌ Error de conexión")
+      setTimeout(() => setMessage(""), 5000)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   // Handle cancel
   const handleCancel = () => {
@@ -320,46 +213,64 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
       color: car.color,
       nombreDueño: car.nombreDueño,
       telefono: car.telefono,
-    });
-    setCapturedImages({});
-    setUploadedUrls({});
-    setIsEditing(false);
-    setCurrentStep("plate");
-  };
+    })
+    setUploadedUrls({})
+    setNewPlateImage(null)
+    setNewVehicleImage(null)
+    setIsEditing(false)
+    setMessage("")
+  }
 
   // Confidence utilities
   const getConfidenceColor = (confidence?: number) => {
-    if (!confidence) return "bg-gray-500";
-    if (confidence >= 0.8) return "bg-green-500";
-    if (confidence >= 0.6) return "bg-yellow-500";
-    return "bg-red-500";
-  };
+    if (!confidence) return "bg-gray-500"
+    if (confidence >= 0.8) return "bg-green-500"
+    if (confidence >= 0.6) return "bg-yellow-500"
+    return "bg-red-500"
+  }
 
   const getConfidenceText = (confidence?: number) => {
-    if (!confidence) return "Sin datos";
-    const percentage = Math.round(confidence * 100);
-    if (percentage >= 80) return `${percentage}% - Excelente`;
-    if (percentage >= 60) return `${percentage}% - Buena`;
-    return `${percentage}% - Baja`;
-  };
+    if (!confidence) return "Sin datos"
+    const percentage = Math.round(confidence * 100)
+    if (percentage >= 80) return `${percentage}% - Excelente`
+    if (percentage >= 60) return `${percentage}% - Buena`
+    return `${percentage}% - Baja`
+  }
 
   const getMethodIcon = (method?: string) => {
     switch (method) {
-      case "camara_movil": return "📱";
-      case "camara_desktop": return "💻";
-      case "manual": return "✋";
-      default: return "❓";
+      case "camara_movil":
+        return "📱"
+      case "camara_desktop":
+        return "💻"
+      case "manual":
+        return "✋"
+      default:
+        return "❓"
     }
-  };
+  }
 
   const getMethodText = (method?: string) => {
     switch (method) {
-      case "camara_movil": return "Cámara Móvil";
-      case "camara_desktop": return "Cámara Desktop";
-      case "manual": return "Entrada Manual";
-      default: return "Método Desconocido";
+      case "camara_movil":
+        return "Cámara Móvil"
+      case "camara_desktop":
+        return "Cámara Desktop"
+      case "manual":
+        return "Entrada Manual"
+      default:
+        return "Método Desconocido"
     }
-  };
+  }
+
+  // Check if there are changes to save
+  const hasChanges = () => {
+    const dataChanged = Object.keys(editData).some(
+      (key) => editData[key as keyof typeof editData] !== car[key as keyof Car],
+    )
+    const imagesChanged = uploadedUrls.plateUrl || uploadedUrls.vehicleUrl
+    return dataChanged || imagesChanged
+  }
 
   return (
     <div className="space-y-6">
@@ -388,11 +299,7 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
                 </Button>
               ) : (
                 <div className="flex space-x-2">
-                  <Button
-                    onClick={handleSave}
-                    disabled={isLoading || (!uploadedUrls.plateUrl && !uploadedUrls.vehicleUrl && Object.values(editData).every((v, i) => v === [car.placa, car.marca, car.modelo, car.color, car.nombreDueño, car.telefono][i]))}
-                    size="sm"
-                  >
+                  <Button onClick={handleSave} disabled={isLoading || !hasChanges()} size="sm">
                     <Save className="h-4 w-4 mr-2" />
                     {isLoading ? "Guardando..." : "Guardar"}
                   </Button>
@@ -452,7 +359,12 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
               <div>
                 <Label>Propietario</Label>
                 {isEditing ? (
-                  <Input name="nombreDueño" value={editData.nombreDueño} onChange={handleInputChange} className="mt-1" />
+                  <Input
+                    name="nombreDueño"
+                    value={editData.nombreDueño}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
                 ) : (
                   <p>{car.nombreDueño}</p>
                 )}
@@ -468,90 +380,98 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
             </div>
           </div>
 
-          {/* Image Capture/Upload Section */}
+          {/* Image Upload Section */}
           {isEditing && (
-            <div className="mt-4 pt-4 border-t">
-              <h3 className="text-lg font-medium mb-2">Actualizar Imágenes</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {["plate", "vehicle"].map((type) => (
-                  <div key={type}>
-                    <Label>Imagen de {type === "plate" ? "Placa" : "Vehículo"}</Label>
-                    {currentStep === type && !capturedImages[type] && (
-                      <div className="space-y-2">
-                        {isMobile && !useFileInput ? (
-                          <>
-                            <video
-                              ref={videoRef}
-                              autoPlay
-                              playsInline
-                              muted
-                              className="w-full rounded-lg bg-black"
-                              style={{ height: "250px", objectFit: "cover" }}
-                            />
-                            <Button onClick={capturePhoto} disabled={!videoReady || !streamActive} className="w-full" size="sm">
-                              <Camera className="h-4 w-4 mr-2" />
-                              {videoReady && streamActive ? "Capturar Foto" : "Esperando..."}
-                            </Button>
-                            <Button onClick={() => setUseFileInput(true)} variant="outline" className="w-full" size="sm">
-                              <Smartphone className="h-4 w-4" />
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <input
-                              ref={fileInputRef}
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => handleFileUpload(e)}
-                              className="hidden"
-                            />
-                            <Button onClick={() => fileInputRef.current?.click()} className="w-full" size="sm">
-                              <Smartphone className="h-4 w-4 mr-2" />
-                              Seleccionar Imagen
-                            </Button>
-                            {isMobile && (
-                              <Button onClick={() => { setUseFileInput(false); startCamera(); }} variant="outline" className="w-full" size="sm">
-                                <Camera className="h-4 w-4 mr-2" />
-                                Usar Cámara
-                              </Button>
-                            )}
-                          </>
-                        )}
+            <div className="mt-6 pt-4 border-t">
+              <h3 className="text-lg font-medium mb-4">Actualizar Imágenes</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Plate Image */}
+                <div className="space-y-3">
+                  <Label className="text-base font-medium">Imagen de Placa</Label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                    <ImageWithFallback
+                      src={newPlateImage || car.imagenes?.plateImageUrl || "/placeholder.svg"}
+                      alt="Imagen de placa"
+                      className="w-full h-32 object-cover rounded-lg mb-3"
+                      fallback="/placeholder.svg"
+                    />
+                    <input
+                      ref={plateFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePlateFileUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      onClick={() => plateFileInputRef.current?.click()}
+                      disabled={isUploadingPlate}
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      {isUploadingPlate ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      {isUploadingPlate ? "Subiendo..." : "Cambiar Imagen de Placa"}
+                    </Button>
+                    {newPlateImage && (
+                      <div className="mt-2 flex items-center text-sm text-green-600">
+                        <Check className="h-4 w-4 mr-1" />
+                        Nueva imagen cargada
                       </div>
-                    )}
-                    {capturedImages[type] && (
-                      <div className="space-y-2">
-                        <ImageWithFallback
-                          src={capturedImages[type] || "/placeholder.svg"}
-                          alt={`${type} capturada`}
-                          className="w-full h-48 object-cover rounded-lg border mt-2"
-                          fallback="/placeholder.svg"
-                        />
-                        <Button onClick={processImage} disabled={isLoading} className="w-full" size="sm">
-                          {isLoading ? "Subiendo..." : "Guardar Imagen"}
-                        </Button>
-                        <Button onClick={retakePhoto} variant="outline" className="w-full" size="sm">
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Retomar
-                        </Button>
-                      </div>
-                    )}
-                    {uploadedUrls[type === "plate" ? "plateUrl" : "vehicleUrl"] && (
-                      <Alert className="mt-2">
-                        <AlertDescription>✅ Imagen {type === "plate" ? "de placa" : "de vehículo"} actualizada</AlertDescription>
-                      </Alert>
                     )}
                   </div>
-                ))}
+                </div>
+
+                {/* Vehicle Image */}
+                <div className="space-y-3">
+                  <Label className="text-base font-medium">Imagen del Vehículo</Label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                    <ImageWithFallback
+                      src={newVehicleImage || car.imagenes?.vehicleImageUrl || "/placeholder.svg"}
+                      alt="Imagen del vehículo"
+                      className="w-full h-32 object-cover rounded-lg mb-3"
+                      fallback="/placeholder.svg"
+                    />
+                    <input
+                      ref={vehicleFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleVehicleFileUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      onClick={() => vehicleFileInputRef.current?.click()}
+                      disabled={isUploadingVehicle}
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      {isUploadingVehicle ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      {isUploadingVehicle ? "Subiendo..." : "Cambiar Imagen del Vehículo"}
+                    </Button>
+                    {newVehicleImage && (
+                      <div className="mt-2 flex items-center text-sm text-green-600">
+                        <Check className="h-4 w-4 mr-1" />
+                        Nueva imagen cargada
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              <canvas ref={canvasRef} className="hidden" />
             </div>
           )}
 
           {/* Existing Images (Non-editing View) */}
           {!isEditing && (
-            <div className="mt-4 pt-4 border-t">
-              <h3 className="text-lg font-medium mb-2">Imágenes</h3>
+            <div className="mt-6 pt-4 border-t">
+              <h3 className="text-lg font-medium mb-4">Imágenes</h3>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
                   <Label>Imagen de Placa</Label>
@@ -603,7 +523,7 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
           </div>
 
           {car.imagenes && showDetails && (
-            <Card>
+            <Card className="mt-4">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Info className="h-4 w-4 mr-2" />
@@ -638,5 +558,5 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }
