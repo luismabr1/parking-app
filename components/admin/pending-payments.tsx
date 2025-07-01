@@ -18,6 +18,8 @@ import {
   Hash,
   ImageIcon,
   ExternalLink,
+  Calculator,
+  TrendingUp,
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import ExitTimeDisplay from "./exit-time-display"
@@ -30,6 +32,7 @@ interface PaymentInfo {
   telefono: string
   numeroIdentidad: string
   montoPagado: number
+  montoPagadoUsd?: number
   fechaPago: string
   estado: string
   estadoValidacion: string
@@ -47,6 +50,8 @@ interface PaymentInfo {
   tiempoSalida?: string
   tiempoSalidaEstimado?: string
   montoCalculado?: number
+  tasaCambioUsada?: number
+  duracionMinutos?: number
 }
 
 interface CompanySettings {
@@ -64,9 +69,9 @@ const PendingPaymentCard: React.FC<{
   payment: PaymentInfo
   onValidate: (id: string) => void
   onReject: (id: string) => void
-  formatCurrency: (amount: number) => string
+  companySettings: CompanySettings
   isProcessing: boolean
-}> = React.memo(({ payment, onValidate, onReject, formatCurrency, isProcessing }) => {
+}> = React.memo(({ payment, onValidate, onReject, companySettings, isProcessing }) => {
   const [showReceiptModal, setShowReceiptModal] = useState(false)
 
   const getPaymentTypeColor = (tipo: string) => {
@@ -95,6 +100,62 @@ const PendingPaymentCard: React.FC<{
     }
   }
 
+  // Función para formatear montos según el tipo de pago
+  const formatAmount = (amount: number, isMainAmount = true) => {
+    if (!amount || isNaN(amount)) return "0.00"
+
+    const isElectronicPayment = ["pago_movil", "transferencia"].includes(payment.tipoPago?.toLowerCase())
+
+    if (isElectronicPayment) {
+      // Para pagos electrónicos, mostrar en Bs como principal
+      if (isMainAmount) {
+        return `Bs. ${amount.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      } else {
+        // Como referencia en USD
+        const usdAmount =
+          payment.montoPagadoUsd || amount / (payment.tasaCambioUsada || companySettings.tasaCambio || 36)
+        return `$${usdAmount.toFixed(2)} USD`
+      }
+    } else {
+      // Para efectivo, mostrar en USD
+      return `$${amount.toFixed(2)} USD`
+    }
+  }
+
+  // Función para calcular y mostrar la fórmula de cálculo
+  const getCalculationFormula = () => {
+    const tarifaPorHora = companySettings.tarifaPorHora || 2.0
+    const duracion = payment.duracionMinutos || 0
+    const horas = Math.ceil(duracion / 60) || 1 // Mínimo 1 hora
+    const montoUSD = tarifaPorHora * horas
+
+    const isElectronicPayment = ["pago_movil", "transferencia"].includes(payment.tipoPago?.toLowerCase())
+
+    if (isElectronicPayment) {
+      const tasaCambio = payment.tasaCambioUsada || companySettings.tasaCambio || 36
+      const montoBs = montoUSD * tasaCambio
+
+      return {
+        formula: `$${tarifaPorHora}/hora × ${horas} hora${horas > 1 ? "s" : ""} × ${tasaCambio} Bs/$`,
+        calculation: `$${montoUSD.toFixed(2)} × ${tasaCambio} = Bs. ${montoBs.toLocaleString("es-VE", { minimumFractionDigits: 2 })}`,
+        result: `Bs. ${montoBs.toLocaleString("es-VE", { minimumFractionDigits: 2 })}`,
+        usdReference: `($${montoUSD.toFixed(2)} USD)`,
+        exchangeRate: tasaCambio,
+      }
+    } else {
+      return {
+        formula: `$${tarifaPorHora}/hora × ${horas} hora${horas > 1 ? "s" : ""}`,
+        calculation: `$${tarifaPorHora} × ${horas} = $${montoUSD.toFixed(2)}`,
+        result: `$${montoUSD.toFixed(2)} USD`,
+        usdReference: null,
+        exchangeRate: null,
+      }
+    }
+  }
+
+  const calculationInfo = getCalculationFormula()
+  const isElectronicPayment = ["pago_movil", "transferencia"].includes(payment.tipoPago?.toLowerCase())
+
   return (
     <>
       <Card className="mb-4">
@@ -109,7 +170,7 @@ const PendingPaymentCard: React.FC<{
             </Badge>
           </div>
 
-          {/* Exit Time Display - Prominente después del tipo de pago */}
+          {/* Exit Time Display */}
           {(payment.tiempoSalida || payment.tiempoSalidaEstimado) && (
             <div className="mt-2">
               <ExitTimeDisplay
@@ -144,22 +205,63 @@ const PendingPaymentCard: React.FC<{
             )}
           </div>
 
-          {/* Payment Details */}
+          {/* Payment Amount Details */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Monto Pagado:</span>
-              <span className="font-bold text-green-600">{formatCurrency(payment.montoPagado)}</span>
+              <div className="text-right">
+                <div className="font-bold text-green-600">{formatAmount(payment.montoPagado, true)}</div>
+                {isElectronicPayment && (
+                  <div className="text-xs text-gray-500">{formatAmount(payment.montoPagado, false)}</div>
+                )}
+              </div>
             </div>
 
-            {payment.montoCalculado && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Monto Calculado:</span>
-                <span className="font-bold">{formatCurrency(payment.montoCalculado)}</span>
+            {/* Calculation Formula */}
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Calculator className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-800">Cálculo del Monto:</span>
+              </div>
+              <div className="text-sm space-y-1">
+                <div className="text-gray-700">{calculationInfo.formula}</div>
+                <div className="text-gray-600">{calculationInfo.calculation}</div>
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Monto Calculado:</span>
+                  <div className="text-right">
+                    <div className="font-bold text-blue-600">{calculationInfo.result}</div>
+                    {calculationInfo.usdReference && (
+                      <div className="text-xs text-gray-500">{calculationInfo.usdReference}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Exchange Rate Info for Electronic Payments */}
+            {isElectronicPayment && calculationInfo.exchangeRate && (
+              <div className="bg-yellow-50 p-3 rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="h-4 w-4 text-yellow-600" />
+                  <span className="text-sm font-medium text-yellow-800">Tasa de Cambio:</span>
+                </div>
+                <div className="text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700">Tasa usada:</span>
+                    <span className="font-bold text-yellow-700">
+                      {calculationInfo.exchangeRate.toLocaleString("es-VE")} Bs/$
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Fecha del pago: {new Date(payment.fechaPago).toLocaleDateString("es-ES")}
+                  </div>
+                </div>
               </div>
             )}
 
             <Separator />
 
+            {/* Payment Details */}
             <div className="grid grid-cols-1 gap-2 text-sm">
               {payment.referenciaTransferencia && (
                 <div className="flex items-center gap-2">
@@ -193,7 +295,7 @@ const PendingPaymentCard: React.FC<{
                 </div>
               )}
 
-              {/* Comprobante de Pago */}
+              {/* Receipt */}
               {payment.urlImagenComprobante && (
                 <div className="flex items-center gap-2">
                   <ImageIcon className="h-3 w-3" />
@@ -240,7 +342,7 @@ const PendingPaymentCard: React.FC<{
         </CardContent>
       </Card>
 
-      {/* Modal para mostrar el comprobante */}
+      {/* Receipt Modal */}
       {showReceiptModal && payment.urlImagenComprobante && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl max-h-[90vh] overflow-auto">
@@ -260,7 +362,7 @@ const PendingPaymentCard: React.FC<{
                   target.src = "/placeholder.svg?height=400&width=300&text=Error+cargando+imagen"
                 }}
               />
-              <div className="mt-4 text-sm text-gray-600">
+              <div className="mt-4 text-sm text-gray-600 space-y-2">
                 <p>
                   <strong>Referencia:</strong> {payment.referenciaTransferencia}
                 </p>
@@ -268,8 +370,18 @@ const PendingPaymentCard: React.FC<{
                   <strong>Banco:</strong> {payment.banco}
                 </p>
                 <p>
-                  <strong>Monto:</strong> {formatCurrency(payment.montoPagado)}
+                  <strong>Monto:</strong> {formatAmount(payment.montoPagado, true)}
                 </p>
+                {isElectronicPayment && (
+                  <>
+                    <p>
+                      <strong>Equivalente:</strong> {formatAmount(payment.montoPagado, false)}
+                    </p>
+                    <p>
+                      <strong>Tasa:</strong> {payment.tasaCambioUsada?.toLocaleString("es-VE")} Bs/$
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -308,7 +420,6 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
       }
     } catch (error) {
       console.error("Error fetching company settings:", error)
-      // Keep default settings if fetch fails
     }
   }, [])
 
@@ -419,27 +530,6 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
     [fetchPayments, onStatsUpdate],
   )
 
-  const formatCurrency = useCallback(
-    (amount: number) => {
-      if (!amount || isNaN(amount)) return "$0.00"
-
-      // Usar configuración por defecto si no está disponible
-      const moneda = companySettings?.moneda || "VES"
-      const tasaCambio = companySettings?.tasaCambio || 36.0
-
-      if (moneda === "USD") {
-        return `$${amount.toFixed(2)} USD`
-      }
-
-      const usdAmount = amount / tasaCambio
-      if (usdAmount >= 1) {
-        return `$${usdAmount.toFixed(2)} USD`
-      }
-      return `${moneda} ${amount.toLocaleString()}`
-    },
-    [companySettings],
-  )
-
   // Función para ordenar pagos por urgencia (tiempo de salida)
   const sortByUrgency = useCallback((a: PaymentInfo, b: PaymentInfo) => {
     const getUrgencyScore = (payment: PaymentInfo) => {
@@ -466,7 +556,7 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
   useEffect(() => {
     fetchCompanySettings()
     fetchPayments()
-    const interval = setInterval(fetchPayments, 30000) // Refresh every 30 seconds
+    const interval = setInterval(fetchPayments, 30000)
     return () => clearInterval(interval)
   }, [fetchCompanySettings, fetchPayments])
 
@@ -524,7 +614,7 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
               payment={payment}
               onValidate={validatePayment}
               onReject={rejectPayment}
-              formatCurrency={formatCurrency}
+              companySettings={companySettings}
               isProcessing={processingPayments.has(payment._id)}
             />
           ))}
