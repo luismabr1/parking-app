@@ -1,5 +1,6 @@
 /**
- * Este script crea datos de ejemplo en la base de datos MongoDB
+ * Este script inicializa la base de datos MongoDB con la configuración básica
+ * Sin datos dummy - listo para datos reales
  *
  * Para ejecutar:
  * 1. Asegúrate de tener configurada la variable MONGODB_URI en .env.local
@@ -63,45 +64,50 @@ async function seedDatabase() {
     await db.createCollection("car_history")
 
     // Limpiar datos existentes
+    console.log("🧹 Limpiando datos existentes...")
     await db.collection("tickets").deleteMany({})
     await db.collection("pagos").deleteMany({})
     await db.collection("cars").deleteMany({})
     await db.collection("car_history").deleteMany({})
+    await db.collection("staff").deleteMany({})
 
     // 1. Insertar configuración unificada de la empresa
-    console.log("⚙️ Insertando configuración unificada de la empresa...")
+    console.log("⚙️ Insertando configuración de la empresa...")
     const companySettings = {
       // Datos generales de la empresa
       nombreEmpresa: "Estacionamiento Central",
-      tarifaPorHora: 2,
+      direccion: "Av. Principal, Centro",
+      telefono: "+58-212-555-0000",
+      email: "info@estacionamiento.com",
       moneda: "VES",
-      tasaCambio: 106.25, // VES por USD
-      tiempoGracia: 15,
-      espaciosDisponibles: 100,
+      tarifaPorHora: 2.0,
+      tasaCambio: 36.0, // VES por USD
+      tiempoGracia: 15, // minutos
+      espaciosDisponibles: 50,
       fechaActualizacion: new Date(),
 
       // Configuración de métodos de pago electrónico
       pagoMovil: {
         banco: "Banco de Venezuela (BDV)",
-        cedula: "J-12345678-9",
-        telefono: "0414-1234567",
+        cedula: "V-00000000",
+        telefono: "0000-0000000",
       },
       transferencia: {
         banco: "Banco de Venezuela (BDV)",
-        cedula: "J-12345678-9",
-        telefono: "0212-1234567",
+        cedula: "V-00000000",
+        telefono: "0000-0000000",
         numeroCuenta: "0102-0000-00-0000000000",
       },
     }
 
     await db.collection("company_settings").deleteMany({})
     await db.collection("company_settings").insertOne(companySettings)
-    console.log("✅ Configuración unificada de empresa insertada")
+    console.log("✅ Configuración de empresa insertada")
 
-    // 2. Crear tickets disponibles
-    console.log("🎫 Creando tickets disponibles...")
+    // 2. Crear tickets/espacios disponibles (sin asignar)
+    console.log("🎫 Creando espacios de estacionamiento...")
     const tickets = []
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= 50; i++) {
       tickets.push({
         codigoTicket: `PARK${i.toString().padStart(3, "0")}`,
         estado: "disponible",
@@ -109,35 +115,28 @@ async function seedDatabase() {
         horaOcupacion: null,
         horaConfirmacion: null,
         montoCalculado: 0,
+        carInfo: null,
         ultimoPagoId: null,
       })
     }
 
     const result = await db.collection("tickets").insertMany(tickets)
-    console.log(`✅ ${result.insertedCount} tickets disponibles creados`)
+    console.log(`✅ ${result.insertedCount} espacios de estacionamiento creados`)
 
-    // 3. Crear datos de ejemplo para el personal
-    console.log("👥 Creando personal del sistema...")
-    const staffMembers = [
-      {
-        nombre: "Admin",
-        apellido: "Sistema",
-        email: "admin@estacionamiento.com",
-        rol: "administrador",
-        fechaCreacion: new Date(),
-      },
-      {
-        nombre: "Operador",
-        apellido: "Ejemplo",
-        email: "operador@estacionamiento.com",
-        rol: "operador",
-        fechaCreacion: new Date(),
-      },
-    ]
+    // 3. Crear usuario administrador básico
+    console.log("👤 Creando usuario administrador...")
+    const adminUser = {
+      nombre: "Admin",
+      apellido: "Sistema",
+      email: "admin@estacionamiento.com",
+      password: "admin123", // En producción debe estar hasheado
+      rol: "administrador",
+      fechaCreacion: new Date(),
+      activo: true,
+    }
 
-    await db.collection("staff").deleteMany({})
-    const staffResult = await db.collection("staff").insertMany(staffMembers)
-    console.log(`✅ ${staffResult.insertedCount} miembros del personal insertados`)
+    const staffResult = await db.collection("staff").insertOne(adminUser)
+    console.log("✅ Usuario administrador creado")
 
     // 4. Insertar bancos venezolanos
     console.log("🏦 Insertando bancos venezolanos...")
@@ -145,38 +144,41 @@ async function seedDatabase() {
     await db.collection("banks").insertMany(venezuelanBanks)
     console.log(`✅ ${venezuelanBanks.length} bancos insertados`)
 
-    console.log("\n🎉 Base de datos inicializada correctamente")
-    console.log("\n📋 CONFIGURACIÓN INSERTADA:")
+    console.log("\n🎉 Base de datos inicializada para datos reales")
+    console.log("\n📋 CONFIGURACIÓN BÁSICA:")
     console.log("   🏢 Empresa: Estacionamiento Central")
-    console.log("   💰 Tarifa: 2 VES/hora")
-    console.log("   💱 Tasa de cambio: 106.25 VES/USD")
+    console.log("   💰 Tarifa: 2.0 VES/hora")
+    console.log("   💱 Tasa de cambio: 36.0 VES/USD")
     console.log("   ⏰ Tiempo de gracia: 15 minutos")
-    console.log("   🅿️ Espacios disponibles: 100")
-    console.log("   📱 Pago móvil configurado")
-    console.log("   🏦 Transferencia bancaria configurada")
+    console.log("   🅿️ Espacios disponibles: 50")
 
-    console.log("\n📋 TICKETS DISPONIBLES:")
-    console.log("   📝 PARK001-PARK020: Listos para asignar nuevos vehículos")
-    console.log("   ⚠️  Estos tickets están disponibles para el registro de vehículos")
+    console.log("\n📋 ESPACIOS CREADOS:")
+    console.log("   📝 PARK001-PARK050: Todos disponibles")
+    console.log("   ⚠️  Listos para registrar vehículos reales")
 
-    console.log("\n🚗 FLUJO RECOMENDADO:")
-    console.log("   1. 📸 Registrar vehículo con fotos (Captura de Vehículo)")
-    console.log("   2. ✅ Confirmar estacionamiento (pestaña 'Confirmar')")
+    console.log("\n🚗 FLUJO DE TRABAJO:")
+    console.log("   1. 📸 Registrar vehículo real con fotos")
+    console.log("   2. ✅ Confirmar estacionamiento")
     console.log("   3. 💳 Cliente realiza pago")
-    console.log("   4. ✅ Validar pago (pestaña 'Pagos Pendientes')")
-    console.log("   5. 🚪 Procesar salida (pestaña 'Salidas')")
+    console.log("   4. ✅ Validar pago recibido")
+    console.log("   5. 🚪 Procesar salida del vehículo")
 
-    console.log("\n🔐 Acceso al panel de administración:")
+    console.log("\n🔐 Acceso al sistema:")
     console.log("   URL: http://localhost:3000/admin")
     console.log("   Usuario: admin")
     console.log("   Contraseña: admin123")
 
-    console.log("\n✨ SISTEMA LISTO PARA DATOS REALES:")
-    console.log("   • Sin datos dummy - empezar desde cero")
-    console.log("   • 20 espacios de estacionamiento disponibles")
-    console.log("   • Configuración completa lista (general + pagos)")
+    console.log("\n✨ SISTEMA LIMPIO Y LISTO:")
+    console.log("   • Sin datos dummy")
+    console.log("   • Configuración básica lista")
+    console.log("   • 50 espacios disponibles")
     console.log("   • Bancos venezolanos configurados")
-    console.log("   • Personal administrativo creado")
+    console.log("   • Listo para datos reales")
+
+    console.log("\n⚠️  IMPORTANTE:")
+    console.log("   • Actualiza los datos de pago en Configuración")
+    console.log("   • Ajusta tarifas según tus necesidades")
+    console.log("   • Cambia la contraseña del administrador")
   } catch (err) {
     console.error("❌ Error:", err)
   } finally {

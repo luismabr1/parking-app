@@ -36,16 +36,16 @@ interface PaymentInfo {
 }
 
 interface CompanySettings {
-  nombre: string
-  moneda: string
-  tasaCambio: number
-  tarifaPorHora: number
-  tiempoGracia: number
+  nombreEmpresa?: string
+  moneda?: string
+  tarifas?: {
+    tasaCambio?: number
+    precioHora?: number
+  }
 }
 
 interface PendingPaymentsProps {
   onStatsUpdate: () => void
-  companySettings: CompanySettings
 }
 
 const PendingPaymentCard: React.FC<{
@@ -206,11 +206,33 @@ const PendingPaymentCard: React.FC<{
 
 PendingPaymentCard.displayName = "PendingPaymentCard"
 
-const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate, companySettings }) => {
+const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
   const [payments, setPayments] = useState<PaymentInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [processingPayments, setProcessingPayments] = useState<Set<string>>(new Set())
+  const [companySettings, setCompanySettings] = useState<CompanySettings>({
+    nombreEmpresa: "Estacionamiento",
+    moneda: "VES",
+    tarifas: {
+      tasaCambio: 35.0,
+      precioHora: 3.0,
+    },
+  })
   const isFetchingRef = useRef(false)
+
+  // Fetch company settings
+  const fetchCompanySettings = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/company-settings")
+      if (response.ok) {
+        const settings = await response.json()
+        setCompanySettings(settings)
+      }
+    } catch (error) {
+      console.error("Error fetching company settings:", error)
+      // Keep default settings if fetch fails
+    }
+  }, [])
 
   const fetchPayments = useCallback(async () => {
     if (isFetchingRef.current) return
@@ -318,14 +340,19 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate, compan
     (amount: number) => {
       if (!amount || isNaN(amount)) return "$0.00"
 
-      if (companySettings.moneda === "USD") {
+      // Usar configuración por defecto si no está disponible
+      const moneda = companySettings?.moneda || "VES"
+      const tasaCambio = companySettings?.tarifas?.tasaCambio || 35.0
+
+      if (moneda === "USD") {
         return `$${amount.toFixed(2)} USD`
       }
-      const usdAmount = amount / companySettings.tasaCambio
+
+      const usdAmount = amount / tasaCambio
       if (usdAmount >= 1) {
         return `$${usdAmount.toFixed(2)} USD`
       }
-      return `${companySettings.moneda} ${amount.toLocaleString()}`
+      return `${moneda} ${amount.toLocaleString()}`
     },
     [companySettings],
   )
@@ -354,10 +381,11 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate, compan
   }, [payments, sortByUrgency])
 
   useEffect(() => {
+    fetchCompanySettings()
     fetchPayments()
     const interval = setInterval(fetchPayments, 30000) // Refresh every 30 seconds
     return () => clearInterval(interval)
-  }, [fetchPayments])
+  }, [fetchCompanySettings, fetchPayments])
 
   if (isLoading) {
     return (

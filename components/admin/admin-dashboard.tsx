@@ -31,7 +31,7 @@ interface DashboardStats {
 
 const areStatsEqual = (newStats: DashboardStats, oldStats: DashboardStats) => {
   return Object.keys(newStats).every(
-    (key) => newStats[key as keyof DashboardStats] === oldStats[key as keyof DashboardStats]
+    (key) => newStats[key as keyof DashboardStats] === oldStats[key as keyof DashboardStats],
   )
 }
 
@@ -64,7 +64,7 @@ function AdminDashboard() {
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       console.log(
-        `🔍 DEBUG: Estado actualizado en AdminDashboard - activeTab: ${activeTab}, showStats: ${showStats}, isLoadingStats: ${isLoadingStats}, stats.pendingPayments: ${stats.pendingPayments}`
+        `🔍 DEBUG: Estado actualizado en AdminDashboard - activeTab: ${activeTab}, showStats: ${showStats}, isLoadingStats: ${isLoadingStats}, stats.pendingPayments: ${stats.pendingPayments}`,
       )
     }
   }, [activeTab, showStats, isLoadingStats, stats])
