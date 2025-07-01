@@ -5,7 +5,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { CreditCard, CheckCircle, XCircle, Clock, RefreshCw, Car, User, Phone, Building2, Hash } from "lucide-react"
+import {
+  CreditCard,
+  CheckCircle,
+  XCircle,
+  Clock,
+  RefreshCw,
+  Car,
+  User,
+  Phone,
+  Building2,
+  Hash,
+  ImageIcon,
+  ExternalLink,
+} from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import ExitTimeDisplay from "./exit-time-display"
 
@@ -21,6 +34,7 @@ interface PaymentInfo {
   estado: string
   estadoValidacion: string
   tipoPago: string
+  urlImagenComprobante?: string
   carInfo: {
     placa: string
     marca: string
@@ -38,10 +52,8 @@ interface PaymentInfo {
 interface CompanySettings {
   nombreEmpresa?: string
   moneda?: string
-  tarifas?: {
-    tasaCambio?: number
-    precioHora?: number
-  }
+  tasaCambio?: number
+  tarifaPorHora?: number
 }
 
 interface PendingPaymentsProps {
@@ -55,6 +67,8 @@ const PendingPaymentCard: React.FC<{
   formatCurrency: (amount: number) => string
   isProcessing: boolean
 }> = React.memo(({ payment, onValidate, onReject, formatCurrency, isProcessing }) => {
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
+
   const getPaymentTypeColor = (tipo: string) => {
     switch (tipo?.toLowerCase()) {
       case "transferencia":
@@ -82,125 +96,186 @@ const PendingPaymentCard: React.FC<{
   }
 
   return (
-    <Card className="mb-4">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CreditCard className="h-5 w-5" />
-            Ticket: {payment.codigoTicket}
-          </CardTitle>
-          <Badge className={getPaymentTypeColor(payment.tipoPago)} variant="secondary">
-            {formatPaymentType(payment.tipoPago)}
-          </Badge>
-        </div>
-
-        {/* Exit Time Display - Prominente después del tipo de pago */}
-        {(payment.tiempoSalida || payment.tiempoSalidaEstimado) && (
-          <div className="mt-2">
-            <ExitTimeDisplay tiempoSalida={payment.tiempoSalida} tiempoSalidaEstimado={payment.tiempoSalidaEstimado} />
-          </div>
-        )}
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Car Information */}
-        <div className="bg-gray-50 p-3 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <Car className="h-4 w-4 text-gray-600" />
-            <span className="font-semibold text-gray-900">{payment.carInfo?.placa || "Placa no disponible"}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
-            <span>
-              {payment.carInfo?.marca || "N/A"} {payment.carInfo?.modelo || ""}
-            </span>
-            <span>{payment.carInfo?.color || "N/A"}</span>
-          </div>
-          {payment.carInfo?.nombreDueño && (
-            <div className="flex items-center gap-2 mt-2 text-sm">
-              <User className="h-3 w-3" />
-              <span>{payment.carInfo.nombreDueño}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Payment Details */}
-        <div className="space-y-3">
+    <>
+      <Card className="mb-4">
+        <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Monto Pagado:</span>
-            <span className="font-bold text-green-600">{formatCurrency(payment.montoPagado)}</span>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Ticket: {payment.codigoTicket}
+            </CardTitle>
+            <Badge className={getPaymentTypeColor(payment.tipoPago)} variant="secondary">
+              {formatPaymentType(payment.tipoPago)}
+            </Badge>
           </div>
 
-          {payment.montoCalculado && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Monto Calculado:</span>
-              <span className="font-bold">{formatCurrency(payment.montoCalculado)}</span>
+          {/* Exit Time Display - Prominente después del tipo de pago */}
+          {(payment.tiempoSalida || payment.tiempoSalidaEstimado) && (
+            <div className="mt-2">
+              <ExitTimeDisplay
+                tiempoSalida={payment.tiempoSalida}
+                tiempoSalidaEstimado={payment.tiempoSalidaEstimado}
+                fechaPago={payment.fechaPago}
+                codigoTicket={payment.codigoTicket}
+                variant="compact"
+              />
             </div>
           )}
+        </CardHeader>
 
-          <Separator />
-
-          <div className="grid grid-cols-1 gap-2 text-sm">
-            {payment.referenciaTransferencia && (
-              <div className="flex items-center gap-2">
-                <Hash className="h-3 w-3" />
-                <span className="text-gray-600">Ref:</span>
-                <span className="font-mono">{payment.referenciaTransferencia}</span>
-              </div>
-            )}
-
-            {payment.banco && (
-              <div className="flex items-center gap-2">
-                <Building2 className="h-3 w-3" />
-                <span className="text-gray-600">Banco:</span>
-                <span>{payment.banco}</span>
-              </div>
-            )}
-
-            {payment.telefono && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-3 w-3" />
-                <span className="text-gray-600">Teléfono:</span>
-                <span>{payment.telefono}</span>
-              </div>
-            )}
-
-            {payment.numeroIdentidad && (
-              <div className="flex items-center gap-2">
+        <CardContent className="space-y-4">
+          {/* Car Information */}
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Car className="h-4 w-4 text-gray-600" />
+              <span className="font-semibold text-gray-900">{payment.carInfo?.placa || "Placa no disponible"}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+              <span>
+                {payment.carInfo?.marca || "N/A"} {payment.carInfo?.modelo || ""}
+              </span>
+              <span>{payment.carInfo?.color || "N/A"}</span>
+            </div>
+            {payment.carInfo?.nombreDueño && (
+              <div className="flex items-center gap-2 mt-2 text-sm">
                 <User className="h-3 w-3" />
-                <span className="text-gray-600">Cédula:</span>
-                <span>{payment.numeroIdentidad}</span>
+                <span>{payment.carInfo.nombreDueño}</span>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <Clock className="h-3 w-3" />
-            <span>Pago realizado: {new Date(payment.fechaPago).toLocaleString("es-ES")}</span>
+          {/* Payment Details */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Monto Pagado:</span>
+              <span className="font-bold text-green-600">{formatCurrency(payment.montoPagado)}</span>
+            </div>
+
+            {payment.montoCalculado && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Monto Calculado:</span>
+                <span className="font-bold">{formatCurrency(payment.montoCalculado)}</span>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="grid grid-cols-1 gap-2 text-sm">
+              {payment.referenciaTransferencia && (
+                <div className="flex items-center gap-2">
+                  <Hash className="h-3 w-3" />
+                  <span className="text-gray-600">Ref:</span>
+                  <span className="font-mono">{payment.referenciaTransferencia}</span>
+                </div>
+              )}
+
+              {payment.banco && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-3 w-3" />
+                  <span className="text-gray-600">Banco:</span>
+                  <span>{payment.banco}</span>
+                </div>
+              )}
+
+              {payment.telefono && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-3 w-3" />
+                  <span className="text-gray-600">Teléfono:</span>
+                  <span>{payment.telefono}</span>
+                </div>
+              )}
+
+              {payment.numeroIdentidad && (
+                <div className="flex items-center gap-2">
+                  <User className="h-3 w-3" />
+                  <span className="text-gray-600">Cédula:</span>
+                  <span>{payment.numeroIdentidad}</span>
+                </div>
+              )}
+
+              {/* Comprobante de Pago */}
+              {payment.urlImagenComprobante && (
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="h-3 w-3" />
+                  <span className="text-gray-600">Comprobante:</span>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-blue-600 hover:text-blue-800"
+                    onClick={() => setShowReceiptModal(true)}
+                  >
+                    Ver comprobante
+                    <ExternalLink className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Clock className="h-3 w-3" />
+              <span>Pago realizado: {new Date(payment.fechaPago).toLocaleString("es-ES")}</span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-2">
+            <Button
+              onClick={() => onValidate(payment._id)}
+              disabled={isProcessing}
+              className="flex-1 bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Validar Pago
+            </Button>
+            <Button
+              onClick={() => onReject(payment._id)}
+              disabled={isProcessing}
+              variant="destructive"
+              className="flex-1"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Rechazar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Modal para mostrar el comprobante */}
+      {showReceiptModal && payment.urlImagenComprobante && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl max-h-[90vh] overflow-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Comprobante de Pago - {payment.codigoTicket}</h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowReceiptModal(false)}>
+                <XCircle className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="p-4">
+              <img
+                src={payment.urlImagenComprobante || "/placeholder.svg"}
+                alt={`Comprobante de pago ${payment.codigoTicket}`}
+                className="w-full h-auto rounded-lg"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  target.src = "/placeholder.svg?height=400&width=300&text=Error+cargando+imagen"
+                }}
+              />
+              <div className="mt-4 text-sm text-gray-600">
+                <p>
+                  <strong>Referencia:</strong> {payment.referenciaTransferencia}
+                </p>
+                <p>
+                  <strong>Banco:</strong> {payment.banco}
+                </p>
+                <p>
+                  <strong>Monto:</strong> {formatCurrency(payment.montoPagado)}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-2">
-          <Button
-            onClick={() => onValidate(payment._id)}
-            disabled={isProcessing}
-            className="flex-1 bg-green-600 hover:bg-green-700"
-          >
-            <CheckCircle className="h-4 w-4 mr-2" />
-            Validar Pago
-          </Button>
-          <Button
-            onClick={() => onReject(payment._id)}
-            disabled={isProcessing}
-            variant="destructive"
-            className="flex-1"
-          >
-            <XCircle className="h-4 w-4 mr-2" />
-            Rechazar
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      )}
+    </>
   )
 })
 
@@ -213,10 +288,8 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
   const [companySettings, setCompanySettings] = useState<CompanySettings>({
     nombreEmpresa: "Estacionamiento",
     moneda: "VES",
-    tarifas: {
-      tasaCambio: 35.0,
-      precioHora: 3.0,
-    },
+    tasaCambio: 36.0,
+    tarifaPorHora: 2.0,
   })
   const isFetchingRef = useRef(false)
 
@@ -226,7 +299,12 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
       const response = await fetch("/api/admin/company-settings")
       if (response.ok) {
         const settings = await response.json()
-        setCompanySettings(settings)
+        setCompanySettings({
+          nombreEmpresa: settings.nombreEmpresa || "Estacionamiento",
+          moneda: settings.moneda || "VES",
+          tasaCambio: settings.tasaCambio || 36.0,
+          tarifaPorHora: settings.tarifaPorHora || 2.0,
+        })
       }
     } catch (error) {
       console.error("Error fetching company settings:", error)
@@ -265,7 +343,11 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
         const response = await fetch("/api/admin/validate-payment", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId }),
+          body: JSON.stringify({
+            paymentId,
+            currentPrecioHora: companySettings.tarifaPorHora || 2.0,
+            currentTasaCambio: companySettings.tasaCambio || 36.0,
+          }),
         })
 
         if (response.ok) {
@@ -276,13 +358,14 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
           await fetchPayments()
           onStatsUpdate()
         } else {
-          throw new Error("Error validating payment")
+          const errorData = await response.json()
+          throw new Error(errorData.message || "Error validating payment")
         }
       } catch (error) {
         console.error("Error validating payment:", error)
         toast({
           title: "Error",
-          description: "No se pudo validar el pago",
+          description: error instanceof Error ? error.message : "No se pudo validar el pago",
           variant: "destructive",
         })
       } finally {
@@ -293,7 +376,7 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
         })
       }
     },
-    [fetchPayments, onStatsUpdate],
+    [fetchPayments, onStatsUpdate, companySettings],
   )
 
   const rejectPayment = useCallback(
@@ -342,7 +425,7 @@ const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate }) => {
 
       // Usar configuración por defecto si no está disponible
       const moneda = companySettings?.moneda || "VES"
-      const tasaCambio = companySettings?.tarifas?.tasaCambio || 35.0
+      const tasaCambio = companySettings?.tasaCambio || 36.0
 
       if (moneda === "USD") {
         return `$${amount.toFixed(2)} USD`

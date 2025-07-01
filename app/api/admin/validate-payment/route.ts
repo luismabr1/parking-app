@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { connectToDatabase } from "@/lib/mongodb"
+import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
-export async function PUT(request: NextRequest) {
+async function validatePayment(request: NextRequest) {
   try {
     console.log("🔄 Iniciando validación de pago...")
 
@@ -31,21 +31,34 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ message: "Falta parámetro requerido: currentTasaCambio" }, { status: 400 })
     }
 
-    console.log("🔍 Validando parámetros:")
-    console.log(`- paymentId: ${paymentId}`)
-    console.log(`- currentPrecioHora: ${currentPrecioHora}`)
-    console.log(`- currentTasaCambio: ${currentTasaCambio}`)
+    const client = await clientPromise
+    const db = client.db("parking")
 
-    const { db } = await connectToDatabase()
-
-    // Buscar el pago
+    // Buscar el pago solo en la colección "pagos"
     console.log(`🔍 Buscando pago con ID: ${paymentId}`)
-    const payment = await db.collection("pagos").findOne({
-      _id: new ObjectId(paymentId),
-    })
+    let payment = null
+
+    try {
+      // Intentar con ObjectId
+      payment = await db.collection("pagos").findOne({
+        _id: new ObjectId(paymentId),
+      })
+    } catch (objectIdError) {
+      console.log("⚠️ Error con ObjectId, intentando con string:", objectIdError)
+      // Si falla, intentar con string directo
+      payment = await db.collection("pagos").findOne({
+        _id: paymentId,
+      })
+    }
 
     if (!payment) {
       console.log("❌ Pago no encontrado")
+      // Debug: mostrar algunos pagos existentes
+      const existingPayments = await db.collection("pagos").find({}).limit(3).toArray()
+      console.log(
+        "🔍 Pagos existentes en 'pagos':",
+        existingPayments.map((p) => ({ id: p._id, codigo: p.codigoTicket })),
+      )
       return NextResponse.json({ message: "Pago no encontrado" }, { status: 404 })
     }
 
@@ -72,13 +85,13 @@ export async function PUT(request: NextRequest) {
 
     // Actualizar el pago como validado
     const updateResult = await db.collection("pagos").updateOne(
-      { _id: new ObjectId(paymentId) },
+      { _id: payment._id },
       {
         $set: {
           estado: "validado",
           estadoValidacion: "validado",
           fechaValidacion: new Date(),
-          validadoPor: "admin", // En producción, usar el usuario actual
+          validadoPor: "admin",
           precioHoraValidacion: currentPrecioHora,
           tasaCambioValidacion: currentTasaCambio,
         },
@@ -128,4 +141,13 @@ export async function PUT(request: NextRequest) {
     console.error("❌ Error validating payment:", error)
     return NextResponse.json({ message: "Error interno del servidor" }, { status: 500 })
   }
+}
+
+// Exportar tanto POST como PUT para compatibilidad
+export async function POST(request: NextRequest) {
+  return validatePayment(request)
+}
+
+export async function PUT(request: NextRequest) {
+  return validatePayment(request)
 }

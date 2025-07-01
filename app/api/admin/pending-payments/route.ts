@@ -11,12 +11,21 @@ export async function GET() {
     const client = await clientPromise
     const db = client.db("parking")
 
+    console.log("🔍 Obteniendo pagos pendientes de la colección 'pagos'...")
+
     // Buscar pagos pendientes con información completa del ticket y carro
     const pendingPayments = await db
       .collection("pagos")
       .aggregate([
         {
-          $match: { estado: "pendiente_validacion" },
+          $match: {
+            $or: [
+              { estadoValidacion: "pendiente" },
+              { estadoValidacion: "pendiente_validacion" },
+              { estado: "pendiente" },
+              { estado: "pendiente_validacion" },
+            ],
+          },
         },
         {
           $lookup: {
@@ -34,8 +43,8 @@ export async function GET() {
         },
         {
           $lookup: {
-            from: "cars", // Join with the cars collection
-            localField: "codigoTicket", // Use codigoTicket to match ticketAsociado
+            from: "cars",
+            localField: "codigoTicket",
             foreignField: "ticketAsociado",
             as: "carInfoFull",
           },
@@ -58,7 +67,8 @@ export async function GET() {
             fechaPago: 1,
             estado: 1,
             estadoValidacion: 1,
-            tipoPago: 1, // Add this line to include tipoPago
+            tipoPago: 1,
+            urlImagenComprobante: 1, // Asegurar que se incluya
             // Merge carInfo from pagos with full data from cars, using ticketInfo.carInfo as fallback
             carInfo: {
               $mergeObjects: [
@@ -70,7 +80,7 @@ export async function GET() {
                   nombreDueño: { $ifNull: ["$carInfo.nombreDueño", "$ticketInfo.carInfo.nombreDueño", "Por definir"] },
                   telefono: { $ifNull: ["$carInfo.telefono", "$ticketInfo.carInfo.telefono", "Por definir"] },
                 },
-                "$carInfoFull", // This will include imagenes from cars
+                "$carInfoFull",
               ],
             },
             // Campos de tiempo de salida
@@ -86,10 +96,15 @@ export async function GET() {
       ])
       .toArray()
 
-    // Debugging log
-    if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG: Pending Payments Response", pendingPayments)
-    }
+    console.log(`📋 Total pagos pendientes encontrados: ${pendingPayments.length}`)
+
+    // Debug: Mostrar información de comprobantes
+    pendingPayments.forEach((payment) => {
+      console.log(`📋 Pago ${payment.codigoTicket}: comprobante = ${payment.urlImagenComprobante ? "SÍ" : "NO"}`)
+      if (payment.urlImagenComprobante) {
+        console.log(`   URL: ${payment.urlImagenComprobante}`)
+      }
+    })
 
     // Set cache control headers
     const response = NextResponse.json(pendingPayments)
