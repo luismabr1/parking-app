@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     }
 
     const client = await clientPromise
-    const db = client.db("parking") // Usar la base de datos correcta
+    const db = client.db("parking")
 
     console.log("🔍 Validando pago:", paymentId)
 
@@ -37,6 +37,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "El pago ya ha sido procesado" }, { status: 400 })
     }
 
+    const now = new Date()
+
     // Actualizar el estado del pago
     const updatePaymentResult = await db.collection("pagos").updateOne(
       { _id: new ObjectId(paymentId) },
@@ -44,8 +46,8 @@ export async function POST(request: Request) {
         $set: {
           estado: "validado",
           estadoValidacion: "validado",
-          fechaValidacion: new Date(),
-          validadoPor: "admin", // Puedes cambiar esto por el ID del admin actual
+          fechaValidacion: now,
+          validadoPor: "admin",
         },
       },
     )
@@ -58,12 +60,58 @@ export async function POST(request: Request) {
       {
         $set: {
           estado: "pagado_validado",
-          fechaValidacionPago: new Date(),
+          fechaValidacionPago: now,
         },
       },
     )
 
     console.log("🎫 Resultado actualización ticket:", updateTicketResult)
+
+    // AGREGAR REGISTRO EN CAR_HISTORY
+    console.log("📚 Actualizando historial del carro para pago validado...")
+    const historyUpdateResult = await db.collection("car_history").updateOne(
+      {
+        ticketAsociado: payment.codigoTicket,
+        activo: true,
+      },
+      {
+        $push: {
+          eventos: {
+            tipo: "pago_validado",
+            fecha: now,
+            estado: "pago_confirmado",
+            datos: {
+              montoPagado: payment.montoPagadoUsd || payment.montoPagado,
+              metodoPago: payment.tipoPago,
+              referencia: payment.referenciaTransferencia,
+              banco: payment.banco,
+              validadoPor: "admin",
+              fechaConfirmacionPago: now,
+              pagoId: payment._id.toString(),
+              urlComprobante: payment.urlImagenComprobante,
+            },
+          },
+          pagos: {
+            fecha: now,
+            monto: payment.montoPagadoUsd || payment.montoPagado,
+            metodo: payment.tipoPago,
+            referencia: payment.referenciaTransferencia,
+            banco: payment.banco,
+            estado: "validado",
+            pagoId: payment._id.toString(),
+            urlComprobante: payment.urlImagenComprobante,
+          },
+        },
+        $set: {
+          estadoActual: "pago_confirmado",
+          fechaUltimaActualizacion: now,
+          montoTotalPagado: payment.montoPagadoUsd || payment.montoPagado,
+          fechaConfirmacionPago: now,
+        },
+      },
+    )
+
+    console.log("📚 Historial actualizado - Documentos modificados:", historyUpdateResult.modifiedCount)
 
     if (updatePaymentResult.modifiedCount === 0) {
       return NextResponse.json({ message: "No se pudo actualizar el pago" }, { status: 500 })
@@ -72,6 +120,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       message: `Pago del ticket ${payment.codigoTicket} validado exitosamente`,
       codigoTicket: payment.codigoTicket,
+      fechaValidacion: now,
     })
   } catch (error) {
     console.error("Error validating payment:", error)
