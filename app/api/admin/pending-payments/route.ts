@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
-// Opt out of caching for this route
 export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
 export const revalidate = 0
@@ -9,104 +8,54 @@ export const revalidate = 0
 export async function GET() {
   try {
     const client = await clientPromise
-    const db = client.db("parking")
+    const db = client.db("parking") // Usar la base de datos correcta
 
-    console.log("🔍 Obteniendo pagos pendientes de la colección 'pagos'...")
+    console.log("🔍 Buscando pagos pendientes en la colección 'pagos'...")
 
-    // Buscar pagos pendientes con información completa del ticket y carro
     const pendingPayments = await db
       .collection("pagos")
-      .aggregate([
-        {
-          $match: {
-            $or: [
-              { estadoValidacion: "pendiente" },
-              { estadoValidacion: "pendiente_validacion" },
-              { estado: "pendiente" },
-              { estado: "pendiente_validacion" },
-            ],
-          },
-        },
-        {
-          $lookup: {
-            from: "tickets",
-            localField: "codigoTicket",
-            foreignField: "codigoTicket",
-            as: "ticketInfo",
-          },
-        },
-        {
-          $unwind: {
-            path: "$ticketInfo",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $lookup: {
-            from: "cars",
-            localField: "codigoTicket",
-            foreignField: "ticketAsociado",
-            as: "carInfoFull",
-          },
-        },
-        {
-          $unwind: {
-            path: "$carInfoFull",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $project: {
-            _id: 1,
-            codigoTicket: 1,
-            referenciaTransferencia: 1,
-            banco: 1,
-            telefono: 1,
-            numeroIdentidad: 1,
-            montoPagado: 1,
-            fechaPago: 1,
-            estado: 1,
-            estadoValidacion: 1,
-            tipoPago: 1,
-            urlImagenComprobante: 1, // Asegurar que se incluya
-            // Merge carInfo from pagos with full data from cars, using ticketInfo.carInfo as fallback
-            carInfo: {
-              $mergeObjects: [
-                {
-                  placa: { $ifNull: ["$carInfo.placa", "$ticketInfo.carInfo.placa", "Dato no proporcionado"] },
-                  marca: { $ifNull: ["$carInfo.marca", "$ticketInfo.carInfo.marca", "Por definir"] },
-                  modelo: { $ifNull: ["$carInfo.modelo", "$ticketInfo.carInfo.modelo", "Por definir"] },
-                  color: { $ifNull: ["$carInfo.color", "$ticketInfo.carInfo.color", "Por definir"] },
-                  nombreDueño: { $ifNull: ["$carInfo.nombreDueño", "$ticketInfo.carInfo.nombreDueño", "Por definir"] },
-                  telefono: { $ifNull: ["$carInfo.telefono", "$ticketInfo.carInfo.telefono", "Por definir"] },
-                },
-                "$carInfoFull",
-              ],
-            },
-            // Campos de tiempo de salida
-            tiempoSalida: { $ifNull: ["$tiempoSalida", "$ticketInfo.tiempoSalida"] },
-            tiempoSalidaEstimado: { $ifNull: ["$tiempoSalidaEstimado", "$ticketInfo.tiempoSalidaEstimado"] },
-            // Información del ticket
-            montoCalculado: "$ticketInfo.montoCalculado",
-          },
-        },
-        {
-          $sort: { fechaPago: -1 },
-        },
-      ])
+      .find({
+        estado: "pendiente_validacion",
+        estadoValidacion: "pendiente",
+      })
+      .sort({ fechaPago: -1 })
+      .project({
+        _id: 1,
+        ticketId: 1,
+        codigoTicket: 1,
+        tipoPago: 1,
+        referenciaTransferencia: 1,
+        banco: 1,
+        telefono: 1,
+        numeroIdentidad: 1,
+        montoPagado: 1,
+        montoPagadoUsd: 1,
+        montoCalculado: 1,
+        tasaCambioUsada: 1,
+        fechaPago: 1,
+        estado: 1,
+        estadoValidacion: 1,
+        tiempoSalida: 1,
+        tiempoSalidaEstimado: 1,
+        carInfo: 1,
+        urlImagenComprobante: 1,
+      })
       .toArray()
 
-    console.log(`📋 Total pagos pendientes encontrados: ${pendingPayments.length}`)
+    console.log(`✅ Encontrados ${pendingPayments.length} pagos pendientes`)
 
-    // Debug: Mostrar información de comprobantes
+    // Debug: verificar comprobantes
     pendingPayments.forEach((payment) => {
-      console.log(`📋 Pago ${payment.codigoTicket}: comprobante = ${payment.urlImagenComprobante ? "SÍ" : "NO"}`)
-      if (payment.urlImagenComprobante) {
-        console.log(`   URL: ${payment.urlImagenComprobante}`)
-      }
+      console.log(`🔍 Pago ${payment.codigoTicket} - Comprobante: ${payment.urlImagenComprobante ? "SÍ" : "NO"}`)
+      console.log(`📋 Datos del pago:`, {
+        codigoTicket: payment.codigoTicket,
+        tipoPago: payment.tipoPago,
+        banco: payment.banco,
+        montoPagado: payment.montoPagado,
+        estado: payment.estado,
+      })
     })
 
-    // Set cache control headers
     const response = NextResponse.json(pendingPayments)
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
     response.headers.set("Pragma", "no-cache")
