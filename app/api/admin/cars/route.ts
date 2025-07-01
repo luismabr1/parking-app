@@ -1,38 +1,75 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
+import { v2 as cloudinary } from "cloudinary";
 
-// Opt out of caching for this route
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
 export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-export const revalidate = 0;
 
 export async function GET() {
   try {
     const client = await clientPromise;
     const db = client.db("parking");
 
-    const cars = await db.collection("cars").find({}).sort({ fechaRegistro: -1 }).toArray();
+    const cars = await db
+      .collection("cars")
+      .find({ estado: { $in: ["estacionado", "estacionado_confirmado"] } })
+      .sort({ horaIngreso: -1 })
+      .toArray();
 
-    const response = NextResponse.json(cars);
-    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    response.headers.set("Pragma", "no-cache");
-    response.headers.set("Expires", "0");
-    response.headers.set("Surrogate-Control", "no-store");
-
-    return response;
+    return NextResponse.json(cars);
   } catch (error) {
-    console.error("Error fetching cars:", error);
+    if (process.env.NODE_ENV === "development") {
+      console.error("Error fetching cars:", error);
+    }
     return NextResponse.json({ message: "Error al obtener carros" }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request) {
+  return handleCarRequest(request, "POST");
+}
+
+export async function PUT(request) {
+  return handleCarRequest(request, "PUT");
+}
+
+async function handleCarRequest(request, method) {
   try {
     const client = await clientPromise;
     const db = client.db("parking");
+    const formData = await request.formData();
 
-    const body = await request.json();
-    const {
+    const carId = formData.get("carId")?.toString();
+    const isUpdate = method === "PUT" && carId;
+
+    const placa = formData.get("placa")?.toString().toUpperCase() || "";
+    const marca = formData.get("marca")?.toString() || "";
+    const modelo = formData.get("modelo")?.toString() || "";
+    const color = formData.get("color")?.toString() || "";
+    const nombreDueño = formData.get("nombreDueño")?.toString() || "";
+    const telefono = formData.get("telefono")?.toString() || "";
+    const ticketAsociado = formData.get("ticketAsociado")?.toString() || "";
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(`${method} request received`, { carId, placa, marca, modelo, color, nombreDueño, telefono, ticketAsociado });
+    }
+
+    let existingCar;
+    if (isUpdate) {
+      existingCar = await db.collection("cars").findOne({ _id: new ObjectId(carId) });
+      if (!existingCar) {
+        return NextResponse.json({ error: "Vehículo no encontrado" }, { status: 404 });
+      }
+    }
+
+    const now = new Date();
+    const carData = {
       placa,
       marca,
       modelo,
@@ -40,158 +77,126 @@ export async function POST(request: Request) {
       nombreDueño,
       telefono,
       ticketAsociado,
-      imagenes,
-    } = body;
+      horaIngreso: isUpdate ? existingCar.horaIngreso : now,
+      estado: isUpdate ? existingCar.estado : "estacionado",
+      fechaRegistro: isUpdate ? existingCar.fechaRegistro : now,
+      lastModified: now,
+      imagenes: {
+        ...existingCar?.imagenes || {},
+        fechaCaptura: now,
+        capturaMetodo: "manual",
+      },
+    };
 
-    console.log("🚗 CREATING CAR:", {
-      placa,
-      ticketAsociado,
-      hasImagenes: !!imagenes,
-      imagenesKeys: imagenes ? Object.keys(imagenes) : [],
-    });
+    const plateImage = formData.get("plateImage") as File | null;
+    const vehicleImage = formData.get("vehicleImage") as File | null;
+    const plateImageUrl = formData.get("plateImageUrl")?.toString();
+    const vehicleImageUrl = formData.get("vehicleImageUrl")?.toString();
 
-    if (!ticketAsociado) {
-      return NextResponse.json({ message: "Ticket es requerido" }, { status: 400 });
-    }
+    if (plateImage || vehicleImage || plateImageUrl || vehicleImageUrl) {
+      if (plateImage) {
+        const plateUploadResponse = await cloudinary.uploader.upload(
+          `data:image/jpeg;base64,${await plateImage.arrayBuffer().then(Buffer.from).toString("base64")}`,
+          { folder: "parking-plates" }
+        );
+        carData.imagenes.plateImageUrl = plateUploadResponse.secure_url;
+      } else if (plateImageUrl) {
+        carData.imagenes.plateImageUrl = plateImageUrl;
+      }
 
-    const placaFinal = placa && placa.trim() ? placa.toUpperCase() : "PENDIENTE";
-
-    if (imagenes) {
-      console.log("📸 IMAGES DATA:", {
-        hasPlateImage: !!imagenes.plateImageUrl,
-        hasVehicleImage: !!imagenes.vehicleImageUrl,
-        plateImageLength: imagenes.plateImageUrl ? imagenes.plateImageUrl.length : 0,
-        vehicleImageLength: imagenes.vehicleImageUrl ? imagenes.vehicleImageUrl.length : 0,
-        plateImageType: imagenes.plateImageUrl ? imagenes.plateImageUrl.substring(0, 30) : "none",
-        vehicleImageType: imagenes.vehicleImageUrl ? imagenes.vehicleImageUrl.substring(0, 30) : "none",
-      });
-    }
-
-    const ticket = await db.collection("tickets").findOne({ codigoTicket: ticketAsociado });
-
-    if (!ticket) {
-      return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
-    }
-
-    if (ticket.estado !== "disponible") {
-      return NextResponse.json({ message: "El ticket no está disponible" }, { status: 400 });
-    }
-
-    let existingCar = null;
-    if (placaFinal !== "PENDIENTE") {
-      existingCar = await db.collection("cars").findOne({
-        placa: placaFinal,
-        estado: { $in: ["estacionado_confirmado", "pagado", "estacionado"] },
-      });
-
-      if (existingCar) {
-        return NextResponse.json({ message: "Ya existe un carro con esta placa estacionado" }, { status: 400 });
+      if (vehicleImage) {
+        const vehicleUploadResponse = await cloudinary.uploader.upload(
+          `data:image/jpeg;base64,${await vehicleImage.arrayBuffer().then(Buffer.from).toString("base64")}`,
+          { folder: "parking-vehicles" }
+        );
+        carData.imagenes.vehicleImageUrl = vehicleUploadResponse.secure_url;
+      } else if (vehicleImageUrl) {
+        carData.imagenes.vehicleImageUrl = vehicleImageUrl;
       }
     }
 
-    const carData = {
-      placa: placaFinal,
-      marca: marca || "Por definir",
-      modelo: modelo || "Por definir",
-      color: color || "Por definir",
-      nombreDueño: nombreDueño || "Por definir",
-      telefono: telefono || "Por definir",
-      ticketAsociado,
-      horaIngreso: new Date(),
-      estado: "estacionado_confirmado",
-      fechaRegistro: new Date(),
-      imagenes: imagenes
-        ? {
-            ...imagenes,
-            fechaCaptura: new Date(),
-          }
-        : undefined,
-    };
+    let result;
+    if (isUpdate) {
+      result = await db.collection("cars").updateOne(
+        { _id: new ObjectId(carId) },
+        { $set: carData }
+      );
+      if (result.matchedCount === 0) {
+        return NextResponse.json({ error: "Vehículo no encontrado" }, { status: 404 });
+      }
+    } else {
+      result = await db.collection("cars").insertOne(carData);
+      carData._id = result.insertedId;
 
-    console.log("💾 SAVING CAR DATA:", {
-      placa: carData.placa,
-      hasImagenes: !!carData.imagenes,
-      imagenesStructure: carData.imagenes ? Object.keys(carData.imagenes) : [],
-    });
-
-    const result = await db.collection("cars").insertOne(carData);
-
-    const savedCar = await db.collection("cars").findOne({ _id: result.insertedId });
-    console.log("✅ CAR SAVED:", {
-      id: result.insertedId,
-      hasImagenes: !!savedCar?.imagenes,
-      imagenesKeys: savedCar?.imagenes ? Object.keys(savedCar.imagenes) : [],
-    });
-
-    await db.collection("tickets").updateOne(
-      { codigoTicket: ticketAsociado },
-      {
-        $set: {
-          estado: "ocupado",
-          horaOcupacion: new Date(),
-          carInfo: {
-            placa: placaFinal,
-            marca: marca || "Por definir",
-            modelo: modelo || "Por definir",
-            color: color || "Por definir",
-            nombreDueño: nombreDueño || "Por definir",
-            telefono: telefono || "Por definir",
-            imagenes: imagenes
-              ? {
-                  ...imagenes,
-                  fechaCaptura: new Date(),
-                }
-              : undefined,
+      if (ticketAsociado) {
+        const updateResult = await db.collection("tickets").updateOne(
+          { codigoTicket: ticketAsociado },
+          {
+            $set: {
+              estado: "ocupado",
+              carInfo: {
+                placa,
+                marca,
+                modelo,
+                color,
+                nombreDueño,
+                telefono,
+                horaIngreso: now.toISOString(),
+                fechaRegistro: now.toISOString(),
+                imagenes: carData.imagenes,
+              },
+              horaOcupacion: now.toISOString(),
+            },
           },
-        },
-      },
-    );
+          { upsert: true }
+        );
+        if (process.env.NODE_ENV === "development") {
+          console.log("🔍 DEBUG - Updated tickets for ticket:", ticketAsociado, updateResult);
+        }
+      }
 
-    // Create initial car_history record with enhanced logging and error handling
-    const carId = savedCar._id.toString(); // Ensure carId is a string to match confirmation logic
-    const initialHistory = {
-      carId,
-      placa: savedCar.placa,
-      marca: savedCar.marca,
-      modelo: savedCar.modelo,
-      color: savedCar.color,
-      nombreDueño: savedCar.nombreDueño,
-      telefono: savedCar.telefono,
-      ticketAsociado: ticketAsociado,
-      horaIngreso: savedCar.horaIngreso,
-      estado: "registro_inicial",
-      fechaRegistro: savedCar.fechaRegistro,
-      imagenes: savedCar.imagenes,
-      ticketId: ticket._id.toString(),
-      pagoId: null,
-      fecha_registro_inicial: new Date(),
-    };
-    console.log("💾 CREATING INITIAL CAR HISTORY:", initialHistory);
-    const historyInsertResult = await db.collection("car_history").insertOne(initialHistory);
-    console.log(`✅ CAR HISTORY CREATED with _id: ${historyInsertResult.insertedId} for carId: ${carId}`);
-    if (!historyInsertResult.insertedId) {
-      console.error("❌ CAR HISTORY INSERTION FAILED");
-      return NextResponse.json({ message: "Error al crear el historial del carro" }, { status: 500 });
+      const historyEntry = {
+        carId: result.insertedId.toString(),
+        placa: carData.placa || "PENDIENTE",
+        marca: carData.marca || "Por definir",
+        modelo: carData.modelo || "Por definir",
+        color: carData.color || "Por definir",
+        nombreDueño: carData.nombreDueño || "Por definir",
+        telefono: carData.telefono || "Por definir",
+        ticketAsociado: carData.ticketAsociado || "",
+        estadoActual: "estacionado",
+        activo: true,
+        completado: false,
+        fechaRegistro: now,
+        fechaUltimaActualizacion: now,
+        datosVehiculo: { ...carData, fechaCreacion: now },
+        eventos: [
+          {
+            tipo: "registro_inicial",
+            fecha: now,
+            estado: "estacionado",
+            datos: {
+              metodoRegistro: carData.imagenes.capturaMetodo || "manual",
+              imagenes: carData.imagenes || null,
+              confianzaPlaca: carData.imagenes.confianzaPlaca || 0,
+              confianzaVehiculo: carData.imagenes.confianzaVehiculo || 0,
+            },
+          },
+        ],
+        pagos: [],
+        pagosRechazados: [],
+        montosPendientes: [],
+        montoTotalPagado: 0,
+      };
+      await db.collection("car_history").insertOne(historyEntry);
     }
 
-    const response = NextResponse.json({
-      message: "Carro registrado exitosamente",
-      carId: result.insertedId,
-      imagenes: imagenes ? "Imágenes guardadas" : "Sin imágenes",
-      debug: {
-        hasImagenes: !!imagenes,
-        imagenesKeys: imagenes ? Object.keys(imagenes) : [],
-      },
-    });
-
-    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    response.headers.set("Pragma", "no-cache");
-    response.headers.set("Expires", "0");
-    response.headers.set("Surrogate-Control", "no-store");
-
-    return response;
+    const updatedCar = await db.collection("cars").findOne({ _id: isUpdate ? new ObjectId(carId) : result.insertedId });
+    return NextResponse.json({ success: true, car: updatedCar });
   } catch (error) {
-    console.error("Error creating car:", error);
-    return NextResponse.json({ message: "Error al registrar el carro" }, { status: 500 });
+    if (process.env.NODE_ENV === "development") {
+      console.error("Error handling car request:", error);
+    }
+    return NextResponse.json({ error: error.message || "Error interno del servidor" }, { status: 500 });
   }
 }

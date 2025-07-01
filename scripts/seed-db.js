@@ -68,7 +68,38 @@ async function seedDatabase() {
     await db.collection("cars").deleteMany({})
     await db.collection("car_history").deleteMany({})
 
-    // Crear solo tickets disponibles para empezar con datos reales
+    // 1. Insertar configuración unificada de la empresa
+    console.log("⚙️ Insertando configuración unificada de la empresa...")
+    const companySettings = {
+      // Datos generales de la empresa
+      nombreEmpresa: "Estacionamiento Central",
+      tarifaPorHora: 2,
+      moneda: "VES",
+      tasaCambio: 106.25, // VES por USD
+      tiempoGracia: 15,
+      espaciosDisponibles: 100,
+      fechaActualizacion: new Date(),
+
+      // Configuración de métodos de pago electrónico
+      pagoMovil: {
+        banco: "Banco de Venezuela (BDV)",
+        cedula: "J-12345678-9",
+        telefono: "0414-1234567",
+      },
+      transferencia: {
+        banco: "Banco de Venezuela (BDV)",
+        cedula: "J-12345678-9",
+        telefono: "0212-1234567",
+        numeroCuenta: "0102-0000-00-0000000000",
+      },
+    }
+
+    await db.collection("company_settings").deleteMany({})
+    await db.collection("company_settings").insertOne(companySettings)
+    console.log("✅ Configuración unificada de empresa insertada")
+
+    // 2. Crear tickets disponibles
+    console.log("🎫 Creando tickets disponibles...")
     const tickets = []
     for (let i = 1; i <= 20; i++) {
       tickets.push({
@@ -85,7 +116,8 @@ async function seedDatabase() {
     const result = await db.collection("tickets").insertMany(tickets)
     console.log(`✅ ${result.insertedCount} tickets disponibles creados`)
 
-    // Crear datos de ejemplo para el personal
+    // 3. Crear datos de ejemplo para el personal
+    console.log("👥 Creando personal del sistema...")
     const staffMembers = [
       {
         nombre: "Admin",
@@ -107,31 +139,22 @@ async function seedDatabase() {
     const staffResult = await db.collection("staff").insertMany(staffMembers)
     console.log(`✅ ${staffResult.insertedCount} miembros del personal insertados`)
 
-    // Crear configuración de empresa de ejemplo
-    const companySettings = {
-      pagoMovil: {
-        banco: "Banco de Venezuela (BDV)",
-        cedula: "J-12345678-9",
-        telefono: "0414-1234567",
-      },
-      transferencia: {
-        banco: "Banco de Venezuela (BDV)",
-        cedula: "J-12345678-9",
-        telefono: "0212-1234567",
-        numeroCuenta: "0102-0000-00-0000000000",
-      },
-    }
-
-    await db.collection("company_settings").deleteMany({})
-    await db.collection("company_settings").insertOne(companySettings)
-    console.log("✅ Configuración de empresa insertada")
-
-    // Insertar bancos venezolanos
+    // 4. Insertar bancos venezolanos
+    console.log("🏦 Insertando bancos venezolanos...")
     await db.collection("banks").deleteMany({})
     await db.collection("banks").insertMany(venezuelanBanks)
     console.log(`✅ ${venezuelanBanks.length} bancos insertados`)
 
-    console.log("\n🎉 Base de datos inicializada para datos reales")
+    console.log("\n🎉 Base de datos inicializada correctamente")
+    console.log("\n📋 CONFIGURACIÓN INSERTADA:")
+    console.log("   🏢 Empresa: Estacionamiento Central")
+    console.log("   💰 Tarifa: 2 VES/hora")
+    console.log("   💱 Tasa de cambio: 106.25 VES/USD")
+    console.log("   ⏰ Tiempo de gracia: 15 minutos")
+    console.log("   🅿️ Espacios disponibles: 100")
+    console.log("   📱 Pago móvil configurado")
+    console.log("   🏦 Transferencia bancaria configurada")
+
     console.log("\n📋 TICKETS DISPONIBLES:")
     console.log("   📝 PARK001-PARK020: Listos para asignar nuevos vehículos")
     console.log("   ⚠️  Estos tickets están disponibles para el registro de vehículos")
@@ -151,8 +174,9 @@ async function seedDatabase() {
     console.log("\n✨ SISTEMA LISTO PARA DATOS REALES:")
     console.log("   • Sin datos dummy - empezar desde cero")
     console.log("   • 20 espacios de estacionamiento disponibles")
-    console.log("   • Configuración básica lista")
+    console.log("   • Configuración completa lista (general + pagos)")
     console.log("   • Bancos venezolanos configurados")
+    console.log("   • Personal administrativo creado")
   } catch (err) {
     console.error("❌ Error:", err)
   } finally {

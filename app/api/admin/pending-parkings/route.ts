@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 
-// Opt out of caching for this route
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 export const revalidate = 0;
@@ -14,7 +13,7 @@ export async function GET() {
       .collection("tickets")
       .aggregate([
         {
-          $match: { estado: "ocupado" },
+          $match: { estado: "ocupado" }, // Matches newly registered cars
         },
         {
           $lookup: {
@@ -31,7 +30,7 @@ export async function GET() {
           },
         },
         {
-          $match: { "carInfoFull.estado": "estacionado_confirmado" }, // Only include active cars
+          $match: { "carInfoFull.estado": { $in: ["estacionado", "estacionado_confirmado"] } }, // Include both states
         },
         {
           $project: {
@@ -40,6 +39,7 @@ export async function GET() {
             estado: 1,
             horaOcupacion: 1,
             carInfo: {
+              _id: "$carInfoFull._id",
               placa: { $ifNull: ["$carInfoFull.placa", "$carInfo.placa", "Dato no proporcionado"] },
               marca: { $ifNull: ["$carInfoFull.marca", "$carInfo.marca", "Por definir"] },
               modelo: { $ifNull: ["$carInfoFull.modelo", "$carInfo.modelo", "Por definir"] },
@@ -59,7 +59,6 @@ export async function GET() {
       .toArray();
 
     const response = NextResponse.json(pendingParkings);
-
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     response.headers.set("Pragma", "no-cache");
     response.headers.set("Expires", "0");

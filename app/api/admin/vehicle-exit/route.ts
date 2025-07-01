@@ -1,98 +1,302 @@
-// Opt out of caching for this route
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import { NextResponse } from "next/server"
+import clientPromise from "@/lib/mongodb"
 
-import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongodb";
+export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+export const revalidate = 0
 
 export async function POST(request: Request) {
+  const startTime = Date.now()
+
   try {
-    const client = await clientPromise;
-    const db = client.db("parking");
-
-    const { ticketCode } = await request.json();
-
-    if (!ticketCode) {
-      return NextResponse.json({ message: "Código de ticket requerido" }, { status: 400 });
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔄 Iniciando proceso de salida de vehículo...")
     }
 
-    console.log(`🚗 Procesando salida para ticket: ${ticketCode}`);
+    const client = await clientPromise
+    const db = client.db("parking")
 
-    const ticket = await db.collection("tickets").findOne({ codigoTicket: ticketCode });
+    // Parse request body
+    let body
+    try {
+      body = await request.json()
+      if (process.env.NODE_ENV === "development") {
+        console.log("📥 Datos recibidos para salida:", body)
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("❌ Error parsing JSON:", error)
+      }
+      return NextResponse.json({ message: "Formato JSON inválido" }, { status: 400 })
+    }
 
+    const { ticketCode } = body
+
+    // Validate required fields
+    if (!ticketCode) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("❌ Código de ticket requerido")
+      }
+      return NextResponse.json({ message: "Código de ticket requerido" }, { status: 400 })
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔍 Validando campos requeridos:")
+      console.log("- ticketCode:", ticketCode)
+    }
+
+    // Find ticket
+    if (process.env.NODE_ENV === "development") {
+      console.log("🎫 Buscando ticket:", ticketCode)
+    }
+
+    const ticket = await db.collection("tickets").findOne({ codigoTicket: ticketCode })
     if (!ticket) {
-      return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
+      if (process.env.NODE_ENV === "development") {
+        console.error("❌ Ticket no encontrado:", ticketCode)
+      }
+      return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 })
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("✅ Ticket encontrado:", {
+        codigo: ticket.codigoTicket,
+        estado: ticket.estado,
+        montoCalculado: ticket.montoCalculado,
+      })
     }
 
     if (ticket.estado !== "pagado_validado") {
+      if (process.env.NODE_ENV === "development") {
+        console.error("❌ Estado de ticket inválido:", ticket.estado)
+      }
       return NextResponse.json(
-        { message: "El ticket debe estar pagado y validado antes de procesar la salida" },
-        { status: 400 }
-      );
+        { message: "El ticket debe estar pagado y validado para permitir la salida" },
+        { status: 400 },
+      )
     }
 
-    const car = await db.collection("cars").findOne({
-      ticketAsociado: ticketCode,
-      estado: { $in: ["estacionado_confirmado", "pagado"] },
-    });
+    // Find car
+    if (process.env.NODE_ENV === "development") {
+      console.log("🚗 Buscando vehículo asociado al ticket:", ticketCode)
+    }
 
+    const car = await db.collection("cars").findOne({ ticketAsociado: ticketCode })
     if (!car) {
-      return NextResponse.json({ message: "No se encontró el carro asociado a este ticket" }, { status: 404 });
+      if (process.env.NODE_ENV === "development") {
+        console.error("❌ Vehículo no encontrado para ticket:", ticketCode)
+      }
+      return NextResponse.json({ message: "Vehículo no encontrado" }, { status: 404 })
     }
 
-    console.log(`✅ Carro encontrado: ${car.placa} - ${car.marca} ${car.modelo}`);
+    if (process.env.NODE_ENV === "development") {
+      console.log("✅ Vehículo encontrado:", {
+        placa: car.placa,
+        marca: car.marca,
+        modelo: car.modelo,
+        horaIngreso: car.horaIngreso,
+      })
+    }
 
-    // Update car_history with exit data and full audit trail
-    await db.collection("car_history").updateOne(
-      { carId: car._id.toString() },
+    const now = new Date()
+    const horaIngreso = new Date(car.horaIngreso)
+    const duracionMinutos = Math.floor((now.getTime() - horaIngreso.getTime()) / (1000 * 60))
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("⏱️ Cálculos de tiempo:")
+      console.log("- Hora ingreso:", horaIngreso.toISOString())
+      console.log("- Hora salida:", now.toISOString())
+      console.log("- Duración (minutos):", duracionMinutos)
+    }
+
+    // Get payment info
+    if (process.env.NODE_ENV === "development") {
+      console.log("💰 Buscando información de pago para ticket:", ticketCode)
+    }
+
+    const pago = await db.collection("pagos").findOne({
+      codigoTicket: ticketCode,
+      estadoValidacion: "validado",
+    })
+
+    if (process.env.NODE_ENV === "development") {
+      if (pago) {
+        console.log("✅ Pago encontrado:", {
+          id: pago._id,
+          monto: pago.montoPagado,
+          tipoPago: pago.tipoPago,
+          fechaPago: pago.fechaPago,
+        })
+      } else {
+        console.log("⚠️ No se encontró pago validado para el ticket")
+      }
+    }
+
+    // Update ticket to completed
+    if (process.env.NODE_ENV === "development") {
+      console.log("🎫 Actualizando estado del ticket a 'salido'")
+    }
+
+    const ticketUpdateResult = await db.collection("tickets").updateOne(
+      { codigoTicket: ticketCode },
       {
         $set: {
-          estado: "finalizado",
-          fecha_salida: new Date(),
-          ticketData: ticket,
-          pagoData: await db.collection("pagos").findOne({ codigoTicket: ticketCode }),
-          carData: car,
+          estado: "salido",
+          horaSalida: now,
+          duracionMinutos: duracionMinutos,
         },
-      }
-    );
+      },
+    )
 
-    // Eliminar el registro del carro de la colección cars
-    await db.collection("cars").deleteOne({ _id: car._id });
+    if (process.env.NODE_ENV === "development") {
+      console.log("💾 Ticket actualizado - Documentos modificados:", ticketUpdateResult.modifiedCount)
+    }
 
-    // LIBERAR EL TICKET - volver a estado disponible
-    await db.collection("tickets").updateOne(
+    // Archive car data and remove from active cars
+    const carId = car._id.toString()
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("📚 Actualizando historial del carro:", carId)
+    }
+
+    // Final update to car_history with complete information
+    const historyUpdateResult = await db.collection("car_history").updateOne(
+      { carId },
+      {
+        $push: {
+          eventos: {
+            tipo: "salida_vehiculo",
+            fecha: now,
+            estado: "finalizado",
+            datos: {
+              duracionTotal: duracionMinutos,
+              montoTotal: pago?.montoPagado || 0,
+              horaSalida: now,
+              autorizadoPor: "admin",
+            },
+          },
+        },
+        $set: {
+          estadoActual: "finalizado",
+          activo: false,
+          completado: true,
+          fechaSalida: now,
+          fechaUltimaActualizacion: now,
+          duracionTotalMinutos: duracionMinutos,
+
+          // Preserve all final data
+          datosFinales: {
+            horaSalida: now,
+            duracionMinutos: duracionMinutos,
+            montoTotalPagado: pago?.montoPagado || 0,
+            estadoFinal: "completado_exitosamente",
+          },
+
+          // Complete ticket data
+          ticketDataFinal: {
+            ...ticket,
+            horaSalida: now,
+            duracionMinutos: duracionMinutos,
+            estadoFinal: "salido",
+          },
+
+          // Complete payment data if exists
+          ...(pago && {
+            pagoDataFinal: {
+              ...pago,
+              fechaSalida: now,
+              duracionFacturada: duracionMinutos,
+            },
+          }),
+        },
+      },
+    )
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("📚 Historial actualizado - Documentos modificados:", historyUpdateResult.modifiedCount)
+    }
+
+    // Remove car from active collection (archive it)
+    if (process.env.NODE_ENV === "development") {
+      console.log("🗑️ Eliminando vehículo de la colección activa")
+    }
+
+    const carDeleteResult = await db.collection("cars").deleteOne({ _id: car._id })
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("🗑️ Vehículo eliminado - Documentos eliminados:", carDeleteResult.deletedCount)
+    }
+
+    // Reset ticket for reuse
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔄 Reseteando ticket para reutilización")
+    }
+
+    const ticketResetResult = await db.collection("tickets").updateOne(
       { codigoTicket: ticketCode },
       {
         $set: {
           estado: "disponible",
           horaOcupacion: null,
-          montoCalculado: 0,
+          horaSalida: null,
           ultimoPagoId: null,
         },
-      }
-    );
+        $unset: {
+          tipoPago: "",
+          tiempoSalida: "",
+          tiempoSalidaEstimado: "",
+          montoPendiente: "",
+        },
+      },
+    )
 
-    console.log(`✅ Ticket ${ticketCode} liberado y disponible para nuevo uso`);
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔄 Ticket reseteado - Documentos modificados:", ticketResetResult.modifiedCount)
+    }
+
+    const processingTime = Date.now() - startTime
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(`🎉 Salida de vehículo completada exitosamente en ${processingTime}ms`)
+      console.log(`✅ Ticket ${ticketCode} liberado, duración: ${duracionMinutos} minutos`)
+    }
 
     const response = NextResponse.json({
-      message: `Salida procesada exitosamente. El espacio ${ticketCode} está ahora disponible.`,
+      message: "Salida registrada exitosamente",
       ticketCode,
+      duracionMinutos,
+      montoTotal: pago?.montoPagado || 0,
       carInfo: {
         placa: car.placa,
         marca: car.marca,
         modelo: car.modelo,
         propietario: car.nombreDueño,
       },
-    });
+    })
 
-    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    response.headers.set("Pragma", "no-cache");
-    response.headers.set("Expires", "0");
-    response.headers.set("Surrogate-Control", "no-store");
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+    response.headers.set("Pragma", "no-cache")
+    response.headers.set("Expires", "0")
+    response.headers.set("Surrogate-Control", "no-store")
 
-    return response;
+    return response
   } catch (error) {
-    console.error("Error processing vehicle exit:", error);
-    return NextResponse.json({ message: "Error al procesar la salida del vehículo" }, { status: 500 });
+    const processingTime = Date.now() - startTime
+
+    if (process.env.NODE_ENV === "development") {
+      console.error(`❌ Error procesando salida de vehículo después de ${processingTime}ms:`, error)
+      console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace available")
+    }
+
+    return NextResponse.json(
+      {
+        message: "Error al procesar la salida del vehículo",
+        ...(process.env.NODE_ENV === "development" && {
+          error: error instanceof Error ? error.message : "Unknown error",
+          processingTime,
+        }),
+      },
+      { status: 500 },
+    )
   }
 }

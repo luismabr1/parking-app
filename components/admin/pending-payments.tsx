@@ -1,476 +1,363 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle, XCircle, RefreshCw, Car, ImageIcon } from "lucide-react";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import ExitTimeDisplay from "./exit-time-display";
-import { sortPaymentsByUrgency } from "@/lib/payment-utils";
-import ImageWithFallback from "../image-with-fallback";
-import React from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { CreditCard, CheckCircle, XCircle, Clock, RefreshCw, Car, User, Phone, Building2, Hash } from "lucide-react"
+import { toast } from "@/hooks/use-toast"
+import ExitTimeDisplay from "./exit-time-display"
 
-export interface PendingPayment {
-  _id: string;
-  codigoTicket: string;
-  referenciaTransferencia: string;
-  banco: string;
-  telefono: string;
-  numeroIdentidad: string;
-  montoPagado: number;
-  montoCalculado: number;
-  fechaPago: string;
-  estado: string;
-  tiempoSalida?: string;
-  tiempoSalidaEstimado?: string;
-  tipoPago?: string;
+interface PaymentInfo {
+  _id: string
+  codigoTicket: string
+  referenciaTransferencia: string
+  banco: string
+  telefono: string
+  numeroIdentidad: string
+  montoPagado: number
+  fechaPago: string
+  estado: string
+  estadoValidacion: string
+  tipoPago: string
   carInfo: {
-    placa: string;
-    marca: string;
-    modelo: string;
-    color: string;
-    nombreDueño: string;
-    telefono: string;
-    horaIngreso?: string;
-    fechaRegistro?: string;
-    imagenes?: {
-      plateImageUrl?: string;
-      vehicleImageUrl?: string;
-      fechaCaptura?: string;
-      capturaMetodo?: string;
-    };
-  };
-  montoPagadoUsd?: number;
-  tasaCambioUsada?: number;
+    placa: string
+    marca: string
+    modelo: string
+    color: string
+    nombreDueño: string
+    telefono: string
+    imagenes?: string[]
+  }
+  tiempoSalida?: string
+  tiempoSalidaEstimado?: string
+  montoCalculado?: number
+}
+
+interface CompanySettings {
+  nombre: string
+  moneda: string
+  tasaCambio: number
+  tarifaPorHora: number
+  tiempoGracia: number
 }
 
 interface PendingPaymentsProps {
-  onStatsUpdate: () => void;
+  onStatsUpdate: () => void
+  companySettings: CompanySettings
 }
 
-interface PendingPaymentCardProps {
-  payment: PendingPayment;
-  onValidate: (id: string) => void;
-  onReject: (id: string) => void;
-  isProcessing: boolean;
-}
-
-const PendingPaymentCard: React.FC<PendingPaymentCardProps> = ({
-  payment,
-  onValidate,
-  onReject,
-  isProcessing,
-}) => {
-  const [companySettings, setCompanySettings] = useState<{ tarifas: { precioHora: number; tasaCambio: number } } | null>(null);
-  const [loadingSettings, setLoadingSettings] = useState(true);
-
-  useEffect(() => {
-    const fetchCompanySettings = async () => {
-      try {
-        const response = await fetch("/api/company-settings");
-        if (response.ok) {
-          const data = await response.json();
-          setCompanySettings(data);
-        }
-      } catch (error) {
-        console.error("Error fetching company settings:", error);
-      } finally {
-        setLoadingSettings(false);
-      }
-    };
-    fetchCompanySettings();
-  }, []);
-
-  if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizando PendingPaymentCard para ticket ${payment.codigoTicket}`, payment);
+const PendingPaymentCard: React.FC<{
+  payment: PaymentInfo
+  onValidate: (id: string) => void
+  onReject: (id: string) => void
+  formatCurrency: (amount: number) => string
+  isProcessing: boolean
+}> = React.memo(({ payment, onValidate, onReject, formatCurrency, isProcessing }) => {
+  const getPaymentTypeColor = (tipo: string) => {
+    switch (tipo?.toLowerCase()) {
+      case "transferencia":
+        return "bg-blue-100 text-blue-800"
+      case "pago_movil":
+        return "bg-green-100 text-green-800"
+      case "efectivo":
+        return "bg-yellow-100 text-yellow-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
   }
 
-  const formatDataWithFallback = (value: string | undefined) => {
-    if (!value || value === "Por definir" || value === "PENDIENTE") {
-      return "Dato no proporcionado";
+  const formatPaymentType = (tipo: string) => {
+    switch (tipo?.toLowerCase()) {
+      case "transferencia":
+        return "Transferencia"
+      case "pago_movil":
+        return "Pago Móvil"
+      case "efectivo":
+        return "Efectivo"
+      default:
+        return tipo || "No especificado"
     }
-    return value;
-  };
-
-  const tasaCambio = companySettings?.tarifas.tasaCambio || payment.tasaCambioUsada || 35.0;
-  const precioHora = companySettings?.tarifas.precioHora || 3.0;
-
-  const isUsdPayment = payment.tipoPago === "efectivo_usd";
-  const montoToDisplay = isUsdPayment
-    ? formatCurrency(payment.montoCalculado, "USD")
-    : formatCurrency(payment.montoCalculado * tasaCambio, "VES");
-
-  const hours = payment.montoCalculado / precioHora;
-  const formattedHours = hours % 1 === 0 ? hours.toFixed(0) : hours.toFixed(1);
+  }
 
   return (
-    <div className="border rounded-lg p-4 space-y-4 bg-white shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <h3 className="font-semibold text-lg">Ticket: {payment.codigoTicket}</h3>
+    <Card className="mb-4">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Ticket: {payment.codigoTicket}
+          </CardTitle>
+          <Badge className={getPaymentTypeColor(payment.tipoPago)} variant="secondary">
+            {formatPaymentType(payment.tipoPago)}
+          </Badge>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Fecha de Pago</p>
-          <p className="font-medium">{formatDateTime(payment.fechaPago || payment.fechaCreacion)}</p>
-        </div>
-      </div>
 
-      {payment.tipoPago && (
-        <div className="bg-blue-100 p-3 rounded-lg text-center">
-          <h4 className="text-2xl font-bold text-blue-800">
-            {payment.tipoPago === "efectivo_bs" ? "EFECTIVO BS" : payment.tipoPago === "efectivo_usd" ? "EFECTIVO USD" : payment.tipoPago.toUpperCase()}
-          </h4>
-        </div>
-      )}
-
-      <ExitTimeDisplay
-        tiempoSalida={payment.tiempoSalida}
-        tiempoSalidaEstimado={payment.tiempoSalidaEstimado}
-        fechaPago={payment.fechaPago || payment.fechaCreacion}
-        codigoTicket={payment.codigoTicket}
-        variant="full"
-      />
-
-      {payment.carInfo && (
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="flex items-center space-x-2 mb-3">
-            <Car className="h-4 w-4 text-blue-600" />
-            <h4 className="font-medium text-blue-800">Vehículo a Retirar</h4>
+        {/* Exit Time Display - Prominente después del tipo de pago */}
+        {(payment.tiempoSalida || payment.tiempoSalidaEstimado) && (
+          <div className="mt-2">
+            <ExitTimeDisplay tiempoSalida={payment.tiempoSalida} tiempoSalidaEstimado={payment.tiempoSalidaEstimado} />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <div>
-                  <span className="text-gray-600 text-sm">Placa:</span>
-                  <span className="font-medium ml-2 text-lg">{formatDataWithFallback(payment.carInfo.placa)}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600 text-sm">Vehículo:</span>
-                  <span className="font-medium ml-2">
-                    {formatDataWithFallback(payment.carInfo.marca)} {formatDataWithFallback(payment.carInfo.modelo)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-600 text-sm">Color:</span>
-                  <span className="font-medium ml-2">{formatDataWithFallback(payment.carInfo.color)}</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-gray-600 text-sm">Propietario:</span>
-                  <span className="font-medium ml-2">{formatDataWithFallback(payment.carInfo.nombreDueño)}</span>
-                </div>
-                {payment.carInfo.telefono && payment.carInfo.telefono !== "Por definir" && (
-                  <div>
-                    <span className="text-gray-600 text-sm">Teléfono:</span>
-                    <span className="font-medium ml-2">{payment.carInfo.telefono}</span>
-                  </div>
-                )}
-                {(payment.carInfo.horaIngreso || payment.carInfo.fechaRegistro) && (
-                  <div>
-                    <span className="text-gray-600 text-sm">Ingreso:</span>
-                    <span className="font-medium ml-2 text-sm">
-                      {formatDateTime(payment.carInfo.fechaRegistro || payment.carInfo.horaIngreso)}
-                    </span>
-                  </div>
-                )}
-              </div>
+        )}
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {/* Car Information */}
+        <div className="bg-gray-50 p-3 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <Car className="h-4 w-4 text-gray-600" />
+            <span className="font-semibold text-gray-900">{payment.carInfo?.placa || "Placa no disponible"}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+            <span>
+              {payment.carInfo?.marca || "N/A"} {payment.carInfo?.modelo || ""}
+            </span>
+            <span>{payment.carInfo?.color || "N/A"}</span>
+          </div>
+          {payment.carInfo?.nombreDueño && (
+            <div className="flex items-center gap-2 mt-2 text-sm">
+              <User className="h-3 w-3" />
+              <span>{payment.carInfo.nombreDueño}</span>
             </div>
-            {(payment.carInfo.imagenes?.plateImageUrl || payment.carInfo.imagenes?.vehicleImageUrl) && (
-              <div className="lg:col-span-3 mt-4">
-                <h5 className="text-sm font-medium text-gray-700 flex items-center mb-2">
-                  <ImageIcon className="h-4 w-4 mr-1" />
-                  Imágenes de Referencia
-                </h5>
-                <div className="flex flex-wrap gap-4 justify-center">
-                  {payment.carInfo.imagenes?.plateImageUrl && (
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500 mb-1">Placa</p>
-                      <ImageWithFallback
-                        src={payment.carInfo.imagenes.plateImageUrl}
-                        alt={`Placa del vehículo ${payment.carInfo.placa}`}
-                        className="w-64 h-48 object-cover rounded border"
-                        fallback="/placeholder.svg"
-                      />
-                    </div>
-                  )}
-                  {payment.carInfo.imagenes?.vehicleImageUrl && (
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500 mb-1">Vehículo</p>
-                      <ImageWithFallback
-                        src={payment.carInfo.imagenes.vehicleImageUrl}
-                        alt={`Vehículo ${payment.carInfo.marca} ${payment.carInfo.modelo}`}
-                        className="w-64 h-48 object-cover rounded border"
-                        fallback="/placeholder.svg"
-                      />
-                    </div>
-                  )}
-                </div>
-                {payment.carInfo.imagenes?.fechaCaptura && (
-                  <div className="text-xs text-gray-500 text-center mt-2">
-                    <p>Capturado: {formatDateTime(payment.carInfo.imagenes.fechaCaptura)}</p>
-                    {payment.carInfo.imagenes.capturaMetodo && (
-                      <p className="capitalize">
-                        Método: {payment.carInfo.imagenes.capturaMetodo.replace("_", " ")}
-                      </p>
-                    )}
-                  </div>
-                )}
+          )}
+        </div>
+
+        {/* Payment Details */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Monto Pagado:</span>
+            <span className="font-bold text-green-600">{formatCurrency(payment.montoPagado)}</span>
+          </div>
+
+          {payment.montoCalculado && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Monto Calculado:</span>
+              <span className="font-bold">{formatCurrency(payment.montoCalculado)}</span>
+            </div>
+          )}
+
+          <Separator />
+
+          <div className="grid grid-cols-1 gap-2 text-sm">
+            {payment.referenciaTransferencia && (
+              <div className="flex items-center gap-2">
+                <Hash className="h-3 w-3" />
+                <span className="text-gray-600">Ref:</span>
+                <span className="font-mono">{payment.referenciaTransferencia}</span>
+              </div>
+            )}
+
+            {payment.banco && (
+              <div className="flex items-center gap-2">
+                <Building2 className="h-3 w-3" />
+                <span className="text-gray-600">Banco:</span>
+                <span>{payment.banco}</span>
+              </div>
+            )}
+
+            {payment.telefono && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-3 w-3" />
+                <span className="text-gray-600">Teléfono:</span>
+                <span>{payment.telefono}</span>
+              </div>
+            )}
+
+            {payment.numeroIdentidad && (
+              <div className="flex items-center gap-2">
+                <User className="h-3 w-3" />
+                <span className="text-gray-600">Cédula:</span>
+                <span>{payment.numeroIdentidad}</span>
               </div>
             )}
           </div>
+
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <Clock className="h-3 w-3" />
+            <span>Pago realizado: {new Date(payment.fechaPago).toLocaleString("es-ES")}</span>
+          </div>
         </div>
-      )}
 
-      <div className="space-y-2">
-        <div>
-          <p className="text-sm text-gray-500">Monto a Pagar</p>
-          <p className="text-2xl font-bold">{montoToDisplay}</p>
+        {/* Action Buttons */}
+        <div className="flex gap-2 pt-2">
+          <Button
+            onClick={() => onValidate(payment._id)}
+            disabled={isProcessing}
+            className="flex-1 bg-green-600 hover:bg-green-700"
+          >
+            <CheckCircle className="h-4 w-4 mr-2" />
+            Validar Pago
+          </Button>
+          <Button
+            onClick={() => onReject(payment._id)}
+            disabled={isProcessing}
+            variant="destructive"
+            className="flex-1"
+          >
+            <XCircle className="h-4 w-4 mr-2" />
+            Rechazar
+          </Button>
         </div>
-        <div className="text-sm text-gray-600">
-          <p>Detalles del Cálculo:</p>
-          <p>{formattedHours} horas * {formatCurrency(precioHora, "USD")} por hora = {formatCurrency(payment.montoCalculado, "USD")}</p>
-          <p>Tasa de Cambio Usada: 1 USD = {formatCurrency(tasaCambio, "VES")}</p>
-        </div>
-      </div>
+      </CardContent>
+    </Card>
+  )
+})
 
-      {payment.tipoPago?.startsWith("efectivo") && (
-        <div className="bg-yellow-50 p-3 rounded-lg mt-3">
-          <p className="text-sm text-yellow-800 font-medium flex items-center">
-            <span className="mr-2">💰</span> Pago en Efectivo - Cliente debe dirigirse a taquilla
-          </p>
-          <p className="text-xs text-yellow-600 mt-1">
-            El cliente está en camino para completar el pago en efectivo.
-          </p>
-        </div>
-      )}
+PendingPaymentCard.displayName = "PendingPaymentCard"
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <p className="text-sm text-gray-500">Referencia de Transferencia</p>
-          <p className="font-medium">{payment.referenciaTransferencia}</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">Banco</p>
-          <p className="font-medium">{payment.banco}</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">Teléfono</p>
-          <p className="font-medium">{payment.telefono}</p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">Número de Identidad</p>
-          <p className="font-medium">{payment.numeroIdentidad}</p>
-        </div>
-      </div>
+const PendingPayments: React.FC<PendingPaymentsProps> = ({ onStatsUpdate, companySettings }) => {
+  const [payments, setPayments] = useState<PaymentInfo[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [processingPayments, setProcessingPayments] = useState<Set<string>>(new Set())
+  const isFetchingRef = useRef(false)
 
-      <div className="flex gap-3 pt-4 border-t">
-        <Button
-          onClick={() => onValidate(payment._id)}
-          disabled={isProcessing}
-          className="flex-1"
-          aria-label={`Validar pago ${payment.codigoTicket}`}
-        >
-          <CheckCircle className="h-4 w-4 mr-2" />
-          {isProcessing ? "Validando..." : "Validar Pago"}
-        </Button>
-        <Button
-          onClick={() => onReject(payment._id)}
-          disabled={isProcessing}
-          variant="destructive"
-          className="flex-1"
-          aria-label={`Rechazar pago ${payment.codigoTicket}`}
-        >
-          <XCircle className="h-4 w-4 mr-2" />
-          {isProcessing ? "Rechazando..." : "Rechazar Pago"}
-        </Button>
-      </div>
-    </div>
-  );
-};
+  const fetchPayments = useCallback(async () => {
+    if (isFetchingRef.current) return
 
-const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
-  const [payments, setPayments] = useState<PendingPayment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const isFetchingRef = useRef(false);
-  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
-  const fetchCounterRef = useRef(0);
-  const renderCountRef = useRef(0);
-  const prevOnStatsUpdateRef = useRef(onStatsUpdate);
-  const prevPaymentsRef = useRef<PendingPayment[]>(payments);
-
-  useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `🔍 DEBUG: Estado actualizado - payments.length: ${payments.length}, isLoading: ${isLoading}, error: ${error}`
-      );
-    }
-  }, [payments, isLoading, error]);
-
-  renderCountRef.current += 1;
-  if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizado de PendingPayments #${renderCountRef.current}`);
-    if (prevOnStatsUpdateRef.current !== onStatsUpdate) {
-      console.log("🔍 DEBUG: onStatsUpdate cambió, posible causa de re-render");
-      prevOnStatsUpdateRef.current = onStatsUpdate;
-    }
-  }
-
-  useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG: Montando PendingPayments");
-    }
-    return () => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Desmontando PendingPayments");
-      }
-    };
-  }, []);
-
-  const sortedPayments = useMemo(() => {
-    return [...payments].sort(sortPaymentsByUrgency);
-  }, [payments]);
-
-  const arePaymentsEqual = (newPayments: PendingPayment[], oldPayments: PendingPayment[]) => {
-    if (newPayments.length !== oldPayments.length) return false;
-    if (newPayments.length === 0) return true;
-    return newPayments.every((newPayment, index) => newPayment._id === oldPayments[index]._id);
-  };
-
-  const fetchPendingPayments = useCallback(async (showLoading = true, source = "unknown") => {
-    fetchCounterRef.current += 1;
-    const fetchId = fetchCounterRef.current;
-    if (isFetchingRef.current) {
-      if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Solicitud #${fetchId} en curso (fuente: ${source}), omitiendo fetch`);
-      }
-      return;
-    }
-
+    isFetchingRef.current = true
     try {
-      if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Iniciando solicitud #${fetchId} (fuente: ${source})`);
+      const response = await fetch(`/api/admin/pending-payments?t=${Date.now()}`)
+      if (response.ok) {
+        const data = await response.json()
+        setPayments(data)
       }
-      if (showLoading) setIsLoading(true);
-      isFetchingRef.current = true;
-
-      const timestamp = new Date().getTime();
-      const response = await fetch(`/api/admin/pending-payments?t=${timestamp}`, {
-        method: "GET",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Error al cargar pagos pendientes");
-      }
-
-      const data = await response.json();
-      if (!Array.isArray(data)) {
-        throw new Error("Formato de datos inválido: se esperaba un array");
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Respuesta de solicitud #${fetchId} (fuente: ${source})`, data);
-      }
-
-      if (!arePaymentsEqual(data as PendingPayment[], prevPaymentsRef.current)) {
-        setPayments(data as PendingPayment[]);
-        prevPaymentsRef.current = data as PendingPayment[];
-      } else {
-        if (process.env.NODE_ENV === "development") {
-          console.log(`🔍 DEBUG: Omitiendo actualización de payments, datos idénticos (fuente: ${source})`);
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar datos");
-      if (process.env.NODE_ENV === "development") {
-        console.error(`🔍 DEBUG: Error en solicitud #${fetchId} (fuente: ${source})`, err);
-      }
+    } catch (error) {
+      console.error("Error fetching pending payments:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los pagos pendientes",
+        variant: "destructive",
+      })
     } finally {
-      if (showLoading) setIsLoading(false);
-      isFetchingRef.current = false;
+      setIsLoading(false)
+      isFetchingRef.current = false
     }
-  }, []);
+  }, [])
 
-  const handlePaymentAction = useCallback(
-    async (paymentId: string, action: "validate" | "reject") => {
+  const validatePayment = useCallback(
+    async (paymentId: string) => {
+      setProcessingPayments((prev) => new Set(prev).add(paymentId))
+
       try {
-        setProcessingId(paymentId);
-        setError("");
+        const response = await fetch("/api/admin/validate-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId }),
+        })
 
-        const settingsResponse = await fetch("/api/company-settings");
-        const companySettings = await settingsResponse.json();
-        const currentPrecioHora = companySettings.tarifas.precioHora || 3.0;
-        const currentTasaCambio = companySettings.tarifas.tasaCambio || 35.0;
-
-        const timestamp = new Date().getTime();
-        const response = await fetch(`/api/admin/${action}-payment?t=${timestamp}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-          body: JSON.stringify({ paymentId, currentPrecioHora, currentTasaCambio }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.message || `Error al ${action === "validate" ? "validar" : "rechazar"} el pago`
-          );
+        if (response.ok) {
+          toast({
+            title: "Pago Validado",
+            description: "El pago ha sido validado exitosamente",
+          })
+          await fetchPayments()
+          onStatsUpdate()
+        } else {
+          throw new Error("Error validating payment")
         }
-
-        await fetchPendingPayments(false, `${action}-payment`);
-        onStatsUpdate();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al procesar la acción");
+      } catch (error) {
+        console.error("Error validating payment:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo validar el pago",
+          variant: "destructive",
+        })
       } finally {
-        setProcessingId(null);
+        setProcessingPayments((prev) => {
+          const newSet = new Set(prev)
+          newSet.delete(paymentId)
+          return newSet
+        })
       }
     },
-    [fetchPendingPayments, onStatsUpdate]
-  );
+    [fetchPayments, onStatsUpdate],
+  )
+
+  const rejectPayment = useCallback(
+    async (paymentId: string) => {
+      setProcessingPayments((prev) => new Set(prev).add(paymentId))
+
+      try {
+        const response = await fetch("/api/admin/reject-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId }),
+        })
+
+        if (response.ok) {
+          toast({
+            title: "Pago Rechazado",
+            description: "El pago ha sido rechazado",
+            variant: "destructive",
+          })
+          await fetchPayments()
+          onStatsUpdate()
+        } else {
+          throw new Error("Error rejecting payment")
+        }
+      } catch (error) {
+        console.error("Error rejecting payment:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo rechazar el pago",
+          variant: "destructive",
+        })
+      } finally {
+        setProcessingPayments((prev) => {
+          const newSet = new Set(prev)
+          newSet.delete(paymentId)
+          return newSet
+        })
+      }
+    },
+    [fetchPayments, onStatsUpdate],
+  )
+
+  const formatCurrency = useCallback(
+    (amount: number) => {
+      if (!amount || isNaN(amount)) return "$0.00"
+
+      if (companySettings.moneda === "USD") {
+        return `$${amount.toFixed(2)} USD`
+      }
+      const usdAmount = amount / companySettings.tasaCambio
+      if (usdAmount >= 1) {
+        return `$${usdAmount.toFixed(2)} USD`
+      }
+      return `${companySettings.moneda} ${amount.toLocaleString()}`
+    },
+    [companySettings],
+  )
+
+  // Función para ordenar pagos por urgencia (tiempo de salida)
+  const sortByUrgency = useCallback((a: PaymentInfo, b: PaymentInfo) => {
+    const getUrgencyScore = (payment: PaymentInfo) => {
+      if (!payment.tiempoSalida && !payment.tiempoSalidaEstimado) return 0
+
+      const exitTime = new Date(payment.tiempoSalida || payment.tiempoSalidaEstimado || "")
+      const now = new Date()
+      const diffMinutes = (exitTime.getTime() - now.getTime()) / (1000 * 60)
+
+      if (diffMinutes < 0) return 4 // Crítico - ya pasó el tiempo
+      if (diffMinutes < 15) return 3 // Muy urgente
+      if (diffMinutes < 30) return 2 // Urgente
+      if (diffMinutes < 60) return 1 // Moderado
+      return 0 // Normal
+    }
+
+    return getUrgencyScore(b) - getUrgencyScore(a)
+  }, [])
+
+  const sortedPayments = useMemo(() => {
+    return [...payments].sort(sortByUrgency)
+  }, [payments, sortByUrgency])
 
   useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
-      console.log("🔍 DEBUG: Configurando useEffect inicial");
-    }
-    fetchPendingPayments(true, "initial-mount");
-
-    if (intervalIdRef.current) {
-      if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Limpiando intervalo previo antes de crear uno nuevo");
-      }
-      clearInterval(intervalIdRef.current);
-    }
-
-    intervalIdRef.current = setInterval(() => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Ejecutando fetch desde intervalo");
-      }
-      fetchPendingPayments(false, "interval");
-    }, 10000);
-
-    return () => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Limpiando intervalo en desmontaje");
-      }
-      if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current);
-        intervalIdRef.current = null;
-      }
-    };
-  }, [fetchPendingPayments]);
+    fetchPayments()
+    const interval = setInterval(fetchPayments, 30000) // Refresh every 30 seconds
+    return () => clearInterval(interval)
+  }, [fetchPayments])
 
   if (isLoading) {
     return (
@@ -484,58 +371,58 @@ const PendingPayments = ({ onStatsUpdate }: PendingPaymentsProps) => {
           </div>
         </CardContent>
       </Card>
-    );
+    )
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Pagos Pendientes de Validación</CardTitle>
-        <Button onClick={() => fetchPendingPayments(true, "manual-refresh")} variant="outline" size="sm">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Actualizar
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {process.env.NODE_ENV === "development" && (
-          <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
-            <p className="font-bold">🔧 DEBUG INFO:</p>
-            <p>Total payments: {sortedPayments.length}</p>
-            <p>
-              With tiempoSalida: {sortedPayments.filter((p) => p.tiempoSalida).length} | Without:{" "}
-              {sortedPayments.filter((p) => !p.tiempoSalida).length}
-            </p>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Pagos Pendientes de Validación
+              </CardTitle>
+              <CardDescription>
+                {sortedPayments.length} pago{sortedPayments.length !== 1 ? "s" : ""} esperando validación
+              </CardDescription>
+            </div>
+            <Button variant="outline" onClick={fetchPayments} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            </Button>
           </div>
-        )}
+        </CardHeader>
+      </Card>
 
-        {sortedPayments.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <p className="text-lg font-medium">No hay pagos pendientes</p>
-            <p className="text-sm">Todos los pagos han sido procesados</p>
-            {process.env.NODE_ENV === "development" && <p>🔍 DEBUG: Renderizando vista de lista vacía</p>}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {sortedPayments.map((payment) => (
-              <PendingPaymentCard
-                key={payment._id}
-                payment={payment}
-                onValidate={() => handlePaymentAction(payment._id, "validate")}
-                onReject={() => handlePaymentAction(payment._id, "reject")}
-                isProcessing={processingId === payment._id}
-              />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+      {sortedPayments.length === 0 ? (
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center">
+              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">¡Todo al día!</h3>
+              <p className="text-gray-600">No hay pagos pendientes de validación en este momento.</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {sortedPayments.map((payment) => (
+            <PendingPaymentCard
+              key={payment._id}
+              payment={payment}
+              onValidate={validatePayment}
+              onReject={rejectPayment}
+              formatCurrency={formatCurrency}
+              isProcessing={processingPayments.has(payment._id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-export default React.memo(PendingPayments);
+PendingPayments.displayName = "PendingPayments"
+
+export default React.memo(PendingPayments)

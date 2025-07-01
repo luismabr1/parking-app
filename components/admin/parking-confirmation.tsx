@@ -55,6 +55,7 @@ interface PendingParking {
   estado: string;
   horaOcupacion?: string;
   carInfo?: {
+    _id: string;
     placa: string;
     marca: string;
     modelo: string;
@@ -272,13 +273,13 @@ function ParkingConfirmation() {
       }
 
       if (response.ok) {
-        setMessage(`✅ ${data.message}`);
-        await fetchPendingParkings();
+        setMessage(`✅ ${data.message || "Estacionamiento confirmado exitosamente"}`);
+        await fetchPendingParkings(); // Refresh to remove confirmed parking
         if (process.env.NODE_ENV === "development") {
           console.log("🔍 DEBUG confirmParking - Success, updated message and refetched");
         }
       } else {
-        setMessage(`❌ ${data.message}`);
+        setMessage(`❌ ${data.message || "Error al confirmar el estacionamiento"}`);
         if (process.env.NODE_ENV === "development") {
           console.log("🔍 DEBUG confirmParking - Failed, updated message");
         }
@@ -375,7 +376,9 @@ function ParkingConfirmation() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <h3 className="font-semibold text-lg">Espacio: {parking.codigoTicket}</h3>
-                    <Badge variant="outline">Pendiente Confirmación</Badge>
+                    <Badge variant={parking.estado === "estacionado_confirmado" ? "default" : "outline"}>
+                      {parking.estado === "estacionado_confirmado" ? "Confirmado" : "Ocupado"}
+                    </Badge>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-500">Registrado</p>
@@ -513,13 +516,15 @@ function ParkingConfirmation() {
 
                 <Button
                   onClick={() => confirmParking(parking.codigoTicket)}
-                  disabled={confirmingId === parking.codigoTicket}
+                  disabled={confirmingId === parking.codigoTicket || parking.estado === "estacionado_confirmado"}
                   className="w-full"
-                  variant="default"
+                  variant={parking.estado === "estacionado_confirmado" ? "secondary" : "default"}
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
                   {confirmingId === parking.codigoTicket
                     ? "Confirmando Estacionamiento..."
+                    : parking.estado === "estacionado_confirmado"
+                    ? "Confirmado"
                     : "Confirmar que el Vehículo está Estacionado"}
                 </Button>
               </div>

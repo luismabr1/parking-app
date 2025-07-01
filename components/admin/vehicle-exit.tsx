@@ -1,66 +1,73 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { LogOut, Car, RefreshCw, ImageIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { formatDateTime } from "@/lib/utils";
-import ExitTimeDisplay from "./exit-time-display";
-import ImageWithFallback from "../image-with-fallback";
-import React from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { LogOut, Car, RefreshCw, ImageIcon } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { formatDateTime } from "@/lib/utils"
+import ExitTimeDisplay from "./exit-time-display"
+import ImageWithFallback from "../image-with-fallback"
+import React from "react"
 
 interface PaidTicket {
-  _id: string;
-  codigoTicket: string;
-  estado: string;
-  horaOcupacion?: string;
-  montoCalculado: number;
-  tiempoSalida?: string;
-  tiempoSalidaEstimado?: string;
-  fechaPago?: string;
+  _id: string
+  codigoTicket: string
+  estado: string
+  horaOcupacion?: string
+  montoCalculado: number | string
+  tiempoSalida?: string
+  tiempoSalidaEstimado?: string
+  fechaPago?: string
   carInfo?: {
-    placa: string;
-    marca: string;
-    modelo: string;
-    color: string;
-    nombreDueño: string;
-    telefono: string;
-    horaIngreso?: string;
-    fechaRegistro?: string;
+    placa: string
+    marca: string
+    modelo: string
+    color: string
+    nombreDueño: string
+    telefono: string
+    horaIngreso?: string
+    fechaRegistro?: string
     imagenes?: {
-      plateImageUrl?: string;
-      vehicleImageUrl?: string;
-      fechaCaptura?: string;
-      capturaMetodo?: string;
-    };
-  };
+      plateImageUrl?: string
+      vehicleImageUrl?: string
+      fechaCaptura?: string
+      capturaMetodo?: string
+    }
+  }
 }
 
 const areArraysEqual = <T extends { _id: string }>(arr1: T[], arr2: T[]) => {
-  if (arr1.length !== arr2.length) return false;
-  return arr1.every((item1, i) => item1._id === arr2[i]._id);
-};
+  if (arr1.length !== arr2.length) return false
+  return arr1.every((item1, i) => item1._id === arr2[i]._id)
+}
 
 const VehicleExit = React.memo(() => {
-  const [paidTickets, setPaidTickets] = useState<PaidTicket[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const isFetchingRef = useRef(false);
-  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
-  const fetchCounterRef = useRef(0);
-  const prevPaidTicketsRef = useRef<PaidTicket[]>([]);
+  const [paidTickets, setPaidTickets] = useState<PaidTicket[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isProcessing, setIsProcessing] = useState<string | null>(null)
+  const [message, setMessage] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
+  const isFetchingRef = useRef(false)
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
+  const fetchCounterRef = useRef(0)
+  const prevPaidTicketsRef = useRef<PaidTicket[]>([])
+
+  // Helper function to safely format monetary values
+  const formatMoney = useCallback((value: number | string | undefined): string => {
+    if (value === undefined || value === null) return "0.00"
+    const numValue = typeof value === "string" ? Number.parseFloat(value) : value
+    return isNaN(numValue) ? "0.00" : numValue.toFixed(2)
+  }, [])
 
   // Memoized urgency sorting function
   const getUrgencyScore = useCallback((ticket: PaidTicket) => {
-    if (!ticket.fechaPago || !ticket.tiempoSalida) return 0;
-    const paymentTime = new Date(ticket.fechaPago);
-    const currentTime = new Date();
+    if (!ticket.fechaPago || !ticket.tiempoSalida) return 0
+    const paymentTime = new Date(ticket.fechaPago)
+    const currentTime = new Date()
     const minutesToAdd =
       {
         now: 0,
@@ -71,99 +78,105 @@ const VehicleExit = React.memo(() => {
         "30min": 30,
         "45min": 45,
         "60min": 60,
-      }[ticket.tiempoSalida] || 0;
-    const targetTime = new Date(paymentTime.getTime() + minutesToAdd * 60000);
-    const timeRemaining = Math.ceil((targetTime.getTime() - currentTime.getTime()) / 60000);
-    return timeRemaining <= 0 ? 4 : timeRemaining <= 2 ? 3 : timeRemaining <= 5 ? 2 : 1;
-  }, []);
+      }[ticket.tiempoSalida] || 0
+    const targetTime = new Date(paymentTime.getTime() + minutesToAdd * 60000)
+    const timeRemaining = Math.ceil((targetTime.getTime() - currentTime.getTime()) / 60000)
+    return timeRemaining <= 0 ? 4 : timeRemaining <= 2 ? 3 : timeRemaining <= 5 ? 2 : 1
+  }, [])
 
-  const fetchPaidTickets = useCallback(async (showLoading = true, source = "unknown") => {
-    fetchCounterRef.current += 1;
-    const fetchId = fetchCounterRef.current;
-    if (isFetchingRef.current) {
-      if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Fetch #${fetchId} in progress (source: ${source}), skipping`);
-      }
-      return;
-    }
-
-    try {
-      if (process.env.NODE_ENV === "development") {
-        console.log(`🔍 DEBUG: Starting fetch #${fetchId} (source: ${source})`);
-      }
-      if (showLoading) setIsLoading(true);
-      isFetchingRef.current = true;
-
-      const timestamp = new Date().getTime();
-      const response = await fetch(`/api/admin/paid-tickets?t=${timestamp}`, {
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
+  const fetchPaidTickets = useCallback(
+    async (showLoading = true, source = "unknown") => {
+      fetchCounterRef.current += 1
+      const fetchId = fetchCounterRef.current
+      if (isFetchingRef.current) {
         if (process.env.NODE_ENV === "development") {
-          console.log(`🔍 DEBUG: Raw paid tickets API response #${fetchId}:`, data);
+          console.log(`🔍 DEBUG: Fetch #${fetchId} in progress (source: ${source}), skipping`)
         }
+        return
+      }
 
-        const sortedData = [...data].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
-        if (!areArraysEqual(sortedData, prevPaidTicketsRef.current)) {
+      try {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🔍 DEBUG: Starting fetch #${fetchId} (source: ${source})`)
+        }
+        if (showLoading) setIsLoading(true)
+        isFetchingRef.current = true
+
+        const timestamp = new Date().getTime()
+        const response = await fetch(`/api/admin/paid-tickets?t=${timestamp}`, {
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        })
+        if (response.ok) {
+          const data = await response.json()
           if (process.env.NODE_ENV === "development") {
-            console.log(`🔍 DEBUG: Updated paidTickets #${fetchId} (source: ${source}):`, sortedData);
+            console.log(`🔍 DEBUG: Raw paid tickets API response #${fetchId}:`, data)
           }
-          setPaidTickets(sortedData);
-          prevPaidTicketsRef.current = sortedData;
-        } else if (process.env.NODE_ENV === "development") {
-          console.log(`🔍 DEBUG: Skipping update, data unchanged (source: ${source})`);
+
+          const sortedData = [...data].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a))
+          if (!areArraysEqual(sortedData, prevPaidTicketsRef.current)) {
+            if (process.env.NODE_ENV === "development") {
+              console.log(`🔍 DEBUG: Updated paidTickets #${fetchId} (source: ${source}):`, sortedData)
+            }
+            setPaidTickets(sortedData)
+            prevPaidTicketsRef.current = sortedData
+          } else if (process.env.NODE_ENV === "development") {
+            console.log(`🔍 DEBUG: Skipping update, data unchanged (source: ${source})`)
+          }
         }
+      } catch (error) {
+        console.error(`🔍 DEBUG: Error fetching paid tickets #${fetchId}:`, error)
+      } finally {
+        if (showLoading) setIsLoading(false)
+        isFetchingRef.current = false
       }
-    } catch (error) {
-      console.error(`🔍 DEBUG: Error fetching paid tickets #${fetchId}:`, error);
-    } finally {
-      if (showLoading) setIsLoading(false);
-      isFetchingRef.current = false;
-    }
-  }, [getUrgencyScore]);
+    },
+    [getUrgencyScore],
+  )
 
-  const handleVehicleExit = useCallback(async (ticketCode: string) => {
-    try {
-      setIsProcessing(ticketCode);
-      setMessage("");
+  const handleVehicleExit = useCallback(
+    async (ticketCode: string) => {
+      try {
+        setIsProcessing(ticketCode)
+        setMessage("")
 
-      const timestamp = new Date().getTime();
-      const response = await fetch(`/api/admin/vehicle-exit?t=${timestamp}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-        body: JSON.stringify({ ticketCode }),
-      });
+        const timestamp = new Date().getTime()
+        const response = await fetch(`/api/admin/vehicle-exit?t=${timestamp}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+          body: JSON.stringify({ ticketCode }),
+        })
 
-      const data = await response.json();
-      if (response.ok) {
-        setMessage(`✅ ${data.message}`);
-        await fetchPaidTickets(false, "exit-process");
-      } else {
-        setMessage(`❌ ${data.message}`);
+        const data = await response.json()
+        if (response.ok) {
+          setMessage(`✅ ${data.message}`)
+          await fetchPaidTickets(false, "exit-process")
+        } else {
+          setMessage(`❌ ${data.message}`)
+        }
+        setTimeout(() => setMessage(""), 5000)
+      } catch (error) {
+        setMessage("❌ Error al procesar la salida del vehículo")
+        setTimeout(() => setMessage(""), 5000)
+      } finally {
+        setIsProcessing(null)
       }
-      setTimeout(() => setMessage(""), 5000);
-    } catch (error) {
-      setMessage("❌ Error al procesar la salida del vehículo");
-      setTimeout(() => setMessage(""), 5000);
-    } finally {
-      setIsProcessing(null);
-    }
-  }, [fetchPaidTickets]);
+    },
+    [fetchPaidTickets],
+  )
 
   const formatDataWithFallback = useCallback((value: string | undefined) => {
-    if (!value || value === "Por definir" || value === "PENDIENTE") return "Dato no proporcionado";
-    return value;
-  }, []);
+    if (!value || value === "Por definir" || value === "PENDIENTE") return "Dato no proporcionado"
+    return value
+  }, [])
 
   const filteredTickets = useMemo(
     () =>
@@ -174,32 +187,34 @@ const VehicleExit = React.memo(() => {
           ticket.carInfo?.nombreDueño.toLowerCase().includes(searchTerm.toLowerCase()),
       ),
     [paidTickets, searchTerm],
-  );
+  )
 
   // Log the filteredTickets after memoization
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log(`🔍 DEBUG: Filtered tickets after memoization:`, filteredTickets);
-      console.log(`🔍 DEBUG: Search term: "${searchTerm}"`);
-      console.log(`🔍 DEBUG: Number of unique tickets by codigoTicket:`, 
-        new Set(filteredTickets.map(t => t.codigoTicket)).size);
+      console.log(`🔍 DEBUG: Filtered tickets after memoization:`, filteredTickets)
+      console.log(`🔍 DEBUG: Search term: "${searchTerm}"`)
+      console.log(
+        `🔍 DEBUG: Number of unique tickets by codigoTicket:`,
+        new Set(filteredTickets.map((t) => t.codigoTicket)).size,
+      )
     }
-  }, [filteredTickets, searchTerm]);
+  }, [filteredTickets, searchTerm])
 
   useEffect(() => {
-    fetchPaidTickets(true, "initial-mount");
+    fetchPaidTickets(true, "initial-mount")
 
     intervalIdRef.current = setInterval(() => {
-      fetchPaidTickets(false, "interval");
-    }, 10000);
+      fetchPaidTickets(false, "interval")
+    }, 10000)
 
     return () => {
       if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current);
-        intervalIdRef.current = null;
+        clearInterval(intervalIdRef.current)
+        intervalIdRef.current = null
       }
-    };
-  }, [fetchPaidTickets]);
+    }
+  }, [fetchPaidTickets])
 
   if (isLoading) {
     return (
@@ -213,7 +228,7 @@ const VehicleExit = React.memo(() => {
           </div>
         </CardContent>
       </Card>
-    );
+    )
   }
 
   return (
@@ -281,7 +296,7 @@ const VehicleExit = React.memo(() => {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-500">Monto Pagado</p>
-                    <p className="font-medium">${ticket.montoCalculado.toFixed(2)}</p>
+                    <p className="font-medium">${formatMoney(ticket.montoCalculado)}</p>
                   </div>
                 </div>
 
@@ -363,7 +378,7 @@ const VehicleExit = React.memo(() => {
                               <div className="text-center">
                                 <p className="text-xs text-gray-500 mb-1">Placa</p>
                                 <ImageWithFallback
-                                  src={ticket.carInfo.imagenes.plateImageUrl}
+                                  src={ticket.carInfo.imagenes.plateImageUrl || "/placeholder.svg"}
                                   alt="Placa del vehículo"
                                   className="w-64 h-48 object-cover rounded border"
                                   fallback="/placeholder.svg"
@@ -374,7 +389,7 @@ const VehicleExit = React.memo(() => {
                               <div className="text-center">
                                 <p className="text-xs text-gray-500 mb-1">Vehículo</p>
                                 <ImageWithFallback
-                                  src={ticket.carInfo.imagenes.vehicleImageUrl}
+                                  src={ticket.carInfo.imagenes.vehicleImageUrl || "/placeholder.svg"}
                                   alt="Vehículo"
                                   className="w-64 h-48 object-cover rounded border"
                                   fallback="/placeholder.svg"
@@ -413,9 +428,9 @@ const VehicleExit = React.memo(() => {
         </div>
       </CardContent>
     </Card>
-  );
-});
+  )
+})
 
-VehicleExit.displayName = "VehicleExit";
+VehicleExit.displayName = "VehicleExit"
 
-export default VehicleExit;
+export default VehicleExit

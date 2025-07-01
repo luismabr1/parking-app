@@ -1,136 +1,129 @@
-"use client";
+"use client"
 
-import { memo } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { CarIcon, RefreshCw, ImageIcon, Edit } from "lucide-react";
-import { formatDateTime } from "@/lib/utils";
-import ImageWithFallback from "../image-with-fallback";
+import React, { useState, useEffect, useCallback } from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Car, Clock, RefreshCw } from "lucide-react"
 
-interface CarProps {
-  _id: string;
-  placa: string;
-  marca: string;
-  modelo: string;
-  color: string;
-  nombreDueño: string;
-  telefono: string;
-  ticketAsociado: string;
-  horaIngreso: string;
-  estado: string;
-  imagenes?: {
-    plateImageUrl?: string;
-    vehicleImageUrl?: string;
-    fechaCaptura?: string;
-    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop";
-    confianzaPlaca?: number;
-    confianzaVehiculo?: number;
-  };
+interface CarInfo {
+  _id: string
+  placa: string
+  marca: string
+  modelo: string
+  color: string
+  estado: string
+  fechaIngreso: string
+  ticketAsociado: string
 }
 
 interface MobileCarListProps {
-  cars: CarProps[];
-  onRefresh: () => void;
-  onViewImages: (car: CarProps) => void;
+  onStatsUpdate: () => void
 }
 
-function MobileCarList({ cars, onRefresh, onViewImages }: MobileCarListProps) {
-  const activeCars = cars.filter((car) => car.estado === "estacionado" || car.estado === "estacionado_confirmado");
-  const recentCars = [...activeCars].sort((a, b) => new Date(b.horaIngreso).getTime() - new Date(a.horaIngreso).getTime()).slice(0, 3); // Sort by horaIngreso and take top 3
+const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
+  const [cars, setCars] = useState<CarInfo[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  if (process.env.NODE_ENV === "development") {
-    console.log(`🔍 DEBUG: Renderizando MobileCarList - Total activeCars: ${activeCars.length}, recentCars: ${recentCars.length}, cars: ${cars.length}`);
-    recentCars.forEach((car, index) => console.log(`🔍 DEBUG: recentCar ${index} - placa: ${car.placa}, horaIngreso: ${car.horaIngreso}`));
+  const fetchCars = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/cars")
+      if (response.ok) {
+        const data = await response.json()
+        setCars(data)
+      }
+    } catch (error) {
+      console.error("Error fetching cars:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCars()
+  }, [fetchCars])
+
+  const getStatusBadge = (estado: string) => {
+    switch (estado) {
+      case "estacionado":
+        return <Badge variant="secondary">Pendiente Confirmación</Badge>
+      case "estacionado_confirmado":
+        return <Badge variant="default">Confirmado</Badge>
+      case "pago_pendiente_validacion":
+        return <Badge variant="destructive">Pago Pendiente</Badge>
+      case "pagado_validado":
+        return <Badge variant="outline">Pagado - Listo para Salir</Badge>
+      default:
+        return <Badge variant="secondary">{estado}</Badge>
+    }
+  }
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-center">
+            <RefreshCw className="h-6 w-6 animate-spin" />
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2">
-            <CarIcon className="h-5 w-5 text-green-600" />
-            <span className="font-medium text-lg">Carros Estacionados ({activeCars.length})</span>
-          </div>
-          <Button
-            onClick={onRefresh}
-            variant="outline"
-            size="sm"
-            className="h-8"
-            aria-label="Actualizar lista"
-          >
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Actualizar
-          </Button>
-        </div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Carros Estacionados</h3>
+        <Button variant="outline" size="sm" onClick={fetchCars}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
 
-        {recentCars.length === 0 ? (
-          <div className="text-center py-4 text-gray-500">
-            <CarIcon className="h-10 w-10 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No hay carros estacionados</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {recentCars.map((car) => (
-              <div key={car._id} className="p-3 border rounded-lg bg-white shadow-sm">
-                <div className="flex flex-col space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-lg">{car.placa}</p>
-                      <p className="text-sm text-gray-600">
-                        {car.marca} {car.modelo} - {car.color}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Dueño: {car.nombreDueño} | Tel: {car.telefono}
-                      </p>
-                      {car.imagenes && (
-                        <div className="flex items-center space-x-2 mt-1">
-                          <ImageWithFallback
-                            src={car.imagenes.plateImageUrl || "/placeholder.svg"}
-                            alt={`Placa de ${car.placa}`}
-                            className="w-20 h-12 object-cover rounded border"
-                            fallback="/placeholder.svg"
-                          />
-                          <ImageWithFallback
-                            src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
-                            alt={`Vehículo de ${car.placa}`}
-                            className="w-20 h-12 object-cover rounded border"
-                            fallback="/placeholder.svg"
-                          />
-                          <span className="text-xs text-blue-600">Con imágenes</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-right space-y-1">
-                      <p className="text-sm font-medium">Ticket: {car.ticketAsociado}</p>
-                      <p className="text-xs text-gray-500">
-                        Ingreso: {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
-                      </p>
-                      {car.imagenes && (
-                        <Button
-                          onClick={() => onViewImages(car)}
-                          variant="outline"
-                          size="sm"
-                          className="mt-1 h-7 px-2 text-xs"
-                        >
-                          <Edit className="h-3 w-3 mr-1" />
-                          Ver
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+      {cars.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <Car className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+            <p className="text-muted-foreground">No hay carros estacionados</p>
+          </CardContent>
+        </Card>
+      ) : (
+        cars.map((car) => (
+          <Card key={car._id}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Car className="h-4 w-4" />
+                  <span className="font-semibold">{car.placa}</span>
                 </div>
+                {getStatusBadge(car.estado)}
               </div>
-            ))}
-            {activeCars.length > 3 && (
-              <p className="text-center text-sm text-gray-500">
-                +{activeCars.length - 3} carros adicionales (usa &quot;Actualizar&quot; para ver todos)
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>
+                  {car.marca} {car.modelo} - {car.color}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  <span>Ingreso: {formatTime(car.fechaIngreso)}</span>
+                </div>
+                <p>Ticket: {car.ticketAsociado}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  )
 }
 
-export default memo(MobileCarList);
+MobileCarList.displayName = "MobileCarList"
+
+export default React.memo(MobileCarList)

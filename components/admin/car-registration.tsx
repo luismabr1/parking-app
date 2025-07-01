@@ -402,8 +402,8 @@ function CarRegistration() {
                       </SelectTrigger>
                       <SelectContent>
                         {availableTickets.map((ticket) => (
-                          <SelectItem key={ticket._id} value={ticket.codigoTicket} className="text-lg">
-                            {ticket.codigoTicket}
+                          <SelectItem key={ticket._id} value={ticket.codigo} className="text-lg">
+                            {ticket.codigo}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -477,8 +477,8 @@ function CarRegistration() {
                     </SelectTrigger>
                     <SelectContent>
                       {availableTickets.map((ticket) => (
-                        <SelectItem key={ticket._id} value={ticket.codigoTicket}>
-                          {ticket.codigoTicket}
+                        <SelectItem key={ticket._id} value={ticket.codigo}>
+                          {ticket.codigo}
                         </SelectItem>
                       ))}
                     </SelectContent>

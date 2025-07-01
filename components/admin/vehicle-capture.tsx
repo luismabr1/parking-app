@@ -1,7 +1,6 @@
 "use client";
 
 import type React from "react";
-
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,7 +82,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
   }, [debugInfo, showLogs]);
 
-  // Agregar debug info solo en desarrollo
   const addDebugInfo = useCallback(
     (info: string) => {
       if (process.env.NODE_ENV === "development") {
@@ -98,7 +96,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     [],
   );
 
-  // Limpiar logs manualmente solo en desarrollo
   const clearDebugInfo = useCallback(() => {
     if (process.env.NODE_ENV === "development") {
       setDebugInfo([]);
@@ -106,7 +103,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
   }, [addDebugInfo]);
 
-  // Función para copiar logs al portapapeles solo en desarrollo
   const copyLogsToClipboard = useCallback(() => {
     if (process.env.NODE_ENV === "development") {
       const logText = debugInfo.join("\n");
@@ -123,7 +119,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }
   }, [debugInfo, addDebugInfo]);
 
-  // Cleanup al desmontar
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       addDebugInfo("🚀 Iniciando VehicleCapture simplificado");
@@ -137,7 +132,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     };
   }, [addDebugInfo]);
 
-  // Detectar cámaras disponibles
   useEffect(() => {
     const detectCameras = async () => {
       if (process.env.NODE_ENV === "development") {
@@ -184,7 +178,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     detectCameras();
   }, []);
 
-  // Cargar tickets disponibles
   useEffect(() => {
     const fetchAvailableTickets = async () => {
       try {
@@ -387,10 +380,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     }, 1000);
   }, [stopCamera, startCamera, availableCameras, selectedCameraId]);
 
-  useEffect(() => {
-    console.log("Current NODE_ENV:", process.env.NODE_ENV);
-  }, []);
-
   const handleFileUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -476,7 +465,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
     );
   }, [currentStep, stopCamera, videoReady, streamActive]);
 
-  // Subir imagen a Cloudinary
   const uploadToCloudinary = useCallback(
     async (imageUrl: string, type: "plate" | "vehicle") => {
       try {
@@ -638,28 +626,24 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         addDebugInfo("🚗 Creando registro de estacionamiento...");
       }
 
-      const recordData = {
-        placa: "PENDIENTE",
-        marca: "Por definir",
-        modelo: "Por definir",
-        color: "Por definir",
-        nombreDueño: "Por definir",
-        telefono: "Por definir",
-        ticketAsociado: selectedTicket,
-        imagenes: {
-          plateImageUrl: uploadedUrls.plateUrl,
-          vehicleImageUrl: uploadedUrls.vehicleUrl,
-          fechaCaptura: new Date(),
-          capturaMetodo: "camara_movil",
-          confianzaPlaca: 0,
-          confianzaVehiculo: 0,
-        },
-      };
+      const formData = new FormData();
+      formData.append("placa", "PENDIENTE");
+      formData.append("marca", "Por definir");
+      formData.append("modelo", "Por definir");
+      formData.append("color", "Por definir");
+      formData.append("nombreDueño", "Por definir");
+      formData.append("telefono", "Por definir");
+      formData.append("ticketAsociado", selectedTicket);
+      formData.append("plateImageUrl", uploadedUrls.plateUrl || "");
+      formData.append("vehicleImageUrl", uploadedUrls.vehicleUrl || "");
+      formData.append("imagenes[fechaCaptura]", new Date().toISOString());
+      formData.append("imagenes[capturaMetodo]", "camara_movil");
+      formData.append("imagenes[confianzaPlaca]", "0");
+      formData.append("imagenes[confianzaVehiculo]", "0");
 
       const response = await fetch("/api/admin/cars", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(recordData),
+        body: formData,
       });
 
       const result = await response.json();
@@ -684,7 +668,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
-      {/* Panel principal */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -767,7 +750,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             </Alert>
           )}
 
-          {/* Paso 3: Completado */}
           {currentStep === "completed" && (
             <div className="space-y-4">
               <div className="text-center space-y-4">
@@ -778,7 +760,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                 </div>
               </div>
 
-              {/* Resumen de resultados */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {uploadedUrls.plateUrl && (
                   <div className="space-y-2">
@@ -807,7 +788,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                 )}
               </div>
 
-              {/* Botones de acción en vertical */}
               <div className="space-y-2">
                 <Button onClick={confirmAndRegister} className="w-full" size="lg">
                   <Check className="h-4 w-4 mr-2" />
@@ -825,7 +805,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             </div>
           )}
 
-          {/* Paso 3: Asignar Puesto */}
           {currentStep === "assign" && (
             <div className="space-y-4">
               <div className="text-center space-y-4">
@@ -836,7 +815,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                 </div>
               </div>
 
-              {/* Selector de ticket */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Puesto de Estacionamiento:</label>
                 <select
@@ -854,7 +832,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                 <p className="text-xs text-gray-500">{availableTickets.length} puestos disponibles</p>
               </div>
 
-              {/* Resumen de imágenes */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <h4 className="font-medium text-sm">Placa</h4>
@@ -876,7 +853,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                 </div>
               </div>
 
-              {/* Botones de acción en vertical */}
               <div className="space-y-2">
                 <Button
                   onClick={createParkingRecord}
@@ -908,7 +884,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             </div>
           )}
 
-          {/* Pasos 1 y 2: Captura */}
           {currentStep !== "completed" && currentStep !== "assign" && (
             <>
               {!isCapturing && !capturedImages[currentStep] && (
@@ -973,13 +948,9 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       playsInline
                       muted
                       className="w-full rounded-lg bg-black"
-                      style={{
-                        height: "250px",
-                        objectFit: "cover",
-                      }}
+                      style={{ height: "250px", objectFit: "cover" }}
                     />
 
-                    {/* Indicadores de estado */}
                     <div className="absolute top-2 left-2 space-y-1">
                       <Badge variant={videoReady ? "default" : "secondary"} className="text-xs">
                         {videoReady ? "✅ Video" : "⏳ Video"}
@@ -989,7 +960,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                       </Badge>
                     </div>
 
-                    {/* Controles en la esquina */}
                     <div className="absolute top-2 right-2 space-y-1">
                       <Button onClick={switchCamera} size="sm" variant="secondary">
                         <RefreshCw className="h-3 w-3" />
@@ -1000,7 +970,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
                     </div>
                   </div>
 
-                  {/* Botones principales debajo del video - vertical en móvil */}
                   <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                     <Button
                       onClick={capturePhoto}
@@ -1069,7 +1038,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
             </>
           )}
 
-          {/* Botón de cancelar */}
           {currentStep !== "completed" && currentStep !== "assign" && (
             <div className="text-center pt-4">
               <Button onClick={onCancel} variant="ghost" size="sm">
@@ -1081,7 +1049,6 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
         </CardContent>
       </Card>
 
-      {/* Panel de logs en tiempo real solo en desarrollo */}
       {process.env.NODE_ENV === "development" && showLogs && (
         <Card>
           <CardHeader>
