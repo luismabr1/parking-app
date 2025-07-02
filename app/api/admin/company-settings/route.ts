@@ -24,16 +24,31 @@ export async function GET() {
           numeroCuenta: "",
         },
         tarifas: {
-          precioHora: 3.0,
+          precioHoraDiurno: 3.0,
+          precioHoraNocturno: 4.0,
           tasaCambio: 35.0,
+          horaInicioNocturno: "00:00",
+          horaFinNocturno: "06:00",
         },
       })
     }
 
+    // Migrar configuración antigua a nueva estructura si es necesario
+    if (settings.tarifas && settings.tarifas.precioHora && !settings.tarifas.precioHoraDiurno) {
+      settings.tarifas.precioHoraDiurno = settings.tarifas.precioHora
+      settings.tarifas.precioHoraNocturno = settings.tarifas.precioHora * 1.3 // 30% más caro en la noche
+      settings.tarifas.horaInicioNocturno = "00:00"
+      settings.tarifas.horaFinNocturno = "06:00"
+      delete settings.tarifas.precioHora // Remover campo antiguo
+    }
+
     if (!settings.tarifas) {
       settings.tarifas = {
-        precioHora: 3.0,
+        precioHoraDiurno: 3.0,
+        precioHoraNocturno: 4.0,
         tasaCambio: 35.0,
+        horaInicioNocturno: "00:00",
+        horaFinNocturno: "06:00",
       }
     }
 
@@ -54,15 +69,23 @@ export async function PUT(req: NextRequest) {
 
     if (
       !settings.tarifas ||
-      typeof settings.tarifas.precioHora !== "number" ||
+      typeof settings.tarifas.precioHoraDiurno !== "number" ||
+      typeof settings.tarifas.precioHoraNocturno !== "number" ||
       typeof settings.tarifas.tasaCambio !== "number"
     ) {
       return NextResponse.json({ message: "Datos de tarifas inválidos" }, { status: 400 })
     }
 
     if (settings.tarifas) {
-      settings.tarifas.precioHora = Number.parseFloat(settings.tarifas.precioHora.toFixed(2))
+      settings.tarifas.precioHoraDiurno = Number.parseFloat(settings.tarifas.precioHoraDiurno.toFixed(2))
+      settings.tarifas.precioHoraNocturno = Number.parseFloat(settings.tarifas.precioHoraNocturno.toFixed(2))
       settings.tarifas.tasaCambio = Number.parseFloat(settings.tarifas.tasaCambio.toFixed(2))
+
+      // Validar formato de horas
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/
+      if (!timeRegex.test(settings.tarifas.horaInicioNocturno) || !timeRegex.test(settings.tarifas.horaFinNocturno)) {
+        return NextResponse.json({ message: "Formato de hora inválido. Use HH:mm" }, { status: 400 })
+      }
     }
 
     const result = await db.collection("company_settings").updateOne({}, { $set: settings }, { upsert: true })

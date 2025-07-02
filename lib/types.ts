@@ -60,7 +60,7 @@ export interface StaffMember {
   fechaCreacion: string
 }
 
-// Actualizar la interfaz CompanySettings para incluir los nuevos campos
+// Actualizar la interfaz CompanySettings para incluir tarifas diurnas y nocturnas
 export interface CompanySettings {
   _id?: string
   pagoMovil: {
@@ -75,8 +75,11 @@ export interface CompanySettings {
     numeroCuenta: string
   }
   tarifas: {
-    precioHora: number
+    precioHoraDiurno: number
+    precioHoraNocturno: number
     tasaCambio: number
+    horaInicioNocturno: string // Formato "HH:mm" ej: "00:00"
+    horaFinNocturno: string // Formato "HH:mm" ej: "06:00"
   }
 }
 
@@ -220,5 +223,27 @@ export function formatSafeDate(date: any): string {
     }).format(safeDate)
   } catch {
     return safeDate.toLocaleDateString()
+  }
+}
+
+// Nueva función para determinar si una hora está en horario nocturno
+export function isNightTime(date: Date, startTime: string, endTime: string): boolean {
+  const hour = date.getHours()
+  const minute = date.getMinutes()
+  const currentTime = hour * 60 + minute // Convertir a minutos desde medianoche
+
+  const [startHour, startMinute] = startTime.split(":").map(Number)
+  const [endHour, endMinute] = endTime.split(":").map(Number)
+
+  const startMinutes = startHour * 60 + startMinute
+  const endMinutes = endHour * 60 + endMinute
+
+  // Si el horario nocturno cruza medianoche (ej: 22:00 a 06:00)
+  if (startMinutes > endMinutes) {
+    return currentTime >= startMinutes || currentTime < endMinutes
+  }
+  // Si el horario nocturno no cruza medianoche (ej: 00:00 a 06:00)
+  else {
+    return currentTime >= startMinutes && currentTime < endMinutes
   }
 }

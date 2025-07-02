@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { formatSafeDate } from "./types"
+import { formatSafeDate, isNightTime } from "./types"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -39,7 +39,7 @@ export function formatDateTime(date: any): string {
   return formatSafeDate(date)
 }
 
-// Actualizar la función calculateParkingFee para manejar correctamente los decimales
+// Actualizar la función calculateParkingFee para manejar tarifas diurnas y nocturnas
 export async function calculateParkingFee(entryTime: Date | string): Promise<{ usd: number; bs: number }> {
   try {
     const entryDate = typeof entryTime === "string" ? new Date(entryTime) : entryTime
@@ -50,15 +50,21 @@ export async function calculateParkingFee(entryTime: Date | string): Promise<{ u
     }
 
     // Obtener la configuración de tarifas
-    let precioHora = 3.0 // Valor por defecto
+    let precioHoraDiurno = 3.0 // Valor por defecto
+    let precioHoraNocturno = 4.0 // Valor por defecto (más caro en la noche)
     let tasaCambio = 35.0 // Valor por defecto
+    let horaInicioNocturno = "00:00" // Valor por defecto
+    let horaFinNocturno = "06:00" // Valor por defecto
 
     try {
       const response = await fetch("/api/company-settings")
       if (response.ok) {
         const settings = await response.json()
-        precioHora = settings.tarifas?.precioHora || precioHora
+        precioHoraDiurno = settings.tarifas?.precioHoraDiurno || precioHoraDiurno
+        precioHoraNocturno = settings.tarifas?.precioHoraNocturno || precioHoraNocturno
         tasaCambio = settings.tarifas?.tasaCambio || tasaCambio
+        horaInicioNocturno = settings.tarifas?.horaInicioNocturno || horaInicioNocturno
+        horaFinNocturno = settings.tarifas?.horaFinNocturno || horaFinNocturno
       }
     } catch (error) {
       console.error("Error fetching company settings:", error)
@@ -67,6 +73,11 @@ export async function calculateParkingFee(entryTime: Date | string): Promise<{ u
     const now = new Date()
     const diffInMs = now.getTime() - entryDate.getTime()
     const diffInHours = diffInMs / (1000 * 60 * 60)
+
+    // Calcular tarifa basada en el horario actual
+    const currentHour = now.getHours()
+    const isNight = isNightTime(now, horaInicioNocturno, horaFinNocturno)
+    const precioHora = isNight ? precioHoraNocturno : precioHoraDiurno
 
     // Tarifa: precioHora por hora, mínimo precioHora/2 (30 minutos)
     const feeUSD = Math.max(diffInHours * precioHora, precioHora / 2)

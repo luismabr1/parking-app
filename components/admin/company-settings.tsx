@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Save } from "lucide-react"
+import { Save, Clock, Sun, Moon } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -31,13 +31,17 @@ export default function AdminCompanySettings() {
       numeroCuenta: "",
     },
     tarifas: {
-      precioHora: 3.0,
+      precioHoraDiurno: 3.0,
+      precioHoraNocturno: 4.0,
       tasaCambio: 35.0,
+      horaInicioNocturno: "00:00",
+      horaFinNocturno: "06:00",
     },
   })
 
   const [displayValues, setDisplayValues] = useState({
-    precioHora: "3,00",
+    precioHoraDiurno: "3,00",
+    precioHoraNocturno: "4,00",
     tasaCambio: "35,00",
   })
 
@@ -76,7 +80,8 @@ export default function AdminCompanySettings() {
       setSettings(settingsWithoutId)
 
       setDisplayValues({
-        precioHora: formatNumberForDisplay(settingsWithoutId.tarifas.precioHora),
+        precioHoraDiurno: formatNumberForDisplay(settingsWithoutId.tarifas.precioHoraDiurno),
+        precioHoraNocturno: formatNumberForDisplay(settingsWithoutId.tarifas.precioHoraNocturno),
         tasaCambio: formatNumberForDisplay(settingsWithoutId.tarifas.tasaCambio),
       })
     } catch (err) {
@@ -121,6 +126,11 @@ export default function AdminCompanySettings() {
     return regex.test(text) && (text.match(/[,.]/g) || []).length <= 1
   }
 
+  const isValidTimeInput = (text: string): boolean => {
+    const regex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/
+    return regex.test(text)
+  }
+
   const updateTarifas = (field: string, value: string) => {
     if (!isValidNumberInput(value)) {
       return
@@ -153,10 +163,25 @@ export default function AdminCompanySettings() {
     }))
   }
 
+  const updateHorario = (field: string, value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      tarifas: { ...prev.tarifas, [field]: value },
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
     setMessage("")
+
+    // Validar horarios
+    if (!isValidTimeInput(settings.tarifas.horaInicioNocturno) || !isValidTimeInput(settings.tarifas.horaFinNocturno)) {
+      setMessage("Formato de hora inválido. Use HH:mm (ej: 00:00)")
+      setAlertVariant("destructive")
+      setIsSaving(false)
+      return
+    }
 
     try {
       const settingsToSend = {
@@ -322,49 +347,126 @@ export default function AdminCompanySettings() {
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold border-b pb-2">Configuración de Tarifas</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="precioHora">Precio por Hora (USD)</Label>
-                <Input
-                  id="precioHora"
-                  type="text"
-                  value={displayValues.precioHora}
-                  onChange={(e) => updateTarifas("precioHora", e.target.value)}
-                  onBlur={(e) => handleTarifaBlur("precioHora", e.target.value)}
-                  placeholder="Ej. 3,00"
-                />
-                <p className="text-xs text-gray-500">
-                  Tarifa base por hora de estacionamiento en dólares. Use coma (,) para decimales.
-                </p>
+            <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Configuración de Tarifas
+            </h3>
+
+            {/* Tarifas Diurnas y Nocturnas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Tarifa Diurna */}
+              <div className="space-y-4 p-4 border rounded-lg bg-yellow-50">
+                <div className="flex items-center gap-2 text-lg font-medium text-yellow-800">
+                  <Sun className="h-5 w-5" />
+                  Tarifa Diurna
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="precioHoraDiurno">Precio por Hora (USD)</Label>
+                  <Input
+                    id="precioHoraDiurno"
+                    type="text"
+                    value={displayValues.precioHoraDiurno}
+                    onChange={(e) => updateTarifas("precioHoraDiurno", e.target.value)}
+                    onBlur={(e) => handleTarifaBlur("precioHoraDiurno", e.target.value)}
+                    placeholder="Ej. 3,00"
+                  />
+                  <p className="text-xs text-gray-600">Tarifa aplicada durante el día. Use coma (,) para decimales.</p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="tasaCambio">Tasa de Cambio (Bs. por USD)</Label>
-                <Input
-                  id="tasaCambio"
-                  type="text"
-                  value={displayValues.tasaCambio}
-                  onChange={(e) => updateTarifas("tasaCambio", e.target.value)}
-                  onBlur={(e) => handleTarifaBlur("tasaCambio", e.target.value)}
-                  placeholder="Ej. 35,20"
-                />
-                <p className="text-xs text-gray-500">
-                  Tasa de conversión de dólares a bolívares. Use coma (,) para decimales.
-                </p>
+
+              {/* Tarifa Nocturna */}
+              <div className="space-y-4 p-4 border rounded-lg bg-blue-50">
+                <div className="flex items-center gap-2 text-lg font-medium text-blue-800">
+                  <Moon className="h-5 w-5" />
+                  Tarifa Nocturna
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="precioHoraNocturno">Precio por Hora (USD)</Label>
+                  <Input
+                    id="precioHoraNocturno"
+                    type="text"
+                    value={displayValues.precioHoraNocturno}
+                    onChange={(e) => updateTarifas("precioHoraNocturno", e.target.value)}
+                    onBlur={(e) => handleTarifaBlur("precioHoraNocturno", e.target.value)}
+                    placeholder="Ej. 4,00"
+                  />
+                  <p className="text-xs text-gray-600">
+                    Tarifa aplicada durante la noche. Use coma (,) para decimales.
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="bg-gray-50 p-3 rounded-lg">
-              <p className="text-sm font-medium text-gray-700 mb-2">Vista previa:</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-gray-600">Precio por hora:</span>
-                  <span className="font-medium ml-2">${settings.tarifas.precioHora.toFixed(2)}</span>
+            {/* Configuración de Horario Nocturno */}
+            <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+              <h4 className="font-medium text-gray-800">Horario Nocturno</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="horaInicioNocturno">Hora de Inicio</Label>
+                  <Input
+                    id="horaInicioNocturno"
+                    type="time"
+                    value={settings.tarifas.horaInicioNocturno}
+                    onChange={(e) => updateHorario("horaInicioNocturno", e.target.value)}
+                    placeholder="00:00"
+                  />
+                  <p className="text-xs text-gray-600">Hora en que inicia la tarifa nocturna</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="horaFinNocturno">Hora de Fin</Label>
+                  <Input
+                    id="horaFinNocturno"
+                    type="time"
+                    value={settings.tarifas.horaFinNocturno}
+                    onChange={(e) => updateHorario("horaFinNocturno", e.target.value)}
+                    placeholder="06:00"
+                  />
+                  <p className="text-xs text-gray-600">Hora en que termina la tarifa nocturna</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tasa de Cambio */}
+            <div className="space-y-2">
+              <Label htmlFor="tasaCambio">Tasa de Cambio (Bs. por USD)</Label>
+              <Input
+                id="tasaCambio"
+                type="text"
+                value={displayValues.tasaCambio}
+                onChange={(e) => updateTarifas("tasaCambio", e.target.value)}
+                onBlur={(e) => handleTarifaBlur("tasaCambio", e.target.value)}
+                placeholder="Ej. 35,20"
+              />
+              <p className="text-xs text-gray-500">
+                Tasa de conversión de dólares a bolívares. Use coma (,) para decimales.
+              </p>
+            </div>
+
+            {/* Vista previa */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm font-medium text-gray-700 mb-3">Vista previa de tarifas:</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <Sun className="h-4 w-4 text-yellow-600" />
+                  <div>
+                    <span className="text-gray-600">Diurna:</span>
+                    <span className="font-medium ml-2">${settings.tarifas.precioHoraDiurno.toFixed(2)}/h</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Moon className="h-4 w-4 text-blue-600" />
+                  <div>
+                    <span className="text-gray-600">Nocturna:</span>
+                    <span className="font-medium ml-2">${settings.tarifas.precioHoraNocturno.toFixed(2)}/h</span>
+                  </div>
                 </div>
                 <div>
-                  <span className="text-gray-600">Tasa de cambio:</span>
+                  <span className="text-gray-600">Tasa:</span>
                   <span className="font-medium ml-2">{formatNumberForDisplay(settings.tarifas.tasaCambio)} Bs/USD</span>
                 </div>
+              </div>
+              <div className="mt-2 text-xs text-gray-600">
+                Horario nocturno: {settings.tarifas.horaInicioNocturno} - {settings.tarifas.horaFinNocturno}
               </div>
             </div>
           </div>
