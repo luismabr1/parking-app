@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   try {
     const client = await clientPromise
@@ -42,11 +44,13 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(req: NextRequest) {
   try {
     const client = await clientPromise
     const db = client.db("parking")
-    const settings = await request.json()
+
+    const body = await req.json()
+    const settings = body
 
     if (
       !settings.tarifas ||

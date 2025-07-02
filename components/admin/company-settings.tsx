@@ -60,7 +60,13 @@ export default function AdminCompanySettings() {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch("/api/admin/company-settings")
+      const response = await fetch("/api/admin/company-settings", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -82,7 +88,13 @@ export default function AdminCompanySettings() {
 
   const fetchBanks = async () => {
     try {
-      const response = await fetch("/api/banks")
+      const response = await fetch("/api/banks", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -155,12 +167,16 @@ export default function AdminCompanySettings() {
 
       const response = await fetch("/api/admin/company-settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify(settingsToSend),
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
       }
 
       const result = await response.json()
