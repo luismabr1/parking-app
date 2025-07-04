@@ -112,7 +112,7 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
                 </p>
                 <div className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  <span>Ingreso: {formatTime(car.fechaIngreso)}</span>
+                  <span><span>Ingreso: {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}</span></span>
                 </div>
                 <p>Ticket: {car.ticketAsociado}</p>
               </div>
