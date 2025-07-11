@@ -64,6 +64,7 @@ async function handleCarRequest(request, method) {
         nombreDueño: formData.get("nombreDueño")?.toString() || "",
         telefono: formData.get("telefono")?.toString() || "",
         ticketAsociado: formData.get("ticketAsociado")?.toString() || "",
+        nota: formData.get("nota")?.toString() || "",
       }
 
       // Manejar imágenes si existen
@@ -112,6 +113,7 @@ async function handleCarRequest(request, method) {
         nombreDueño: jsonData.nombreDueño || "",
         telefono: jsonData.telefono || "",
         ticketAsociado: jsonData.ticketAsociado || "",
+        nota: jsonData.nota || "",
       }
 
       // Si hay imágenes en el JSON (desde captura de vehículo)
@@ -145,6 +147,50 @@ async function handleCarRequest(request, method) {
       }
     }
 
+    // VALIDACIÓN CRÍTICA: Verificar disponibilidad del ticket antes de asignar
+    if (!isUpdate || (isUpdate && existingCar.ticketAsociado !== carData.ticketAsociado)) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🎫 DEBUG: Verificando disponibilidad del ticket: ${carData.ticketAsociado}`)
+      }
+
+      const ticketCheck = await db.collection("tickets").findOne({
+        codigoTicket: carData.ticketAsociado,
+      })
+
+      if (!ticketCheck) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🎫 DEBUG: Ticket ${carData.ticketAsociado} no existe`)
+        }
+        return NextResponse.json({ error: `El ticket ${carData.ticketAsociado} no existe` }, { status: 400 })
+      }
+
+      if (ticketCheck.estado !== "disponible") {
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `🎫 DEBUG: Ticket ${carData.ticketAsociado} no está disponible. Estado actual: ${ticketCheck.estado}`,
+          )
+        }
+        return NextResponse.json(
+          { error: `El ticket ${carData.ticketAsociado} ya está ocupado o no está disponible` },
+          { status: 400 },
+        )
+      }
+
+      if (ticketCheck.carInfo && ticketCheck.carInfo !== null) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🎫 DEBUG: Ticket ${carData.ticketAsociado} ya tiene información de carro asociada`)
+        }
+        return NextResponse.json(
+          { error: `El ticket ${carData.ticketAsociado} ya tiene un vehículo asignado` },
+          { status: 400 },
+        )
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🎫 DEBUG: Ticket ${carData.ticketAsociado} está disponible para asignación`)
+      }
+    }
+
     const now = new Date()
     const finalCarData = {
       ...carData,
@@ -172,10 +218,17 @@ async function handleCarRequest(request, method) {
       result = await db.collection("cars").insertOne(finalCarData)
       finalCarData._id = result.insertedId
 
-      // Actualizar ticket asociado
+      // ACTUALIZACIÓN CRÍTICA: Actualizar ticket asociado con validación adicional
       if (carData.ticketAsociado) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🎫 DEBUG: Actualizando ticket ${carData.ticketAsociado} a estado ocupado`)
+        }
+
         const updateResult = await db.collection("tickets").updateOne(
-          { codigoTicket: carData.ticketAsociado },
+          {
+            codigoTicket: carData.ticketAsociado,
+            estado: "disponible", // Solo actualizar si está disponible
+          },
           {
             $set: {
               estado: "ocupado",
@@ -190,14 +243,29 @@ async function handleCarRequest(request, method) {
                 horaIngreso: now.toISOString(),
                 fechaRegistro: now.toISOString(),
                 imagenes: finalCarData.imagenes,
+                nota: carData.nota,
               },
               horaOcupacion: now.toISOString(),
             },
           },
-          { upsert: true },
         )
+
+        if (updateResult.matchedCount === 0) {
+          // Si no se pudo actualizar el ticket, revertir la inserción del carro
+          await db.collection("cars").deleteOne({ _id: result.insertedId })
+
+          if (process.env.NODE_ENV === "development") {
+            console.log(`🎫 DEBUG: No se pudo actualizar el ticket ${carData.ticketAsociado}, revirtiendo inserción`)
+          }
+
+          return NextResponse.json(
+            { error: `El ticket ${carData.ticketAsociado} ya no está disponible` },
+            { status: 400 },
+          )
+        }
+
         if (process.env.NODE_ENV === "development") {
-          console.log("🔍 DEBUG - Updated tickets for ticket:", carData.ticketAsociado, updateResult)
+          console.log("🎫 DEBUG - Ticket actualizado exitosamente:", carData.ticketAsociado, updateResult)
         }
       }
 
@@ -227,6 +295,7 @@ async function handleCarRequest(request, method) {
               imagenes: finalCarData.imagenes || null,
               confianzaPlaca: finalCarData.imagenes?.confianzaPlaca || 0,
               confianzaVehiculo: finalCarData.imagenes?.confianzaVehiculo || 0,
+              nota: finalCarData.nota || "",
             },
           },
         ],

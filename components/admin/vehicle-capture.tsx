@@ -418,7 +418,7 @@ export default function VehicleCapture({ onVehicleDetected, onCancel }: VehicleC
 
   const capturePhoto = useCallback(() => {
     if (process.env.NODE_ENV === "development") {
-      addDebugInfo("��� Capturando foto");
+      addDebugInfo("📸 Capturando foto");
     }
 
     if (!videoRef.current || !canvasRef.current) {

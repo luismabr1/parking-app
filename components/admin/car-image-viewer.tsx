@@ -1,16 +1,16 @@
 "use client"
 
 import type React from "react"
-import { useState, useCallback, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { X, Save, Upload, Eye, EyeOff, ImageIcon } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { formatDateTime } from "@/lib/utils"
-import { ArrowLeft, Save, Upload, Camera, CheckCircle, AlertCircle } from "lucide-react"
 import ImageWithFallback from "../image-with-fallback"
 
 interface Car {
@@ -42,7 +42,7 @@ interface CarImageViewerProps {
 }
 
 const CarImageViewer: React.FC<CarImageViewerProps> = ({ car, onClose, onUpdate }) => {
-  const [editForm, setEditForm] = useState({
+  const [editData, setEditData] = useState({
     placa: car.placa,
     marca: car.marca,
     modelo: car.modelo,
@@ -51,397 +51,341 @@ const CarImageViewer: React.FC<CarImageViewerProps> = ({ car, onClose, onUpdate 
     telefono: car.telefono,
     nota: car.nota || "",
   })
-
-  const [capturedImages, setCapturedImages] = useState<{
-    plate?: string
-    vehicle?: string
+  const [newImages, setNewImages] = useState<{
+    plateImage?: File
+    vehicleImage?: File
+    platePreview?: string
+    vehiclePreview?: string
   }>({})
-
-  const [isSaving, setIsSaving] = useState(false)
-  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState("")
-  const [messageType, setMessageType] = useState<"success" | "error" | "">("")
+  const [showImages, setShowImages] = useState(true)
 
-  const plateFileInputRef = useRef<HTMLInputElement>(null)
-  const vehicleFileInputRef = useRef<HTMLInputElement>(null)
-
-  const showMessage = useCallback((msg: string, type: "success" | "error") => {
-    setMessage(msg)
-    setMessageType(type)
-    setTimeout(() => {
-      setMessage("")
-      setMessageType("")
-    }, 3000)
-  }, [])
+  const plateInputRef = useRef<HTMLInputElement>(null)
+  const vehicleInputRef = useRef<HTMLInputElement>(null)
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setEditForm((prev) => ({ ...prev, [name]: value }))
+    setEditData((prev) => ({ ...prev, [name]: value }))
   }, [])
 
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>, type: "plate" | "vehicle") => {
-    const file = event.target.files?.[0]
-    if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setCapturedImages((prev) => ({ ...prev, [type]: e.target?.result as string }))
-      }
-      reader.readAsDataURL(file)
+  const handleImageSelect = useCallback((type: "plate" | "vehicle", file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const preview = e.target?.result as string
+      setNewImages((prev) => ({
+        ...prev,
+        [`${type}Image`]: file,
+        [`${type}Preview`]: preview,
+      }))
     }
+    reader.readAsDataURL(file)
   }, [])
 
-  const uploadToCloudinary = useCallback(async (imageUrl: string, type: "plate" | "vehicle") => {
-    setIsUploadingImage(true)
-    try {
-      const response = await fetch(imageUrl)
-      const blob = await response.blob()
-      const formData = new FormData()
-      formData.append("image", blob)
-      formData.append("type", type)
-      formData.append("method", "camara_desktop")
-
-      const uploadResponse = await fetch("/api/admin/process-vehicle", {
-        method: "POST",
-        body: formData,
-      })
-
-      const result = await uploadResponse.json()
-      if (result.success) {
-        return result.imageUrl
-      } else {
-        throw new Error(result.message || "Error subiendo imagen")
+  const handlePlateImageChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        handleImageSelect("plate", file)
       }
-    } catch (err) {
-      console.error(`Error subiendo ${type}:`, err)
-      return null
-    } finally {
-      setIsUploadingImage(false)
-    }
-  }, [])
+    },
+    [handleImageSelect],
+  )
 
-  const handleSave = useCallback(async () => {
-    if (isSaving || isUploadingImage) return
+  const handleVehicleImageChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        handleImageSelect("vehicle", file)
+      }
+    },
+    [handleImageSelect],
+  )
 
-    setIsSaving(true)
-    setMessage("")
-    setMessageType("")
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      setIsSubmitting(true)
+      setMessage("")
 
-    try {
-      // Preparar datos para enviar
-      const updateData: any = { ...editForm }
+      try {
+        const formData = new FormData()
 
-      // Subir imágenes si hay nuevas capturas
-      if (capturedImages.plate) {
-        const plateUrl = await uploadToCloudinary(capturedImages.plate, "plate")
-        if (plateUrl) {
-          updateData.plateImageUrl = plateUrl
+        // Agregar datos del carro
+        Object.entries(editData).forEach(([key, value]) => {
+          formData.append(key, value)
+        })
+
+        formData.append("carId", car._id)
+
+        // Agregar imágenes existentes si no hay nuevas
+        if (car.imagenes?.plateImageUrl && !newImages.plateImage) {
+          formData.append("plateImageUrl", car.imagenes.plateImageUrl)
         }
-      }
-
-      if (capturedImages.vehicle) {
-        const vehicleUrl = await uploadToCloudinary(capturedImages.vehicle, "vehicle")
-        if (vehicleUrl) {
-          updateData.vehicleImageUrl = vehicleUrl
+        if (car.imagenes?.vehicleImageUrl && !newImages.vehicleImage) {
+          formData.append("vehicleImageUrl", car.imagenes.vehicleImageUrl)
         }
+
+        // Agregar nuevas imágenes si existen
+        if (newImages.plateImage) {
+          formData.append("plateImage", newImages.plateImage)
+        }
+        if (newImages.vehicleImage) {
+          formData.append("vehicleImage", newImages.vehicleImage)
+        }
+
+        const response = await fetch("/api/admin/cars", {
+          method: "PUT",
+          body: formData,
+        })
+
+        const result = await response.json()
+
+        if (response.ok) {
+          setMessage("✅ Información actualizada correctamente")
+          setTimeout(() => {
+            onUpdate()
+          }, 1500)
+        } else {
+          setMessage(`❌ ${result.error || "Error al actualizar"}`)
+        }
+      } catch (error) {
+        setMessage("❌ Error de conexión")
+      } finally {
+        setIsSubmitting(false)
       }
-
-      const response = await fetch(`/api/admin/cars/${car._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updateData),
-      })
-
-      if (response.ok) {
-        showMessage("✅ Vehículo actualizado correctamente", "success")
-        setTimeout(() => {
-          onUpdate()
-        }, 1000)
-      } else {
-        const errorData = await response.json()
-        showMessage(`❌ Error: ${errorData.message || "Error al actualizar"}`, "error")
-      }
-    } catch (error) {
-      console.error("Error updating car:", error)
-      showMessage("❌ Error de conexión", "error")
-    } finally {
-      setIsSaving(false)
-    }
-  }, [car._id, editForm, capturedImages, isSaving, isUploadingImage, uploadToCloudinary, showMessage, onUpdate])
-
-  const getStatusBadge = (estado: string) => {
-    switch (estado) {
-      case "estacionado":
-        return <Badge variant="secondary">Pendiente Confirmación</Badge>
-      case "estacionado_confirmado":
-        return <Badge variant="default">Confirmado</Badge>
-      case "pago_pendiente_validacion":
-        return <Badge variant="destructive">Pago Pendiente</Badge>
-      case "pagado_validado":
-        return <Badge variant="outline">Pagado - Listo para Salir</Badge>
-      default:
-        return <Badge variant="secondary">{estado}</Badge>
-    }
-  }
-
-  const isFormDisabled = isSaving || isUploadingImage
+    },
+    [editData, newImages, car._id, onUpdate],
+  )
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button onClick={onClose} variant="outline" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Volver
-              </Button>
-              <CardTitle className="flex items-center space-x-2">
-                <span>Editar Vehículo: {car.placa}</span>
-                {getStatusBadge(car.estado)}
-              </CardTitle>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center">
+              <ImageIcon className="h-5 w-5 mr-2" />
+              Editar Vehículo: {car.placa}
+            </CardTitle>
+            <div className="flex items-center space-x-2 mt-2">
+              <Badge variant={car.estado === "estacionado_confirmado" ? "default" : "secondary"}>
+                {car.estado === "estacionado_confirmado" ? "Confirmado" : "Pendiente"}
+              </Badge>
+              <span className="text-sm text-gray-500">
+                Ticket: {car.ticketAsociado} | Ingreso: {formatDateTime(car.horaIngreso)}
+              </span>
             </div>
           </div>
+          <div className="flex items-center space-x-2">
+            <Button onClick={() => setShowImages(!showImages)} variant="outline" size="sm">
+              {showImages ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+            <Button onClick={onClose} variant="ghost" size="sm">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </CardHeader>
+
         <CardContent className="space-y-6">
           {message && (
-            <Alert variant={messageType === "error" ? "destructive" : "default"}>
-              <div className="flex items-center">
-                {messageType === "success" ? (
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                )}
-                <AlertDescription>{message}</AlertDescription>
-              </div>
+            <Alert variant={message.includes("❌") ? "destructive" : "default"}>
+              <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
 
-          {/* Información básica */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2 md:col-span-2">
+          {/* Imágenes actuales y nuevas */}
+          {showImages && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Imágenes del Vehículo</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Imagen de Placa */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Imagen de Placa</Label>
+                    <Button onClick={() => plateInputRef.current?.click()} variant="outline" size="sm">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Cambiar
+                    </Button>
+                  </div>
+
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                    {newImages.platePreview ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-green-600 font-medium">Nueva imagen:</p>
+                        <ImageWithFallback
+                          src={newImages.platePreview || "/placeholder.svg"}
+                          alt="Nueva placa"
+                          className="w-full h-32 object-cover rounded"
+                          fallback="/placeholder.svg"
+                        />
+                      </div>
+                    ) : car.imagenes?.plateImageUrl ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-600">Imagen actual:</p>
+                        <ImageWithFallback
+                          src={car.imagenes.plateImageUrl || "/placeholder.svg"}
+                          alt="Placa actual"
+                          className="w-full h-32 object-cover rounded"
+                          fallback="/placeholder.svg"
+                        />
+                        {car.imagenes.confianzaPlaca && (
+                          <p className="text-xs text-gray-500">
+                            Confianza: {Math.round(car.imagenes.confianzaPlaca * 100)}%
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>No hay imagen de placa</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <input
+                    ref={plateInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePlateImageChange}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* Imagen de Vehículo */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Imagen de Vehículo</Label>
+                    <Button onClick={() => vehicleInputRef.current?.click()} variant="outline" size="sm">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Cambiar
+                    </Button>
+                  </div>
+
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                    {newImages.vehiclePreview ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-green-600 font-medium">Nueva imagen:</p>
+                        <ImageWithFallback
+                          src={newImages.vehiclePreview || "/placeholder.svg"}
+                          alt="Nuevo vehículo"
+                          className="w-full h-32 object-cover rounded"
+                          fallback="/placeholder.svg"
+                        />
+                      </div>
+                    ) : car.imagenes?.vehicleImageUrl ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-600">Imagen actual:</p>
+                        <ImageWithFallback
+                          src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                          alt="Vehículo actual"
+                          className="w-full h-32 object-cover rounded"
+                          fallback="/placeholder.svg"
+                        />
+                        {car.imagenes.confianzaVehiculo && (
+                          <p className="text-xs text-gray-500">
+                            Confianza: {Math.round(car.imagenes.confianzaVehiculo * 100)}%
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>No hay imagen de vehículo</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <input
+                    ref={vehicleInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleVehicleImageChange}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+
+              {car.imagenes && (
+                <div className="text-sm text-gray-500 space-y-1">
+                  <p>
+                    Fecha de captura:{" "}
+                    {car.imagenes.fechaCaptura ? formatDateTime(car.imagenes.fechaCaptura) : "No disponible"}
+                  </p>
+                  <p>
+                    Método:{" "}
+                    {car.imagenes.capturaMetodo === "camara_movil"
+                      ? "Cámara móvil"
+                      : car.imagenes.capturaMetodo === "camara_desktop"
+                        ? "Cámara desktop"
+                        : "Manual"}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Formulario de edición */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <h3 className="text-lg font-semibold">Información del Vehículo</h3>
+
+            <div className="space-y-2">
               <Label htmlFor="nota">Nota del Parquero</Label>
               <Textarea
                 id="nota"
                 name="nota"
-                value={editForm.nota}
+                value={editData.nota}
                 onChange={handleInputChange}
                 placeholder="Información adicional sobre el vehículo..."
                 className="resize-none"
                 rows={2}
-                disabled={isFormDisabled}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="placa">Placa</Label>
-              <Input
-                id="placa"
-                name="placa"
-                value={editForm.placa}
-                onChange={handleInputChange}
-                disabled={isFormDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="marca">Marca</Label>
-              <Input
-                id="marca"
-                name="marca"
-                value={editForm.marca}
-                onChange={handleInputChange}
-                disabled={isFormDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="modelo">Modelo</Label>
-              <Input
-                id="modelo"
-                name="modelo"
-                value={editForm.modelo}
-                onChange={handleInputChange}
-                disabled={isFormDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="color">Color</Label>
-              <Input
-                id="color"
-                name="color"
-                value={editForm.color}
-                onChange={handleInputChange}
-                disabled={isFormDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="nombreDueño">Nombre del Dueño</Label>
-              <Input
-                id="nombreDueño"
-                name="nombreDueño"
-                value={editForm.nombreDueño}
-                onChange={handleInputChange}
-                disabled={isFormDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="telefono">Teléfono</Label>
-              <Input
-                id="telefono"
-                name="telefono"
-                value={editForm.telefono}
-                onChange={handleInputChange}
-                disabled={isFormDisabled}
-              />
-            </div>
-          </div>
 
-          {/* Información del ticket */}
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="font-medium">Ticket:</span> {car.ticketAsociado}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="placa">Placa</Label>
+                <Input id="placa" name="placa" value={editData.placa} onChange={handleInputChange} required />
               </div>
-              <div>
-                <span className="font-medium">Ingreso:</span>{" "}
-                {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
+              <div className="space-y-2">
+                <Label htmlFor="marca">Marca</Label>
+                <Input id="marca" name="marca" value={editData.marca} onChange={handleInputChange} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modelo">Modelo</Label>
+                <Input id="modelo" name="modelo" value={editData.modelo} onChange={handleInputChange} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="color">Color</Label>
+                <Input id="color" name="color" value={editData.color} onChange={handleInputChange} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nombreDueño">Nombre del Dueño</Label>
+                <Input
+                  id="nombreDueño"
+                  name="nombreDueño"
+                  value={editData.nombreDueño}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="telefono">Teléfono</Label>
+                <Input id="telefono" name="telefono" value={editData.telefono} onChange={handleInputChange} required />
               </div>
             </div>
-          </div>
 
-          {/* Sección de imágenes */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Imágenes del Vehículo</h3>
-
-            {/* Imágenes existentes */}
-            {(car.imagenes?.plateImageUrl || car.imagenes?.vehicleImageUrl) && (
-              <div>
-                <Label className="text-sm font-medium text-muted-foreground">Imágenes Actuales</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                  {car.imagenes?.plateImageUrl && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Placa Actual</Label>
-                      <ImageWithFallback
-                        src={car.imagenes.plateImageUrl || "/placeholder.svg"}
-                        alt="Placa actual"
-                        className="w-full h-40 object-cover rounded border"
-                        fallback="/placeholder.svg"
-                      />
-                      {car.imagenes.confianzaPlaca && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Confianza: {Math.round(car.imagenes.confianzaPlaca * 100)}%
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {car.imagenes?.vehicleImageUrl && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Vehículo Actual</Label>
-                      <ImageWithFallback
-                        src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
-                        alt="Vehículo actual"
-                        className="w-full h-40 object-cover rounded border"
-                        fallback="/placeholder.svg"
-                      />
-                      {car.imagenes.confianzaVehiculo && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Confianza: {Math.round(car.imagenes.confianzaVehiculo * 100)}%
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Nuevas imágenes capturadas */}
-            {(capturedImages.plate || capturedImages.vehicle) && (
-              <div>
-                <Label className="text-sm font-medium text-green-600">Nuevas Imágenes</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                  {capturedImages.plate && (
-                    <div>
-                      <Label className="text-xs text-green-600">Nueva Placa</Label>
-                      <ImageWithFallback
-                        src={capturedImages.plate || "/placeholder.svg"}
-                        alt="Nueva placa"
-                        className="w-full h-40 object-cover rounded border border-green-500"
-                        fallback="/placeholder.svg"
-                      />
-                    </div>
-                  )}
-                  {capturedImages.vehicle && (
-                    <div>
-                      <Label className="text-xs text-green-600">Nuevo Vehículo</Label>
-                      <ImageWithFallback
-                        src={capturedImages.vehicle || "/placeholder.svg"}
-                        alt="Nuevo vehículo"
-                        className="w-full h-40 object-cover rounded border border-green-500"
-                        fallback="/placeholder.svg"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Botones para subir nuevas imágenes */}
-            <div>
-              <Label className="text-sm font-medium">Subir Nuevas Imágenes</Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                <div>
-                  <input
-                    ref={plateFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, "plate")}
-                    className="hidden"
-                    disabled={isFormDisabled}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => plateFileInputRef.current?.click()}
-                    className="w-full"
-                    disabled={isFormDisabled}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    {capturedImages.plate ? "Cambiar Imagen de Placa" : "Subir Imagen de Placa"}
-                  </Button>
-                </div>
-                <div>
-                  <input
-                    ref={vehicleFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, "vehicle")}
-                    className="hidden"
-                    disabled={isFormDisabled}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => vehicleFileInputRef.current?.click()}
-                    className="w-full"
-                    disabled={isFormDisabled}
-                  >
-                    <Camera className="h-4 w-4 mr-2" />
-                    {capturedImages.vehicle ? "Cambiar Imagen de Vehículo" : "Subir Imagen de Vehículo"}
-                  </Button>
-                </div>
-              </div>
+            <div className="flex space-x-4 pt-4">
+              <Button type="submit" disabled={isSubmitting} className="flex-1">
+                <Save className="h-4 w-4 mr-2" />
+                {isSubmitting ? "Guardando..." : "Guardar Cambios"}
+              </Button>
+              <Button type="button" onClick={onClose} variant="outline" className="flex-1 bg-transparent">
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
             </div>
-          </div>
-
-          {/* Botón de guardar */}
-          <div className="flex justify-end space-x-2 pt-4 border-t">
-            <Button onClick={onClose} variant="outline" disabled={isFormDisabled}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSave} disabled={isFormDisabled}>
-              <Save className="h-4 w-4 mr-2" />
-              {isSaving ? "Guardando..." : isUploadingImage ? "Subiendo..." : "Guardar Cambios"}
-            </Button>
-          </div>
+          </form>
         </CardContent>
       </Card>
     </div>
