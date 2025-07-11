@@ -19,11 +19,11 @@
     "@radix-ui/react-toast": "^1.1.5",
     "@types/qrcode": "^1.5.5",
     "class-variance-authority": "^0.7.0",
-    "clsx": "^2.0.0",
     "cloudinary": "^2.6.1",
-    "lucide-react": "^0.294.0",
+    "clsx": "^2.0.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.3.1",
+    "lucide-react": "^0.294.0",
     "mongodb": "^6.3.0",
     "next": "^14.0.4",
     "qr-scanner": "^1.4.2",
@@ -32,7 +32,8 @@
     "react-dom": "^18.2.0",
     "tailwind-merge": "^2.1.0",
     "tailwindcss-animate": "^1.0.7",
-    "tesseract.js": "^6.0.1"
+    "tesseract.js": "^6.0.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",
