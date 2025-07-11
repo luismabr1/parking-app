@@ -1,42 +1,41 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { RefreshCw, ChevronDown, ChevronUp, Smartphone } from "lucide-react";
-import PendingPayments from "./pending-payments";
-import StaffManagement from "./staff-management";
-import CompanySettings from "./company-settings";
-import TicketManagement from "./ticket-management";
-import CarRegistration from "./car-registration";
-import CarHistory from "./car-history";
-import VehicleExit from "./vehicle-exit";
-import QRGenerator from "./qr-generator";
-import ParkingConfirmation from "./parking-confirmation";
-import { Badge } from "@/components/ui/badge";
-import { useMobileDetection } from "@/hooks/use-mobile-detection";
-import React, { memo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { RefreshCw, ChevronDown, ChevronUp, Smartphone } from "lucide-react"
+import PendingPayments from "./pending-payments"
+import StaffManagement from "./staff-management"
+import CompanySettings from "./company-settings"
+import TicketManagement from "./ticket-management"
+import CarRegistration from "./car-registration"
+import CarHistory from "./car-history"
+import VehicleExit from "./vehicle-exit"
+import QRGenerator from "./qr-generator"
+import ParkingConfirmation from "./parking-confirmation"
+import { Badge } from "@/components/ui/badge"
+import { useMobileDetection } from "@/hooks/use-mobile-detection"
+import React from "react"
 
-// Definir interfaces fuera del componente para evitar recreación
 interface DashboardStats {
-  pendingPayments: number;
-  totalStaff: number;
-  todayPayments: number;
-  totalTickets: number;
-  availableTickets: number;
-  carsParked: number;
-  paidTickets: number;
-  pendingConfirmations: number;
+  pendingPayments: number
+  totalStaff: number
+  todayPayments: number
+  totalTickets: number
+  availableTickets: number
+  carsParked: number
+  paidTickets: number
+  pendingConfirmations: number
 }
 
-const areStatsEqual = (newStats: DashboardStats, oldStats: DashboardStats) =>
-  Object.keys(newStats).every(
-    (key) => newStats[key as keyof DashboardStats] === oldStats[key as keyof DashboardStats]
-  );
+const areStatsEqual = (newStats: DashboardStats, oldStats: DashboardStats) => {
+  return Object.keys(newStats).every(
+    (key) => newStats[key as keyof DashboardStats] === oldStats[key as keyof DashboardStats],
+  )
+}
 
-// Memoizar el componente para evitar re-renderizados innecesarios
-const AdminDashboard = memo(function AdminDashboard() {
+function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     pendingPayments: 0,
     totalStaff: 0,
@@ -46,142 +45,148 @@ const AdminDashboard = memo(function AdminDashboard() {
     carsParked: 0,
     paidTickets: 0,
     pendingConfirmations: 0,
-  });
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [showStats, setShowStats] = useState(false);
-  const isMobile = useMobileDetection();
-  const [activeTab, setActiveTab] = useState(isMobile ? "cars" : "cars");
-  const prevStatsRef = useRef(stats);
-  const prevMobileRef = useRef(isMobile);
-  const renderCountRef = useRef(0);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  })
+  const [isLoadingStats, setIsLoadingStats] = useState(true)
+  const [showStats, setShowStats] = useState(false)
+  const isMobile = useMobileDetection()
+  const [activeTab, setActiveTab] = useState(isMobile ? "cars" : "cars") // Change default to "cars"
+  const prevStatsRef = useRef(stats)
+  const prevMobileRef = useRef(isMobile)
+  const renderCountRef = useRef(0)
 
-  // Log renders solo en desarrollo
+  // Log renders
+  renderCountRef.current += 1
+  if (process.env.NODE_ENV === "development") {
+    console.log(`🔍 DEBUG: Renderizando AdminDashboard #${renderCountRef.current}`)
+  }
+
+  // Log state changes
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      renderCountRef.current += 1;
-      console.log(`🔍 DEBUG: Renderizando AdminDashboard #${renderCountRef.current}`);
+      console.log(
+        `🔍 DEBUG: Estado actualizado en AdminDashboard - activeTab: ${activeTab}, showStats: ${showStats}, isLoadingStats: ${isLoadingStats}, stats.pendingPayments: ${stats.pendingPayments}`,
+      )
     }
-  });
+  }, [activeTab, showStats, isLoadingStats, stats])
 
-  // Configurar SSE de forma lazy y memoizada
-  const setupSSE = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const eventSource = new EventSource("/api/admin/stats-stream");
-    eventSourceRef.current = eventSource;
-
-    eventSource.onmessage = (event) => {
-      const newStats = JSON.parse(event.data);
-      if (process.env.NODE_ENV === "development") {
-        console.log("🔍 DEBUG: Nueva estadística recibida:", newStats);
-      }
-      if (!areStatsEqual(newStats, prevStatsRef.current)) {
-        setStats(newStats);
-        prevStatsRef.current = newStats;
-      }
-    };
-
-    eventSource.onerror = (error) => {
-      console.error("🔍 DEBUG: Error en SSE:", error);
-      eventSource.close();
-    };
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []);
-
-  // Cargar SSE solo una vez y manejar limpieza
+  // Log isMobile changes
   useEffect(() => {
-    setIsLoadingStats(true);
-    const cleanup = setupSSE();
-    setIsLoadingStats(false);
-    return cleanup;
-  }, [setupSSE]);
+    if (process.env.NODE_ENV === "development") {
+      console.log(`🔍 DEBUG: isMobile cambió: ${isMobile}`)
+    }
+  }, [isMobile])
 
-  // Sincronizar activeTab con isMobile solo si cambia
+  const fetchStats = useCallback(async () => {
+    try {
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 DEBUG: Iniciando fetchStats")
+      }
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/admin/stats?t=${timestamp}`, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+        next: { revalidate: 0 },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setIsLoadingStats(false)
+        if (!areStatsEqual(data, prevStatsRef.current)) {
+          setStats(data)
+          prevStatsRef.current = data
+          if (process.env.NODE_ENV === "development") {
+            console.log("🔍 DEBUG: Stats actualizadas", data)
+          }
+        } else {
+          if (process.env.NODE_ENV === "development") {
+            console.log("🔍 DEBUG: Omitiendo actualización de stats, datos idénticos")
+          }
+        }
+      } else {
+        throw new Error("Error fetching stats")
+      }
+    } catch (error) {
+      console.error("Error fetching stats:", error)
+      setIsLoadingStats(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchStats()
+    const interval = setInterval(fetchStats, 30000)
+    return () => clearInterval(interval)
+  }, [fetchStats])
+
+  // Synchronize activeTab with isMobile, only if isMobile changes
   useEffect(() => {
     if (prevMobileRef.current !== isMobile) {
-      setActiveTab(isMobile ? "cars" : "cars");
-      prevMobileRef.current = isMobile;
+      setActiveTab(isMobile ? "cars" : "cars")
+      if (process.env.NODE_ENV === "development") {
+        console.log(`🔍 DEBUG: Actualizando activeTab a ${isMobile ? "cars" : "cars"} por cambio en isMobile`)
+      }
+      prevMobileRef.current = isMobile
     }
-  }, [isMobile]);
+  }, [isMobile])
 
-  // Botón de refresco manual
-  const handleRefresh = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    setupSSE();
-  }, [setupSSE]);
-
-  // Establecer altura fija para evitar layout shifts
-  const cardHeight = "h-32";
-
- if (isMobile) {
+  // Render mobile view
+  if (isMobile) {
     return (
-      <div className="space-y-4" style={{ minHeight: "100vh" }}>
+      <div className="space-y-4">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl font-bold text-gray-800">Panel Admin</h1>
             <p className="text-sm text-gray-600">Gestión de estacionamiento</p>
           </div>
-          <Button onClick={handleRefresh} variant="outline" size="sm" disabled={isLoadingStats}>
+          <Button onClick={fetchStats} variant="outline" size="sm" disabled={isLoadingStats}>
             <RefreshCw className={`h-4 w-4 ${isLoadingStats ? "animate-spin" : ""}`} />
           </Button>
         </div>
 
-        <Card className="border border-gray-200" style={{ height: cardHeight }}>
-          <CardHeader
-            className="py-3 px-4 cursor-pointer"
-            onClick={() => setShowStats(!showStats)}
-            style={{ minHeight: "48px" }}
-          >
+        <Card className="border border-gray-200">
+          <CardHeader className="py-2 px-4 cursor-pointer" onClick={() => setShowStats(!showStats)}>
             <div className="flex justify-between items-center">
-              <CardTitle className="text-md font-medium"> {/* Aumentado a text-md */}
+              <CardTitle className="text-sm font-medium">
                 Estadísticas{" "}
-                <Badge variant="outline" className="ml-2 text-sm">
+                <Badge variant="outline" className="ml-2">
                   {stats.availableTickets} libres
                 </Badge>
                 {stats.pendingConfirmations > 0 && (
-                  <Badge variant="destructive" className="ml-2 text-sm">
+                  <Badge variant="destructive" className="ml-2">
                     {stats.pendingConfirmations} pendientes
                   </Badge>
                 )}
               </CardTitle>
               {showStats ? (
-                <ChevronUp className="h-5 w-5 text-gray-500" />
+                <ChevronUp className="h-4 w-4 text-gray-500" />
               ) : (
-                <ChevronDown className="h-5 w-5 text-gray-500" />
+                <ChevronDown className="h-4 w-4 text-gray-500" />
               )}
             </div>
           </CardHeader>
           {showStats && (
-            <CardContent className="py-3 px-4 grid grid-cols-2 gap-3">
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded" style={{ minHeight: "48px" }}>
-                <span className="text-sm">Espacios libres:</span>
-                <Badge variant="outline" className="text-sm">{stats.availableTickets}</Badge>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded" style={{ minHeight: "48px" }}>
-                <span className="text-sm">Estacionados:</span>
-                <Badge variant="secondary" className="text-sm">{stats.carsParked}</Badge>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded" style={{ minHeight: "48px" }}>
-                <span className="text-sm">Confirmaciones:</span>
-                <Badge variant={stats.pendingConfirmations > 0 ? "destructive" : "outline"} className="text-sm">
-                  {stats.pendingConfirmations}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded" style={{ minHeight: "48px" }}>
-                <span className="text-sm">Pagos pendientes:</span>
-                <Badge variant={stats.pendingPayments > 0 ? "destructive" : "outline"} className="text-sm">
-                  {stats.pendingPayments}
-                </Badge>
+            <CardContent className="py-2 px-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span className="text-xs">Espacios libres:</span>
+                  <Badge variant="outline">{stats.availableTickets}</Badge>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span className="text-xs">Estacionados:</span>
+                  <Badge variant="secondary">{stats.carsParked}</Badge>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span className="text-xs">Confirmaciones:</span>
+                  <Badge variant={stats.pendingConfirmations > 0 ? "destructive" : "outline"}>
+                    {stats.pendingConfirmations}
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span className="text-xs">Pagos pendientes:</span>
+                  <Badge variant={stats.pendingPayments > 0 ? "destructive" : "outline"}>{stats.pendingPayments}</Badge>
+                </div>
               </div>
             </CardContent>
           )}
@@ -189,11 +194,11 @@ const AdminDashboard = memo(function AdminDashboard() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid grid-cols-4 h-auto">
-            <TabsTrigger value="cars" className="py-2 text-sm relative">
-              <Smartphone className="h-4 w-4 mr-1" />
+            <TabsTrigger value="cars" className="py-2 text-xs relative">
+              <Smartphone className="h-3 w-3 mr-1" />
               Registro
             </TabsTrigger>
-            <TabsTrigger value="confirmations" className="py-2 text-sm relative">
+            <TabsTrigger value="confirmations" className="py-2 text-xs relative">
               Confirmar
               {stats.pendingConfirmations > 0 && (
                 <Badge
@@ -204,7 +209,7 @@ const AdminDashboard = memo(function AdminDashboard() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="payments" className="py-2 text-sm relative">
+            <TabsTrigger value="payments" className="py-2 text-xs relative">
               Pagos
               {stats.pendingPayments > 0 && (
                 <Badge
@@ -215,7 +220,7 @@ const AdminDashboard = memo(function AdminDashboard() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="exit" className="py-2 text-sm relative">
+            <TabsTrigger value="exit" className="py-2 text-xs relative">
               Salida
               {stats.paidTickets > 0 && (
                 <Badge
@@ -235,51 +240,117 @@ const AdminDashboard = memo(function AdminDashboard() {
             <ParkingConfirmation />
           </TabsContent>
           <TabsContent value="payments" className="m-0">
-            <PendingPayments onStatsUpdate={handleRefresh} />
+            <PendingPayments onStatsUpdate={fetchStats} />
           </TabsContent>
           <TabsContent value="exit" className="m-0">
             <VehicleExit />
           </TabsContent>
         </Tabs>
       </div>
-    );
+    )
   }
 
+  // Desktop view
   return (
-    <div className="space-y-6" style={{ minHeight: "100vh" }}>
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Panel de Administración</h1>
           <p className="text-lg text-gray-600">Gestión completa del sistema de estacionamiento</p>
         </div>
-        <Button onClick={handleRefresh} variant="outline" disabled={isLoadingStats}>
+        <Button onClick={fetchStats} variant="outline" disabled={isLoadingStats}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingStats ? "animate-spin" : ""}`} />
           Actualizar
         </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        {[
-          { title: "Pagos Pendientes", value: stats.pendingPayments, variant: stats.pendingPayments > 0 ? "destructive" : "secondary", desc: stats.pendingPayments === 0 ? "Todos procesados" : "Requieren validación" },
-          { title: "Confirmaciones", value: stats.pendingConfirmations, variant: stats.pendingConfirmations > 0 ? "destructive" : "secondary", desc: stats.pendingConfirmations === 0 ? "Todos confirmados" : "Pendientes" },
-          { title: "Personal Activo", value: stats.totalStaff, variant: "secondary", desc: "Usuarios registrados" },
-          { title: "Pagos Hoy", value: stats.todayPayments, variant: "default", desc: "Procesados hoy" },
-          { title: "Total Espacios", value: stats.totalTickets, variant: "outline", desc: "Espacios totales" },
-          { title: "Espacios Libres", value: stats.availableTickets, variant: "secondary", desc: "Disponibles" },
-          { title: "Carros Estacionados", value: stats.carsParked, variant: "destructive", desc: "Actualmente" },
-          { title: "Listos para Salir", value: stats.paidTickets, variant: stats.paidTickets > 0 ? "default" : "secondary", desc: "Pagados" },
-        ].map((stat, index) => (
-          <Card key={index} className={cardHeight} style={{ minHeight: "150px" }}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <Badge variant={stat.variant}>{stat.value}</Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">{stat.desc}</p>
-            </CardContent>
-          </Card>
-        ))}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
+            <Badge variant={stats.pendingPayments > 0 ? "destructive" : "secondary"}>{stats.pendingPayments}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.pendingPayments}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.pendingPayments === 0 ? "Todos procesados" : "Requieren validación"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Confirmaciones</CardTitle>
+            <Badge variant={stats.pendingConfirmations > 0 ? "destructive" : "secondary"}>
+              {stats.pendingConfirmations}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.pendingConfirmations}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.pendingConfirmations === 0 ? "Todos confirmados" : "Pendientes"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Personal Activo</CardTitle>
+            <Badge variant="secondary">{stats.totalStaff}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalStaff}</div>
+            <p className="text-xs text-muted-foreground">Usuarios registrados</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pagos Hoy</CardTitle>
+            <Badge>{stats.todayPayments}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.todayPayments}</div>
+            <p className="text-xs text-muted-foreground">Procesados hoy</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Espacios</CardTitle>
+            <Badge variant="outline">{stats.totalTickets}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalTickets}</div>
+            <p className="text-xs text-muted-foreground">Espacios totales</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Espacios Libres</CardTitle>
+            <Badge variant="secondary">{stats.availableTickets}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.availableTickets}</div>
+            <p className="text-xs text-muted-foreground">Disponibles</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Carros Estacionados</CardTitle>
+            <Badge variant="destructive">{stats.carsParked}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.carsParked}</div>
+            <p className="text-xs text-muted-foreground">Actualmente</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Listos para Salir</CardTitle>
+            <Badge variant={stats.paidTickets > 0 ? "default" : "secondary"}>{stats.paidTickets}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.paidTickets}</div>
+            <p className="text-xs text-muted-foreground">Pagados</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -316,7 +387,7 @@ const AdminDashboard = memo(function AdminDashboard() {
           <ParkingConfirmation />
         </TabsContent>
         <TabsContent value="payments">
-          <PendingPayments onStatsUpdate={handleRefresh} />
+          <PendingPayments onStatsUpdate={fetchStats} />
         </TabsContent>
         <TabsContent value="tickets">
           <TicketManagement />
@@ -334,14 +405,14 @@ const AdminDashboard = memo(function AdminDashboard() {
           <CarHistory />
         </TabsContent>
         <TabsContent value="staff">
-          <StaffManagement onStatsUpdate={handleRefresh} />
+          <StaffManagement onStatsUpdate={fetchStats} />
         </TabsContent>
         <TabsContent value="settings">
           <CompanySettings />
         </TabsContent>
       </Tabs>
     </div>
-  );
-});
+  )
+}
 
-export default AdminDashboard;
+export default React.memo(AdminDashboard)
