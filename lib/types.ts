@@ -96,10 +96,11 @@ export interface Car {
   horaIngreso: string
   estado: "estacionado_confirmado" | "pagado" | "salido"
   fechaRegistro: string
+  nota?: string // Nuevo campo para notas adicionales
   // Nuevos campos para imágenes
   imagenes?: {
-    placaUrl?: string
-    vehiculoUrl?: string
+    plateImageUrl?: string
+    vehicleImageUrl?: string
     fechaCaptura?: string
     capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
     confianzaPlaca?: number
@@ -123,9 +124,10 @@ export interface CarHistoryItem {
   pagoId?: string | null
   estado: "activo" | "pagado" | "finalizado"
   fechaRegistro: string
+  nota?: string // Nuevo campo para notas adicionales
   imagenes?: {
-    placaUrl?: string
-    vehiculoUrl?: string
+    plateImageUrl?: string
+    vehicleImageUrl?: string
     fechaCaptura?: string
     capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
   }
@@ -153,6 +155,7 @@ export interface CarFormData {
   nombreDueño: string
   telefono: string
   ticketAsociado: string
+  nota?: string // Nuevo campo para notas adicionales
 }
 
 export interface DashboardStats {
@@ -179,8 +182,8 @@ export interface Pagination {
 
 // Nuevos tipos para imágenes de vehículos
 export interface VehicleImages {
-  placaUrl: string
-  vehiculoUrl: string
+  plateImageUrl: string
+  vehicleImageUrl: string
   fechaCaptura: string
   capturaMetodo: "manual" | "camara_movil" | "camara_desktop"
   confianzaPlaca?: number

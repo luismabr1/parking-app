@@ -1,61 +1,50 @@
-"use client";
+"use client"
 
-import type React from "react";
-import { useState, useCallback, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  ArrowLeft,
-  Edit,
-  Save,
-  X,
-  Camera,
-  ImageIcon,
-  Eye,
-  EyeOff,
-  Info,
-  RefreshCw,
-  Smartphone,
-} from "lucide-react";
-import { formatDateTime } from "@/lib/utils";
-import ImageWithFallback from "../image-with-fallback";
+import type React from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowLeft, Edit, Save, X, Camera, ImageIcon, Eye, EyeOff, Info, RefreshCw, Smartphone } from "lucide-react"
+import { formatDateTime } from "@/lib/utils"
+import ImageWithFallback from "../image-with-fallback"
 
 interface Car {
-  _id: string;
-  placa: string;
-  marca: string;
-  modelo: string;
-  color: string;
-  nombreDueño: string;
-  telefono: string;
-  ticketAsociado: string;
-  horaIngreso: string;
-  estado: string;
+  _id: string
+  placa: string
+  marca: string
+  modelo: string
+  color: string
+  nombreDueño: string
+  telefono: string
+  ticketAsociado: string
+  horaIngreso: string
+  estado: string
+  nota?: string
   imagenes?: {
-    plateImageUrl?: string;
-    vehicleImageUrl?: string;
-    fechaCaptura?: string;
-    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop";
-    confianzaPlaca?: number;
-    confianzaVehiculo?: number;
-  };
+    plateImageUrl?: string
+    vehicleImageUrl?: string
+    fechaCaptura?: string
+    capturaMetodo?: "manual" | "camara_movil" | "camara_desktop"
+    confianzaPlaca?: number
+    confianzaVehiculo?: number
+  }
 }
 
 interface CarImageViewerProps {
-  car: Car;
-  onClose: () => void;
-  onUpdate: () => void;
+  car: Car
+  onClose: () => void
+  onUpdate: () => void
 }
 
 export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewerProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [showDetails, setShowDetails] = useState(false);
+  const [isEditing, setIsEditing] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [message, setMessage] = useState("")
+  const [showDetails, setShowDetails] = useState(false)
   const [editData, setEditData] = useState({
     placa: car.placa,
     marca: car.marca,
@@ -63,268 +52,288 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
     color: car.color,
     nombreDueño: car.nombreDueño,
     telefono: car.telefono,
-    ticketAsociado: car.ticketAsociado, // Added for editing
-  });
+    ticketAsociado: car.ticketAsociado,
+    nota: car.nota || "",
+  })
   const [capturedImages, setCapturedImages] = useState<{
-    plate?: string;
-    vehicle?: string;
-  }>({});
+    plate?: string
+    vehicle?: string
+  }>({})
   const [uploadedUrls, setUploadedUrls] = useState<{
-    plateUrl?: string;
-    vehicleUrl?: string;
+    plateUrl?: string
+    vehicleUrl?: string
   }>({
     plateUrl: car.imagenes?.plateImageUrl,
     vehicleUrl: car.imagenes?.vehicleImageUrl,
-  });
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [videoReady, setVideoReady] = useState(false);
-  const [streamActive, setStreamActive] = useState(false);
-  const [useFileInput, setUseFileInput] = useState(false);
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
-  const [retryCount, setRetryCount] = useState(0);
-  const [isMobile, setIsMobile] = useState(false);
+  })
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [videoReady, setVideoReady] = useState(false)
+  const [streamActive, setStreamActive] = useState(false)
+  const [useFileInput, setUseFileInput] = useState(false)
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("")
+  const [retryCount, setRetryCount] = useState(0)
+  const [isMobile, setIsMobile] = useState(false)
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef2 = useRef<HTMLInputElement>(null); // For vehicle image
-  const streamRef = useRef<MediaStream | null>(null);
-  const mountedRef = useRef(true);
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef2 = useRef<HTMLInputElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const mountedRef = useRef(true)
 
   // Detect device type
   useEffect(() => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    const isMobileDevice = /iphone|ipad|ipod|android|blackberry|windows phone|mobile/i.test(userAgent) || window.innerWidth <= 768;
-    setIsMobile(isMobileDevice);
-    setUseFileInput(!isMobileDevice); // Force file input on desktop
-  }, []);
+    const userAgent = navigator.userAgent.toLowerCase()
+    const isMobileDevice =
+      /iphone|ipad|ipod|android|blackberry|windows phone|mobile/i.test(userAgent) || window.innerWidth <= 768
+    setIsMobile(isMobileDevice)
+    setUseFileInput(!isMobileDevice)
+  }, [])
 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setEditData((prev) => ({ ...prev, [name]: value }));
-  };
+    const { name, value } = e.target
+    setEditData((prev) => ({ ...prev, [name]: value }))
+  }
 
   // Start camera
-  const startCamera = useCallback(async (type: "plate" | "vehicle") => {
-    if (!isMobile || !mountedRef.current) return;
+  const startCamera = useCallback(
+    async (type: "plate" | "vehicle") => {
+      if (!isMobile || !mountedRef.current) return
 
-    try {
-      setMessage("");
-      setVideoReady(false);
-      setStreamActive(false);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
+      try {
+        setMessage("")
+        setVideoReady(false)
+        setStreamActive(false)
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop())
+          streamRef.current = null
+        }
+
+        const constraints = {
+          video: selectedCameraId
+            ? { deviceId: selectedCameraId, width: { ideal: 640 }, height: { ideal: 480 } }
+            : { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
+        setIsCapturing(true)
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          streamRef.current = stream
+          videoRef.current.play()
+          setVideoReady(true)
+          setStreamActive(true)
+        }
+      } catch (err) {
+        setMessage("Error accediendo a la cámara. Intente usar un archivo.")
+        setRetryCount((prev) => prev + 1)
+        if (retryCount >= 2) setUseFileInput(true)
+        setIsCapturing(false)
       }
-
-      const constraints = {
-        video: selectedCameraId
-          ? { deviceId: selectedCameraId, width: { ideal: 640 }, height: { ideal: 480 } }
-          : { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      setIsCapturing(true);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        videoRef.current.play();
-        setVideoReady(true);
-        setStreamActive(true);
-      }
-    } catch (err) {
-      setMessage("Error accediendo a la cámara. Intente usar un archivo.");
-      setRetryCount((prev) => prev + 1);
-      if (retryCount >= 2) setUseFileInput(true);
-      setIsCapturing(false);
-    }
-  }, [isMobile, retryCount, selectedCameraId]);
+    },
+    [isMobile, retryCount, selectedCameraId],
+  )
 
   // Stop camera
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
     }
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setIsCapturing(false);
-    setVideoReady(false);
-    setStreamActive(false);
-  }, []);
+    if (videoRef.current) videoRef.current.srcObject = null
+    setIsCapturing(false)
+    setVideoReady(false)
+    setStreamActive(false)
+  }, [])
 
   // Handle file upload
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>, type: "plate" | "vehicle") => {
-    const file = event.target.files?.[0];
+    const file = event.target.files?.[0]
     if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader();
+      const reader = new FileReader()
       reader.onload = (e) => {
-        setCapturedImages((prev) => ({ ...prev, [type]: e.target?.result as string }));
-      };
-      reader.readAsDataURL(file);
+        setCapturedImages((prev) => ({ ...prev, [type]: e.target?.result as string }))
+      }
+      reader.readAsDataURL(file)
     } else {
-      setMessage("Por favor seleccione un archivo de imagen válido.");
+      setMessage("Por favor seleccione un archivo de imagen válido.")
     }
-  }, []);
+  }, [])
 
   // Capture photo
-  const capturePhoto = useCallback((type: "plate" | "vehicle") => {
-    if (!isMobile || !videoRef.current || !canvasRef.current) {
-      setMessage("Error: captura solo disponible en móviles");
-      return;
-    }
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
-
-    if (!context || !videoReady || !streamActive) {
-      setMessage("Error: video no está listo para captura");
-      return;
-    }
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const imageUrl = URL.createObjectURL(blob);
-        setCapturedImages((prev) => ({ ...prev, [type]: imageUrl }));
-        stopCamera();
+  const capturePhoto = useCallback(
+    (type: "plate" | "vehicle") => {
+      if (!isMobile || !videoRef.current || !canvasRef.current) {
+        setMessage("Error: captura solo disponible en móviles")
+        return
       }
-    }, "image/jpeg", 0.9);
-  }, [isMobile, stopCamera, videoReady, streamActive]);
+
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      const context = canvas.getContext("2d")
+
+      if (!context || !videoReady || !streamActive) {
+        setMessage("Error: video no está listo para captura")
+        return
+      }
+
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const imageUrl = URL.createObjectURL(blob)
+            setCapturedImages((prev) => ({ ...prev, [type]: imageUrl }))
+            stopCamera()
+          }
+        },
+        "image/jpeg",
+        0.9,
+      )
+    },
+    [isMobile, stopCamera, videoReady, streamActive],
+  )
 
   // Upload to Cloudinary
   const uploadToCloudinary = useCallback(async (imageUrl: string, type: "plate" | "vehicle") => {
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const formData = new FormData();
-      formData.append("image", blob);
-      formData.append("type", type);
-      formData.append("method", "auto");
+      const response = await fetch(imageUrl)
+      const blob = await response.blob()
+      const formData = new FormData()
+      formData.append("image", blob)
+      formData.append("type", type)
+      formData.append("method", "auto")
 
       const uploadResponse = await fetch("/api/admin/process-vehicle", {
         method: "POST",
         body: formData,
-      });
+      })
 
-      const result = await uploadResponse.json();
+      const result = await uploadResponse.json()
       if (result.success) {
-        return result.imageUrl;
+        return result.imageUrl
       } else {
-        throw new Error(result.message || "Error subiendo imagen");
+        throw new Error(result.message || "Error subiendo imagen")
       }
     } catch (err) {
-      setMessage(`Error subiendo ${type}: ${err}`);
-      return null;
+      setMessage(`Error subiendo ${type}: ${err}`)
+      return null
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  }, []);
+  }, [])
 
   // Process image
-  const processImage = useCallback(async (type: "plate" | "vehicle") => {
-    if (!capturedImages[type]) return;
+  const processImage = useCallback(
+    async (type: "plate" | "vehicle") => {
+      if (!capturedImages[type]) return
 
-    const imageUrl = await uploadToCloudinary(capturedImages[type], type);
-    if (imageUrl) {
-      setUploadedUrls((prev) => ({
-        ...prev,
-        [type === "plate" ? "plateUrl" : "vehicleUrl"]: imageUrl,
-      }));
-    }
-  }, [capturedImages, uploadToCloudinary]);
+      const imageUrl = await uploadToCloudinary(capturedImages[type], type)
+      if (imageUrl) {
+        setUploadedUrls((prev) => ({
+          ...prev,
+          [type === "plate" ? "plateUrl" : "vehicleUrl"]: imageUrl,
+        }))
+      }
+    },
+    [capturedImages, uploadToCloudinary],
+  )
 
   // Retake photo
-  const retakePhoto = useCallback((type: "plate" | "vehicle") => {
-    setCapturedImages((prev) => ({ ...prev, [type]: undefined }));
-    if (isMobile && !useFileInput) startCamera(type);
-  }, [isMobile, startCamera, useFileInput]);
+  const retakePhoto = useCallback(
+    (type: "plate" | "vehicle") => {
+      setCapturedImages((prev) => ({ ...prev, [type]: undefined }))
+      if (isMobile && !useFileInput) startCamera(type)
+    },
+    [isMobile, startCamera, useFileInput],
+  )
 
   // Detect cameras
   useEffect(() => {
     if (isMobile) {
       const detectCameras = async () => {
         try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoDevices = devices.filter((device) => device.kind === "videoinput");
-          setAvailableCameras(videoDevices);
-          const backCamera = videoDevices.find((d) => d.label.toLowerCase().includes("back"));
-          setSelectedCameraId(backCamera?.deviceId || videoDevices[0]?.deviceId || "");
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const videoDevices = devices.filter((device) => device.kind === "videoinput")
+          setAvailableCameras(videoDevices)
+          const backCamera = videoDevices.find((d) => d.label.toLowerCase().includes("back"))
+          setSelectedCameraId(backCamera?.deviceId || videoDevices[0]?.deviceId || "")
         } catch (err) {
-          setUseFileInput(true);
+          setUseFileInput(true)
         }
-      };
-      detectCameras();
+      }
+      detectCameras()
     }
-  }, [isMobile]);
+  }, [isMobile])
 
   // Cleanup
   useEffect(() => {
-    mountedRef.current = true;
+    mountedRef.current = true
     return () => {
-      mountedRef.current = false;
-      stopCamera();
-    };
-  }, [stopCamera]);
+      mountedRef.current = false
+      stopCamera()
+    }
+  }, [stopCamera])
 
   // Handle save
   const handleSave = async () => {
-    setIsLoading(true);
-    setMessage("");
+    setIsLoading(true)
+    setMessage("")
 
-    const formData = new FormData();
-    formData.append("carId", car._id || ""); // Include carId for updates
-    formData.append("placa", editData.placa);
-    formData.append("marca", editData.marca);
-    formData.append("modelo", editData.modelo);
-    formData.append("color", editData.color);
-    formData.append("nombreDueño", editData.nombreDueño);
-    formData.append("telefono", editData.telefono);
-    formData.append("ticketAsociado", editData.ticketAsociado); // Added
-    if (uploadedUrls.plateUrl) formData.append("plateImageUrl", uploadedUrls.plateUrl);
-    if (uploadedUrls.vehicleUrl) formData.append("vehicleImageUrl", uploadedUrls.vehicleUrl);
+    const formData = new FormData()
+    formData.append("carId", car._id || "")
+    formData.append("placa", editData.placa)
+    formData.append("marca", editData.marca)
+    formData.append("modelo", editData.modelo)
+    formData.append("color", editData.color)
+    formData.append("nombreDueño", editData.nombreDueño)
+    formData.append("telefono", editData.telefono)
+    formData.append("ticketAsociado", editData.ticketAsociado)
+    formData.append("nota", editData.nota)
+    if (uploadedUrls.plateUrl) formData.append("plateImageUrl", uploadedUrls.plateUrl)
+    if (uploadedUrls.vehicleUrl) formData.append("vehicleImageUrl", uploadedUrls.vehicleUrl)
     if (capturedImages.plate) {
       const plateFile = await fetch(capturedImages.plate)
         .then((res) => res.blob())
-        .then((blob) => new File([blob], "plate.jpg", { type: "image/jpeg" }));
-      formData.append("plateImage", plateFile);
+        .then((blob) => new File([blob], "plate.jpg", { type: "image/jpeg" }))
+      formData.append("plateImage", plateFile)
     }
     if (capturedImages.vehicle) {
       const vehicleFile = await fetch(capturedImages.vehicle)
         .then((res) => res.blob())
-        .then((blob) => new File([blob], "vehicle.jpg", { type: "image/jpeg" }));
-      formData.append("vehicleImage", vehicleFile);
+        .then((blob) => new File([blob], "vehicle.jpg", { type: "image/jpeg" }))
+      formData.append("vehicleImage", vehicleFile)
     }
 
     try {
-      if (process.env.NODE_ENV === "development") console.log("Sending save request", { formData: Object.fromEntries(formData) });
+      if (process.env.NODE_ENV === "development")
+        console.log("Sending save request", { formData: Object.fromEntries(formData) })
       const response = await fetch("/api/admin/cars", {
-        method: car._id ? "PUT" : "POST", // Use PUT for update, POST for create
+        method: car._id ? "PUT" : "POST",
         body: formData,
-      });
-      let data;
+      })
+      let data
       try {
-        data = await response.json();
+        data = await response.json()
       } catch (jsonError) {
-        const text = await response.text();
-        if (process.env.NODE_ENV === "development") console.log("Invalid JSON response", text);
-        throw new Error(`Invalid response: ${text}`);
+        const text = await response.text()
+        if (process.env.NODE_ENV === "development") console.log("Invalid JSON response", text)
+        throw new Error(`Invalid response: ${text}`)
       }
-      if (process.env.NODE_ENV === "development") console.log("Save response", data);
+      if (process.env.NODE_ENV === "development") console.log("Save response", data)
       if (response.ok) {
-        setMessage("✅ Información y/o imágenes actualizadas correctamente");
+        setMessage("✅ Información y/o imágenes actualizadas correctamente")
         setUploadedUrls({
           plateUrl: data.car?.imagenes?.plateImageUrl,
           vehicleUrl: data.car?.imagenes?.vehicleImageUrl,
-        });
-        onUpdate();
+        })
+        onUpdate()
         setEditData({
           placa: data.car?.placa || editData.placa,
           marca: data.car?.marca || editData.marca,
@@ -333,21 +342,22 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
           nombreDueño: data.car?.nombreDueño || editData.nombreDueño,
           telefono: data.car?.telefono || editData.telefono,
           ticketAsociado: data.car?.ticketAsociado || editData.ticketAsociado,
-        }); // Sync with saved data
-        setTimeout(() => setMessage(""), 3000);
+          nota: data.car?.nota || editData.nota,
+        })
+        setTimeout(() => setMessage(""), 3000)
       } else {
-        setMessage(`❌ ${data.message || "Error al actualizar"}`);
-        setTimeout(() => setMessage(""), 5000);
+        setMessage(`❌ ${data.message || "Error al actualizar"}`)
+        setTimeout(() => setMessage(""), 5000)
       }
     } catch (error) {
-      if (process.env.NODE_ENV === "development") console.log("Save error", error);
-      setMessage("❌ Error de conexión o respuesta inválida");
-      setTimeout(() => setMessage(""), 5000);
+      if (process.env.NODE_ENV === "development") console.log("Save error", error)
+      setMessage("❌ Error de conexión o respuesta inválida")
+      setTimeout(() => setMessage(""), 5000)
     } finally {
-      setIsLoading(false);
-      setCapturedImages({}); // Clear captured images after successful save
+      setIsLoading(false)
+      setCapturedImages({})
     }
-  };
+  }
 
   // Handle cancel
   const handleCancel = () => {
@@ -359,48 +369,57 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
       nombreDueño: car.nombreDueño,
       telefono: car.telefono,
       ticketAsociado: car.ticketAsociado,
-    });
-    setCapturedImages({});
+      nota: car.nota || "",
+    })
+    setCapturedImages({})
     setUploadedUrls({
       plateUrl: car.imagenes?.plateImageUrl,
       vehicleUrl: car.imagenes?.vehicleImageUrl,
-    });
-    setIsEditing(false);
-  };
+    })
+    setIsEditing(false)
+  }
 
   // Confidence utilities
   const getConfidenceColor = (confidence?: number) => {
-    if (!confidence) return "bg-gray-500";
-    if (confidence >= 0.8) return "bg-green-500";
-    if (confidence >= 0.6) return "bg-yellow-500";
-    return "bg-red-500";
-  };
+    if (!confidence) return "bg-gray-500"
+    if (confidence >= 0.8) return "bg-green-500"
+    if (confidence >= 0.6) return "bg-yellow-500"
+    return "bg-red-500"
+  }
 
   const getConfidenceText = (confidence?: number) => {
-    if (!confidence) return "Sin datos";
-    const percentage = Math.round(confidence * 100);
-    if (percentage >= 80) return `${percentage}% - Excelente`;
-    if (percentage >= 60) return `${percentage}% - Buena`;
-    return `${percentage}% - Baja`;
-  };
+    if (!confidence) return "Sin datos"
+    const percentage = Math.round(confidence * 100)
+    if (percentage >= 80) return `${percentage}% - Excelente`
+    if (percentage >= 60) return `${percentage}% - Buena`
+    return `${percentage}% - Baja`
+  }
 
   const getMethodIcon = (method?: string) => {
     switch (method) {
-      case "camara_movil": return "📱";
-      case "camara_desktop": return "💻";
-      case "manual": return "✋";
-      default: return "❓";
+      case "camara_movil":
+        return "📱"
+      case "camara_desktop":
+        return "💻"
+      case "manual":
+        return "✋"
+      default:
+        return "❓"
     }
-  };
+  }
 
   const getMethodText = (method?: string) => {
     switch (method) {
-      case "camara_movil": return "Cámara Móvil";
-      case "camara_desktop": return "Cámara Desktop";
-      case "manual": return "Entrada Manual";
-      default: return "Método Desconocido";
+      case "camara_movil":
+        return "Cámara Móvil"
+      case "camara_desktop":
+        return "Cámara Desktop"
+      case "manual":
+        return "Entrada Manual"
+      default:
+        return "Método Desconocido"
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
@@ -431,7 +450,25 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
                 <div className="flex space-x-2">
                   <Button
                     onClick={handleSave}
-                    disabled={isLoading || (Object.values(editData).every((v, i) => v === [car.placa, car.marca, car.modelo, car.color, car.nombreDueño, car.telefono, car.ticketAsociado][i]) && !capturedImages.plate && !capturedImages.vehicle)}
+                    disabled={
+                      isLoading ||
+                      (Object.values(editData).every(
+                        (v, i) =>
+                          v ===
+                          [
+                            car.placa,
+                            car.marca,
+                            car.modelo,
+                            car.color,
+                            car.nombreDueño,
+                            car.telefono,
+                            car.ticketAsociado,
+                            car.nota || "",
+                          ][i],
+                      ) &&
+                        !capturedImages.plate &&
+                        !capturedImages.vehicle)
+                    }
                     size="sm"
                   >
                     <Save className="h-4 w-4 mr-2" />
@@ -480,6 +517,20 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
                   <p>{car.modelo}</p>
                 )}
               </div>
+              <div>
+                <Label>Nota del Parquero</Label>
+                {isEditing ? (
+                  <Input
+                    name="nota"
+                    value={editData.nota}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    placeholder="Información adicional..."
+                  />
+                ) : (
+                  <p className="text-blue-600">{car.nota || "Sin notas"}</p>
+                )}
+              </div>
             </div>
             <div className="space-y-3">
               <div>
@@ -493,7 +544,12 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
               <div>
                 <Label>Propietario</Label>
                 {isEditing ? (
-                  <Input name="nombreDueño" value={editData.nombreDueño} onChange={handleInputChange} className="mt-1" />
+                  <Input
+                    name="nombreDueño"
+                    value={editData.nombreDueño}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
                 ) : (
                   <p>{car.nombreDueño}</p>
                 )}
@@ -509,7 +565,12 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
               <div>
                 <Label>Ticket Asociado</Label>
                 {isEditing ? (
-                  <Input name="ticketAsociado" value={editData.ticketAsociado} onChange={handleInputChange} className="mt-1" />
+                  <Input
+                    name="ticketAsociado"
+                    value={editData.ticketAsociado}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
                 ) : (
                   <p className="font-medium">{car.ticketAsociado}</p>
                 )}
@@ -534,7 +595,9 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
                         className="hidden"
                       />
                       <Button
-                        onClick={() => (type === "plate" ? fileInputRef.current?.click() : fileInputRef2.current?.click())}
+                        onClick={() =>
+                          type === "plate" ? fileInputRef.current?.click() : fileInputRef2.current?.click()
+                        }
                         className="w-full"
                         size="sm"
                       >
@@ -549,20 +612,10 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
                             className="w-full h-48 object-cover rounded-lg border mt-2"
                             fallback="/placeholder.svg"
                           />
-                          <Button
-                            onClick={() => processImage(type)}
-                            disabled={isLoading}
-                            className="w-full"
-                            size="sm"
-                          >
+                          <Button onClick={() => processImage(type)} disabled={isLoading} className="w-full" size="sm">
                             {isLoading ? "Subiendo..." : "Subir Imagen"}
                           </Button>
-                          <Button
-                            onClick={() => retakePhoto(type)}
-                            variant="outline"
-                            className="w-full"
-                            size="sm"
-                          >
+                          <Button onClick={() => retakePhoto(type)} variant="outline" className="w-full" size="sm">
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Tomar de Nuevo
                           </Button>
@@ -696,5 +749,5 @@ export default function CarImageViewer({ car, onClose, onUpdate }: CarImageViewe
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }
