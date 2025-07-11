@@ -32,6 +32,19 @@ const nextConfig = {
       },
     ]
   },
+  webpack: (config) => {
+    config.optimization.splitChunks = {
+      chunks: "all",
+      cacheGroups: {
+        commons: {
+          test: /[\\/]node_modules[\\/]/,
+          name: "vendor",
+          chunks: "all",
+        },
+      },
+    };
+    return config;
+  },
 }
 
 module.exports = nextConfig

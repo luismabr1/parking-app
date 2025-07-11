@@ -68,7 +68,7 @@ async function calculateStats(db: any) {
   });
 
   const pendingConfirmations = await db.collection("tickets").countDocuments({
-    estado: "pendiente_confirmacion", // Ajusta según tu estado
+    estado: "ocupado", // Ajusta según tu estado
   });
 
   const totalStaff = await db.collection("staff").countDocuments();
