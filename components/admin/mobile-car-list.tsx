@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -35,12 +35,12 @@ interface CarInfo {
 }
 
 interface MobileCarListProps {
-  onStatsUpdate?: () => void
+  cars: CarInfo[]
+  onRefresh: () => void
+  onViewImages?: (car: CarInfo) => void
 }
 
-const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
-  const [cars, setCars] = useState<CarInfo[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+const MobileCarList: React.FC<MobileCarListProps> = ({ cars, onRefresh, onViewImages }) => {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Partial<CarInfo>>({})
   const [isSaving, setIsSaving] = useState(false)
@@ -54,24 +54,6 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
 
   const plateFileInputRef = useRef<HTMLInputElement>(null)
   const vehicleFileInputRef = useRef<HTMLInputElement>(null)
-
-  const fetchCars = useCallback(async () => {
-    try {
-      const response = await fetch("/api/admin/cars")
-      if (response.ok) {
-        const data = await response.json()
-        setCars(data)
-      }
-    } catch (error) {
-      console.error("Error fetching cars:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchCars()
-  }, [fetchCars])
 
   const showMessage = useCallback((msg: string, type: "success" | "error") => {
     setMessage(msg)
@@ -181,10 +163,7 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
       })
 
       if (response.ok) {
-        await fetchCars()
-        if (onStatsUpdate && typeof onStatsUpdate === "function") {
-          onStatsUpdate()
-        }
+        onRefresh()
         setEditingId(null)
         setEditForm({})
         setCapturedImages({})
@@ -199,17 +178,7 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
     } finally {
       setIsSaving(false)
     }
-  }, [
-    editingId,
-    editForm,
-    capturedImages,
-    fetchCars,
-    onStatsUpdate,
-    isSaving,
-    isUploadingImage,
-    uploadToCloudinary,
-    showMessage,
-  ])
+  }, [editingId, editForm, capturedImages, onRefresh, isSaving, isUploadingImage, uploadToCloudinary, showMessage])
 
   const handleInputChange = useCallback((field: keyof CarInfo, value: string) => {
     setEditForm((prev) => ({ ...prev, [field]: value }))
@@ -232,23 +201,11 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
 
   const isFormDisabled = isSaving || isUploadingImage
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center justify-center">
-            <RefreshCw className="h-6 w-6 animate-spin" />
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Carros Estacionados</h3>
-        <Button variant="outline" size="sm" onClick={fetchCars} disabled={isFormDisabled}>
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={isFormDisabled}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
@@ -492,7 +449,11 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
                   </div>
 
                   <div className="text-sm text-muted-foreground space-y-1">
-                    {car.nota && <p className="text-blue-600 font-medium">📝 {car.nota}</p>}
+                    {car.nota && (
+                      <div className="mb-2 p-2 bg-pink-50 rounded text-sm">
+                        <span className="text-pink-600 font-medium">📝 {car.nota}</span>
+                      </div>
+                    )}
                     <p>
                       {car.marca} {car.modelo} - {car.color}
                     </p>
@@ -504,9 +465,9 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
                     </div>
                     <p>Ticket: {car.ticketAsociado}</p>
 
-                    {/* Vista previa de imágenes */}
+                    {/* Vista previa de imágenes en la lista */}
                     {(car.imagenes?.plateImageUrl || car.imagenes?.vehicleImageUrl) && (
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex gap-2 mt-2 pt-2 border-t">
                         {car.imagenes?.plateImageUrl && (
                           <div className="flex-1">
                             <ImageWithFallback
@@ -515,7 +476,7 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
                               className="w-full h-16 object-cover rounded border"
                               fallback="/placeholder.svg"
                             />
-                            <p className="text-xs text-center mt-1">Placa</p>
+                            <p className="text-xs text-center mt-1 text-gray-500">Placa</p>
                           </div>
                         )}
                         {car.imagenes?.vehicleImageUrl && (
@@ -526,7 +487,7 @@ const MobileCarList: React.FC<MobileCarListProps> = ({ onStatsUpdate }) => {
                               className="w-full h-16 object-cover rounded border"
                               fallback="/placeholder.svg"
                             />
-                            <p className="text-xs text-center mt-1">Vehículo</p>
+                            <p className="text-xs text-center mt-1 text-gray-500">Vehículo</p>
                           </div>
                         )}
                       </div>

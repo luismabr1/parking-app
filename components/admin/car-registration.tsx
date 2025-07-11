@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CarIcon, RefreshCw, Plus, Camera, Smartphone, Monitor, ImageIcon, Edit, Eye } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -35,6 +36,7 @@ interface Car {
   ticketAsociado: string
   horaIngreso: string
   estado: string
+  nota?: string
   imagenes?: {
     plateImageUrl?: string
     vehicleImageUrl?: string
@@ -53,6 +55,7 @@ interface CarFormData {
   nombreDueño: string
   telefono: string
   ticketAsociado: string
+  nota: string
 }
 
 // Deep comparison for arrays
@@ -84,6 +87,7 @@ function CarRegistration() {
     nombreDueño: "",
     telefono: "",
     ticketAsociado: "",
+    nota: "",
   })
 
   const [capturedImages, setCapturedImages] = useState<{
@@ -177,7 +181,7 @@ function CarRegistration() {
     return () => clearInterval(interval)
   }, [fetchCars, fetchAvailableTickets])
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
   }, [])
@@ -258,6 +262,7 @@ function CarRegistration() {
             nombreDueño: "",
             telefono: "",
             ticketAsociado: "",
+            nota: "",
           })
           setCapturedImages(null)
           await Promise.all([fetchCars(), fetchAvailableTickets()])
@@ -379,6 +384,20 @@ function CarRegistration() {
                 )}
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
+                    <Label htmlFor="nota" className="text-lg">
+                      Nota del Parquero
+                    </Label>
+                    <Textarea
+                      id="nota"
+                      name="nota"
+                      value={formData.nota}
+                      onChange={handleInputChange}
+                      placeholder="Información adicional sobre el vehículo..."
+                      className="text-lg py-3 resize-none"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="placa" className="text-lg">
                       Placa del Vehículo
                     </Label>
@@ -458,6 +477,18 @@ function CarRegistration() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="nota">Nota del Parquero</Label>
+                  <Textarea
+                    id="nota"
+                    name="nota"
+                    value={formData.nota}
+                    onChange={handleInputChange}
+                    placeholder="Información adicional sobre el vehículo..."
+                    className="resize-none"
+                    rows={2}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="placa">Placa del Vehículo</Label>
                   <Input
@@ -578,59 +609,56 @@ function CarRegistration() {
                   >
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center space-x-4">
-                        <div className="space-y-1">
+                        <div className="space-y-1 flex-1">
                           <div className="flex items-center space-x-2">
                             <p className="font-medium text-lg">{car.placa}</p>
                             <Badge variant={car.estado === "estacionado_confirmado" ? "default" : "secondary"}>
                               {car.estado === "estacionado_confirmado" ? "Confirmado" : "Pendiente"}
                             </Badge>
                           </div>
+                          {car.nota && (
+                            <div className="mb-2 p-2 bg-blue-50 rounded text-sm">
+                              <span className="text-blue-600 font-medium">📝 {car.nota}</span>
+                            </div>
+                          )}
                           <p className="text-sm text-gray-600">
                             {car.marca} {car.modelo} - {car.color}
                           </p>
                           <p className="text-sm text-gray-600">
                             Dueño: {car.nombreDueño} | Tel: {car.telefono}
                           </p>
-                          <div className="flex items-center space-x-2 mt-2">
+                        </div>
+
+                        {/* Vista previa de imágenes en desktop */}
+                        {(car.imagenes?.plateImageUrl || car.imagenes?.vehicleImageUrl) && (
+                          <div className="flex space-x-2">
                             {car.imagenes?.plateImageUrl && (
-                              <ImageWithFallback
-                                src={car.imagenes.plateImageUrl || "/placeholder.svg"}
-                                alt={`Placa de ${car.placa}`}
-                                className="w-24 h-16 object-cover rounded border"
-                                fallback="/placeholder.svg"
-                              />
+                              <div className="text-center">
+                                <ImageWithFallback
+                                  src={car.imagenes.plateImageUrl || "/placeholder.svg"}
+                                  alt={`Placa de ${car.placa}`}
+                                  className="w-24 h-16 object-cover rounded border"
+                                  fallback="/placeholder.svg"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Placa</p>
+                              </div>
                             )}
                             {car.imagenes?.vehicleImageUrl && (
-                              <ImageWithFallback
-                                src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
-                                alt={`Vehículo de ${car.placa}`}
-                                className="w-24 h-16 object-cover rounded border"
-                                fallback="/placeholder.svg"
-                              />
-                            )}
-                            {car.imagenes && (
-                              <div className="flex flex-col space-y-1">
-                                <span className="text-xs text-blue-600 flex items-center">
-                                  <ImageIcon className="h-3 w-3 mr-1" />
-                                  Con imágenes
-                                </span>
-                                {car.imagenes.confianzaPlaca && (
-                                  <span className="text-xs text-gray-500">
-                                    Placa: {Math.round(car.imagenes.confianzaPlaca * 100)}%
-                                  </span>
-                                )}
-                                {car.imagenes.confianzaVehiculo && (
-                                  <span className="text-xs text-gray-500">
-                                    Vehículo: {Math.round(car.imagenes.confianzaVehiculo * 100)}%
-                                  </span>
-                                )}
+                              <div className="text-center">
+                                <ImageWithFallback
+                                  src={car.imagenes.vehicleImageUrl || "/placeholder.svg"}
+                                  alt={`Vehículo de ${car.placa}`}
+                                  className="w-24 h-16 object-cover rounded border"
+                                  fallback="/placeholder.svg"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Vehículo</p>
                               </div>
                             )}
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right space-y-2">
+                    <div className="text-right space-y-2 ml-4">
                       <p className="font-medium">Ticket: {car.ticketAsociado}</p>
                       <p className="text-sm text-gray-500">
                         Ingreso: {car.horaIngreso ? formatDateTime(car.horaIngreso) : "Sin fecha"}
