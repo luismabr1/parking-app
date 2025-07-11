@@ -11,15 +11,18 @@ export async function GET() {
     const db = client.db("parking")
 
     // Solo obtener tickets que estén realmente disponibles
-    const availableTickets = await db
-      .collection("tickets")
-      .find({
-        estado: "disponible",
-        // Asegurar que no tengan información de carro asociada
-        $or: [{ carInfo: { $exists: false } }, { carInfo: null }],
-      })
-      .sort({ codigoTicket: 1 })
-      .toArray()
+const availableTickets = await db
+  .collection("tickets")
+  .find({
+    estado: "disponible",
+    $or: [
+      { carInfo: { $exists: false } },
+      { carInfo: null },
+      { carInfo: {} }, // opcional, si quieres incluir objetos vacíos
+    ],
+  })
+  .sort({ codigoTicket: 1 })
+  .toArray()
 
     if (process.env.NODE_ENV === "development") {
       console.log(`🎫 DEBUG: Found ${availableTickets.length} truly available tickets`)

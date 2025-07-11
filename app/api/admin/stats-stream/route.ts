@@ -16,7 +16,10 @@ export async function GET(request: Request) {
   // Enviar headers SSE
   const stream = new ReadableStream({
     start(controller) {
+      let isStreamActive = true; // Flag to track stream state
+
       const sendStats = async () => {
+        if (!isStreamActive) return; // Do nothing if stream is closed
         try {
           const stats = await calculateStats(db);
           controller.enqueue(`data: ${JSON.stringify(stats)}\n\n`);
@@ -38,12 +41,14 @@ export async function GET(request: Request) {
 
         changeStream.on("error", (error) => {
           console.error("Change Stream error:", error);
-          controller.error(error);
+          controller.error(error); // This will close the stream
+          isStreamActive = false;
         });
 
         changeStream.on("end", () => {
           console.log("Change Stream ended");
-          controller.close();
+          controller.close(); // Close the stream
+          isStreamActive = false;
         });
       });
     },

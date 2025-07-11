@@ -269,7 +269,7 @@ const AdminDashboard = memo(function AdminDashboard() {
           { title: "Carros Estacionados", value: stats.carsParked, variant: "destructive", desc: "Actualmente" },
           { title: "Listos para Salir", value: stats.paidTickets, variant: stats.paidTickets > 0 ? "default" : "secondary", desc: "Pagados" },
         ].map((stat, index) => (
-          <Card key={index} className={cardHeight} style={{ minHeight: "120px" }}>
+          <Card key={index} className={cardHeight} style={{ minHeight: "150px" }}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
               <Badge variant={stat.variant}>{stat.value}</Badge>
